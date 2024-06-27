@@ -1,89 +1,61 @@
-const utils =  import.meta.resolve('/utils/utils')
 import dotenv from 'dotenv';
-import express from 'express'
+import express from 'express';
+import fetch from 'node-fetch';
+import utils from '../utils/utils.js';
 
 dotenv.config();
 
 const slingRouter = express.Router();
 
-let sessionData;
-let user;
+class SlingService {
+  constructor() {
+    this.sessionData = null;
+    this.user = null;
+    this.positions = null;
+    this.users = null;
+  }
 
-function renderUserShifts(calendar, positions, users) {
-  const userShiftsDiv = document.createElement('div');
-  const shiftOwner = document.createElement('h4');
-  const userName = users[calendar[0].user.id].legalName + ' ' + users[calendar[0].user.id].lastname;
-  shiftOwner.textContent = `Today's shifts for ${userName}:`;
-  userShiftsDiv.appendChild(shiftOwner);
-  calendar.forEach((shift) => {
-    const shiftDiv = document.createElement('div');
-    const shiftStart = document.createElement('span');
-    const shiftEnd = document.createElement('span');
-    const shiftDetail = document.createElement('span');
-    shiftDiv.appendChild(shiftStart);
-    shiftDiv.appendChild(shiftEnd);
-    shiftDiv.appendChild(shiftDetail);
-    shiftStart.textContent = `${new Date(shift.dtstart).getHours().toLocaleString('en-US', { minimumIntegerDigits: 2})}:${new Date(shift.dtstart).getMinutes().toLocaleString('en-US', { minimumIntegerDigits: 2})} - `;
-    shiftEnd.textContent = `${new Date(shift.dtend).getHours().toLocaleString('en-US', { minimumIntegerDigits: 2})}:${new Date(shift.dtend).getMinutes().toLocaleString('en-US', { minimumIntegerDigits: 2})}: `;
-    shiftDetail.textContent = positions[shift.position.id];
-    userShiftsDiv.appendChild(shiftDiv);
-  })
-  const allShifts = document.getElementById('all-shifts');
-  allShifts.appendChild(userShiftsDiv);
-}
+  async init() {
+    await this.fetchSessionData();
+    this.positions = await this.getAllPositions();
+    this.users = await this.getAllUsers();
+  }
 
-function sortCalendarByUser(calendar) {
-    const shiftsByUser = calendar.reduce((acc, curr) => {
-      const accumulation = { ...acc }
-      if (!accumulation[curr.user.id]) {
-        accumulation[curr.user.id] = [];
+  async fetchSessionData() {
+    const response = await fetch('https://api.getsling.com/v1/account/session', {
+      method: 'GET',
+      headers: {
+        'Authorization': process.env.SLING_AUTHORIZATION,
       }
-      accumulation[curr.user.id].push(curr);
-      return accumulation;
-    }, {});
-    return shiftsByUser;
-};
+    });
+    if (!response.ok) { throw new Error('Error fetching session data'); }
+    this.sessionData = await response.json();
+    this.user = this.sessionData.user;
+    console.log(`Hello ${this.user.legalName} ${this.user.lastname}! Your user_ID IS ${this.user.id} and your org_id is ${this.user.orgs[0].id} (${this.user.orgs[0].name}).`);
+  }
 
-async function fetchTodaysCalendar(date) {
-    const orgId = parseInt(user.orgs[0].id);
-    const userId = user.id; 
-    const endpoint = `https://api.getsling.com/v1/calendar/${orgId}/users/${userId}?dates=${date}`;
+  async getAllPositions() {
+    const endpoint = 'https://api.getsling.com/v1/groups?type=position';
     const options = {
       method: 'GET',
-      headers: process.env.SLING_AUTHORIZATION
+      headers: {
+        'Authorization': process.env.SLING_AUTHORIZATION,
+      }
     };
-  
-    const response = await fetch(endpoint, options)
-    if (!response.ok) { throw new Error('ihh mano...')};
-    
-    const calendarData = await response.json();
-    const publishedCalendar = calendarData.filter((shift) => shift.status === 'published' && shift.type === 'shift');
-    
-    return publishedCalendar;
-}
 
-async function getAllPositions() {
-    const endpoint = `https://api.getsling.com/v1/groups?type=position`;
-    const options = {
-      method: 'GET',
-      headers: utils.authorization,
-    };
-  
     const response = await fetch(endpoint, options);
-  
-    if (!response.ok) {throw new Error('ihh mano...')};
-  
+    if (!response.ok) { throw new Error('Error fetching positions'); }
     const data = await response.json();
-  
-    const positions = data.reduce((acc, curr) => {
-      const accumulation = { ...acc }
-      accumulation[curr.id] = curr.name;
-      return accumulation;
-    }, {});
-    return positions;
-}
 
-async function getAllUsers() {
+    return data.reduce((acc, curr) => {
+      acc[curr.id] = {};
+      acc[curr.id].name = curr.name;
+      acc[curr.id].color = '#'+(Math.random() * 0xFFFFFF << 0).toString(16).padStart(6, '0');
+      return acc;
+    }, {});
+  }
+
+  async getAllUsers() {
     const endpoint = 'https://api.getsling.com/v1/users';
     const options = {
       method: 'GET',
@@ -91,44 +63,73 @@ async function getAllUsers() {
         'Authorization': process.env.SLING_AUTHORIZATION,
       }
     };
-  
+
     const response = await fetch(endpoint, options);
     if (!response.ok) { 
       const error = await response.json();
-      console.log(utils.authorization);
-      throw new Error(`ihh mano... ${error.message}`);
+      throw new Error(`Error fetching users: ${error.message}`);
     }
     const data = await response.json();
-    // create object with user id as key
-    const usersObj = data.reduce((acc, curr) => {
-      const accumulation = { ...acc }
-      accumulation[curr.id] = curr;
-      return accumulation;
-    }
-    , {});
-    console.log(usersObj);
-    return usersObj;
+    
+    return data.reduce((acc, curr) => {
+      acc[curr.id] = curr;
+      return acc;
+    }, {});
+  }
+
+  async fetchTodaysCalendar(date) {
+    const orgId = parseInt(this.user.orgs[0].id);
+    const userId = this.user.id;
+    const endpoint = `https://api.getsling.com/v1/calendar/${orgId}/users/${userId}?dates=${date}`;
+    const options = {
+      method: 'GET',
+      headers: {
+        'Authorization': process.env.SLING_AUTHORIZATION,
+      }
+    };
+
+    const response = await fetch(endpoint, options);
+    if (!response.ok) { throw new Error('Error fetching calendar'); }
+    
+    const calendarData = await response.json();
+    return calendarData.filter(shift => shift.status === 'published' && shift.type === 'shift');
+  }
+
+  sortCalendarByUser(calendar) {
+    const sortedCalendar = calendar.reduce((acc, curr) => {
+      curr.position = this.positions[curr.position.id];
+      if (!acc[curr.user.id]) {
+        acc[curr.user.id] = [];
+      }
+      acc[curr.user.id].push(curr);
+      return acc;
+    }, {});
+    const sortedWithUserInfo = Object.keys(sortedCalendar).map((userId) => {
+      return {
+        ...this.users[userId],
+        shifts: sortedCalendar[userId]
+      };
+    });
+    return sortedWithUserInfo;
+  }
 }
 
-async function fetchSessionData() {
-  const response = await fetch('https://api.getsling.com/v1/account/session', {
-    method: 'GET',
-    headers: {
-      headers: utils.authorization,
-    },
-  })
-  if (!response.ok) { throw new Error('ihh mano...')};
-  sessionData = await response.json();
+const slingService = new SlingService();
+slingService.init();
 
-  user = sessionData.user;
+slingRouter.get('/positions', async (req, res) => {
+  res.status(200).json({ response: slingService.positions });
+});
 
-  console.log(`Hello ${user.legalName} ${user.lastname}! Your user_ID IS ${user.id} and your org_id is ${user.orgs[0].id} (${user.orgs[0].name}).`);
-};
-
-slingRouter.get('/positions', (req, res) => res.status(200).json(getAllPositions));
 slingRouter.get('/users', async (req, res) => {
-  const response = await getAllUsers();
-  res.status(200).json({response})
+  res.status(200).json({ response: slingService.users });
+});
+
+slingRouter.get('/calendar/', async (req, res) => {
+  const date = req.query.date || utils.todayISO(new Date());
+  const calendar = await slingService.fetchTodaysCalendar(date);
+  const sortedCalendar = slingService.sortCalendarByUser(calendar);
+  res.status(200).json(sortedCalendar);
 });
 
 export default slingRouter;

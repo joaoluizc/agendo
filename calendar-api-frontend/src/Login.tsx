@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CrossCircledIcon } from "@radix-ui/react-icons"
 import background from "./resources/background-login.jpeg"
+import { useNavigate } from "react-router-dom";
 
 interface LoginProps {
   switchToSignup: () => void;
@@ -17,6 +18,7 @@ const Login = ({ switchToSignup }: LoginProps) => {
   const [showWrongPswdAlert, setShowWrongPswdAlert] = useState(false);
   const [showEmailNotFoundAlert, setShowEmailNotFoundAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async () => {
     setShowWrongPswdAlert(false);
@@ -44,7 +46,7 @@ const Login = ({ switchToSignup }: LoginProps) => {
             Swal.showLoading();
           },
           willClose: () => {
-            
+            navigate('/');
           }
         }).then((result) => {
           /* Read more about handling dismissals below */
