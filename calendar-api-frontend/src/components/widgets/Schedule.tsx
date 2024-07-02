@@ -3,8 +3,9 @@ import AirDatepicker from 'air-datepicker';
 import 'air-datepicker/air-datepicker.css';
 import localeEn from 'air-datepicker/locale/en';
 import { useEffect, useState } from 'react';
-import utils from './utils/utils';
-import { User } from './types/slingTypes';
+import utils from '../../utils/utils';
+import { User } from '../../types/slingTypes';
+import { time } from 'console';
 
 const Schedule = () => {
   const [sortedCalendar, setSortedCalendar] = useState<User[]>([]);
@@ -19,7 +20,14 @@ const Schedule = () => {
           console.log('start shift fetch');
           const selectedDate = utils.todayISO(date);
           const endpoint = `/api/sling/calendar?date=${selectedDate}`;
-          const response = await fetch(endpoint);
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            credentials: 'include',
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
           if (!response.ok) {
             throw new Error('Failed to fetch shifts' + response.statusText);
           }
@@ -48,7 +56,7 @@ const Schedule = () => {
         <div className="flex flex-col">
           {/* Header with hours */}
           <div className="flex">
-            <div className="w-1/6 bg-gray-100 p-2"></div>
+            <div className="p-2" style={{width:'12%'}}></div>
             <div className="flex-1 overflow-x-auto">
               <div className="grid" style={{ gridTemplateColumns: 'repeat(48, minmax(0, 1fr))' }}>
                 {Array.from({ length: 48 }, (_, i) => (
@@ -66,7 +74,7 @@ const Schedule = () => {
           {/* User rows */}
           {sortedCalendar.map((user, idx) => (
             <div key={idx} className="flex">
-              <div className="w-1/6 h-10 bg-gray-100 p-2 flex items-center">
+              <div className="h-12 p-2 flex items-center border-b" style={{width:'12%'}}>
                 <Avatar>
                   <AvatarImage src={user.avatar} className="w-7 h-7 rounded-full mr-2" />
                   <AvatarFallback className="w-7 h-7 px-2 py-1 rounded-full mr-2 bg-slate-950 text-slate-100 font-semibold">
@@ -74,11 +82,11 @@ const Schedule = () => {
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="text-sm font-semibold">{`${user.name} ${user.lastname}`}</div>
+                  <div className="text-xs font-semibold">{`${user.name} ${user.lastname}`}</div>
                 </div>
               </div>
               <div className="flex-1 overflow-x-auto">
-                <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: 'repeat(48, minmax(0, 1fr))' }}>
+                <div className="grid border-b border-gray-200 h-12" style={{ gridTemplateColumns: 'repeat(48, minmax(0, 1fr))' }}>
                   {user.shifts.map((shift, idx) => {
                     const start = calculateGridColumnStart(shift.dtstart);
                     const span = calculateGridColumnSpan(shift.dtstart, shift.dtend);
@@ -86,14 +94,24 @@ const Schedule = () => {
                     return (
                       <div
                         key={idx}
-                        className={`p-2 m-1 text-xs overflow-hidden whitespace-nowrap truncate`}
+                        className={`p-1 m-1 overflow-hidden whitespace-nowrap truncate rounded`}
                         style={{
                           gridColumnStart: start,
                           gridColumnEnd: `span ${span}`,
-                          backgroundColor: shift.position.color,
+                          backgroundColor: `color-mix(in srgb, ${shift.position.color} 95%, hsl(var(--shiftmix)) 20%)`,
+                          fontSize: '0.6875rem',
                         }}
                       >
-                        {shift.position.name}
+                        <div
+                          className="font-bold truncate"
+                        >
+                          {startEndPretty(shift.dtstart, shift.dtend)}
+                        </div>
+                        <div
+                          className="truncate"
+                        >
+                          {shift.position.name}
+                        </div>
                       </div>
                     );
                   })}
@@ -122,5 +140,26 @@ const calculateGridColumnSpan = (startISO: string, endISO: string) => {
   const durationInMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
   return Math.ceil(durationInMinutes / 30); // Assuming each column represents 30 minutes
 };
+
+const formatDatePretty = (date: string) => { 
+  // given a date, return a string in the format "HH:MM AM/PM"
+  const dateObj = new Date(date);
+  let timeString = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  if (timeString.endsWith(":00 AM") || timeString.endsWith(":00 PM")) {
+    timeString = timeString.replace(":00", "");
+  }
+
+  return timeString;
+}
+
+const startEndPretty = (startRaw: string, endRaw: string) => {
+  const start = formatDatePretty(startRaw);
+  const end = formatDatePretty(endRaw);
+  if(start.slice(-2) === end.slice(-2)) {
+    return `${start.slice(0, -3)}-${end.slice(0, -3)} ${end.slice(-2)}`;
+  }
+  return `${start} - ${end}`;
+}
 
 export default Schedule;

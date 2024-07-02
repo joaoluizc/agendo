@@ -1,5 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { CircleUser, Menu, CalendarHeart, Search } from "lucide-react"
+import { CircleUser, Menu, CalendarHeart, Sun, Moon } from "lucide-react"
+import { useTheme } from "@/components/providers/theme-provider"
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button"
 import {
@@ -10,15 +12,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
-const logout = () => {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-}
-
 const Header = () => {
+    const { setTheme } = useTheme();
+    const navigate = useNavigate();
+
+    const logout = async () => {
+        const response = await fetch('api/logout', {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        if (response.ok) {
+            navigate('/login');
+        } else {
+            console.error('Logout failed');
+        }
+    }
+
     return(
         <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50">
             <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
@@ -111,16 +126,28 @@ const Header = () => {
                 </SheetContent>
             </Sheet>
             <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-            <form className="ml-auto flex-1 sm:flex-initial">
-                <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                    type="search"
-                    placeholder="Search products..."
-                    className="pl-8 sm:w-[300px] md:w-[200px] lg:w-[300px]"
-                />
+                <div id="theme-toggle" className="ml-auto">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="icon">
+                            <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                            <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                            <span className="sr-only">Toggle theme</span>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setTheme("light")}>
+                            Light
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setTheme("dark")}>
+                            Dark
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setTheme("system")}>
+                            System
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
-            </form>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                 <Button variant="secondary" size="icon" className="rounded-full">

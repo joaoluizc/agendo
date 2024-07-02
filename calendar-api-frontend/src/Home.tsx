@@ -1,11 +1,13 @@
 import ShiftsCalendar from "./components/widgets/ShiftsCalendar";
 import { Input } from "./components/ui/input";
 import { Label } from "@radix-ui/react-label";
-import Schedule from "./ShiftsTest";
+import GoogleAppAuth from "./components/widgets/GoogleAppAuth";
+import Schedule from "./components/widgets/Schedule";
 
 const Home = () => {
     return (
         <div className="p-5">
+            <GoogleAppAuth />
             <div id="app flex flex-col gap-5 h-96">
                 <h1>Shift display</h1>
                 <Label htmlFor="date">

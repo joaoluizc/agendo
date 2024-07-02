@@ -1,28 +1,34 @@
 import express from 'express';
 import cors from 'cors'
+import cookieParser from 'cookie-parser';
+
 import connectDB from './src/database/db.js'
 import gCalendarRouter from './src/controllers/gCalendarController.js';
 import slingRouter from './src/controllers/slingController.js';
 import userController from './src/controllers/userController.js'
+import verifyUserAuthentication from './src/middlewares/verifyUserAuthentication.js';
 
 const port = 3001;
 
 const app = express();
 app.use(express.json());
-
 const corsOptions = {
-    origin: 'http://localhost:5173', // Replace with your client's origin
-    optionsSuccessStatus: 200,
-  };
+  origin: 'http://localhost:5173',
+  optionsSuccessStatus: 200,
+  credentials: true,
+};
 app.use(cors(corsOptions));
+app.use(cookieParser());
 
 connectDB();
 
-app.use('/gcalendar', gCalendarRouter);
-app.use('/sling', slingRouter);
+app.use('/gcalendar', verifyUserAuthentication, gCalendarRouter);
+app.use('/sling', verifyUserAuthentication, slingRouter);
 
 app.post('/register', userController.registerUser)
 app.post('/login', userController.loginUser)
+app.post('/logout', userController.logoutUser)
+app.get('/auth-check', verifyUserAuthentication, (req, res) => res.status(200).json({message: 'authenticated'}));
 
 app.get('/', (req, res) => res.status(200).json({message: 'hey there :-))))'}));
 

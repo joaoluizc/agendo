@@ -43,7 +43,8 @@ const loginUser = async (req, res) => {
       { expiresIn: '4h' },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.cookie('jwt', token, { maxAge: 4 * 60 * 60 * 1000, httpOnly: true});
+        res.json({}).send('Logged in');
       }
     );
   } catch (err) {
@@ -52,7 +53,13 @@ const loginUser = async (req, res) => {
   }
 };
 
+const logoutUser = async (req, res) => {
+  res.cookie('jwt', '', { maxAge: 1, httpOnly: true });
+  res.status(200).send('Logged out');
+};
+
 export default {
   registerUser,
   loginUser,
+  logoutUser,
 };

@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
 import { google } from 'googleapis';
+import userService from '../services/userService.js';
 import cron from 'node-cron';
 
 // cron.schedule('0 * * * *', () => {
@@ -14,12 +15,12 @@ const gCalendarRouter = express.Router();
 const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
 
 gCalendarRouter.get('/login', (req, res) => {
-    console.log(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
+    console.log(req.user);
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: 'https://www.googleapis.com/auth/calendar.readonly',
     });
-    res.redirect(url);
+    res.status(200).json({ssoUrl: url});
 });
 
 gCalendarRouter.get('/redirect', (req, res) => {
@@ -30,7 +31,8 @@ gCalendarRouter.get('/redirect', (req, res) => {
             return res.send('Error');
         }
         oauth2Client.setCredentials(tokens);
-        res.redirect('/gcalendar/calendars');
+        userService.addGapiToken(req.user.id, tokens);
+        res.redirect('http://localhost:5173/');
     })
 })
 

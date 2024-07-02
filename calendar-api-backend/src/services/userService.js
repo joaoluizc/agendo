@@ -28,7 +28,14 @@ const findUser = async (email) => {
   return user;
 };
 
+const addGapiToken = async (id, token) => {
+  let user = await User.findOne({ _id: id });
+  user.gapiToken = token;
+  await user.save();
+}
+
 export default {
   createUser,
   findUser,
+  addGapiToken,
 };

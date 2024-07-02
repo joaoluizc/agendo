@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import Swal from 'sweetalert2'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,8 +23,10 @@ const Login = ({ switchToSignup }: LoginProps) => {
     setShowWrongPswdAlert(false);
     setShowEmailNotFoundAlert(false);
     setShowErrorAlert(false);
-    const response = await fetch('http://localhost:3001/login', {
+    const response = await fetch('api/login', {
         method: 'POST',
+        mode: 'cors',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -33,27 +34,7 @@ const Login = ({ switchToSignup }: LoginProps) => {
       });
   
       if (response.ok) {
-        const data = await response.json();
-        console.log('Login successful:', data);
-        localStorage.setItem('token', data.token);
-        // let timerInterval = 0;
-        Swal.fire({
-          title: "Login successful!",
-          html: "Redirecting you to homepage.",
-          timer: 700,
-          timerProgressBar: true,
-          didOpen: () => {
-            Swal.showLoading();
-          },
-          willClose: () => {
-            navigate('/');
-          }
-        }).then((result) => {
-          /* Read more about handling dismissals below */
-          if (result.dismiss === Swal.DismissReason.timer) {
-            console.log("I was closed by the timer");
-          }
-        });
+        navigate('/');
       } else {
         const error = await response.json();
         console.error('Login failed:', error);
@@ -66,37 +47,9 @@ const Login = ({ switchToSignup }: LoginProps) => {
           console.log('Login failed:', error);
         }
       }
-    console.log('Login:', { email, password });
   };
 
   return (
-    // <div>
-    //   <h2>Login</h2>
-    //   <form onSubmit={handleSubmit}>
-    //     <div>
-    //       <label>Email:</label>
-    //       <input
-    //         type="email"
-    //         value={email}
-    //         onChange={(e) => setEmail(e.target.value)}
-    //         required
-    //       />
-    //     </div>
-    //     <div>
-    //       <label>Password:</label>
-    //       <input
-    //         type="password"
-    //         value={password}
-    //         onChange={(e) => setPassword(e.target.value)}
-    //         required
-    //       />
-    //     </div>
-    //     <button type="submit">Login</button>
-    //   </form>
-    //   <p>
-    //     Don't have an account? <button onClick={switchToSignup}>Sign up</button>
-    //   </p>
-    // </div>
     <div className="w-full lg:grid lg:min-h-[600px] lg:grid-cols-2 xl:min-h-[800px]">
     <div className="flex items-center justify-center py-12">
       <div className="mx-auto grid w-[350px] gap-6">
