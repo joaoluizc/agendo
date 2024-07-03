@@ -7,11 +7,7 @@ import { CrossCircledIcon } from "@radix-ui/react-icons"
 import background from "./resources/background-login.jpeg"
 import { useNavigate } from "react-router-dom";
 
-interface LoginProps {
-  switchToSignup: () => void;
-}
-
-const Login = ({ switchToSignup }: LoginProps) => {
+const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showWrongPswdAlert, setShowWrongPswdAlert] = useState(false);
@@ -118,7 +114,7 @@ const Login = ({ switchToSignup }: LoginProps) => {
         </div>
         <div className="mt-4 text-center text-sm">
           Don&apos;t have an account?{" "}
-          <a onClick={switchToSignup} className="underline">
+          <a onClick={() => navigate('/signup')} className="underline cursor-pointer">
             Sign up
           </a>
         </div>

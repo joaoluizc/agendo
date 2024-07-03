@@ -21,8 +21,8 @@ function App() {
             <Route path="/" element={<ProtectedRoute />}>
               <Route path="" element={<Home />} />
             </Route>
-            <Route path="/login" element={<Login switchToSignup={() => 1+1}/>} />
-            <Route path="/signup" element={<Signup switchToLogin={() => 1+1}/>} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

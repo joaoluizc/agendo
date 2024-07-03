@@ -28,9 +28,9 @@ const findUser = async (email) => {
   return user;
 };
 
-const addGapiToken = async (id, token) => {
-  let user = await User.findOne({ _id: id });
-  user.gapiToken = token;
+const addGapiToken = async (email, token) => {
+  let user = await findUser(email);
+  user.gapitoken = token;
   await user.save();
 }
 

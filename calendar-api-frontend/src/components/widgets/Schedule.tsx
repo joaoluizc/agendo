@@ -94,7 +94,7 @@ const Schedule = () => {
                     return (
                       <div
                         key={idx}
-                        className={`p-1 m-1 overflow-hidden whitespace-nowrap truncate rounded`}
+                        className={`p-1 m-1 overflow-hidden whitespace-nowrap truncate rounded text-white`}
                         style={{
                           gridColumnStart: start,
                           gridColumnEnd: `span ${span}`,

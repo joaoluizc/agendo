@@ -51,24 +51,6 @@ const Header = () => {
                     Dashboard
                 </NavLink>
                 <NavLink
-                    to="/orders"
-                    className={({isActive}) => `${isActive ? 'text-foreground' : 'text-muted-foreground'} transition-colors hover:text-foreground`}
-                >
-                    Orders
-                </NavLink>
-                <NavLink
-                    to="/products"
-                    className={({isActive}) => `${isActive ? 'text-foreground' : 'text-muted-foreground'} transition-colors hover:text-foreground`}
-                >
-                    Products
-                </NavLink>
-                <NavLink
-                    to="/customers"
-                    className={({isActive}) => `${isActive ? 'text-foreground' : 'text-muted-foreground'} transition-colors hover:text-foreground`}
-                >
-                    Customers
-                </NavLink>
-                <NavLink
                     to="/settings"
                     className={({isActive}) => `${isActive ? 'text-foreground' : 'text-muted-foreground'} transition-colors hover:text-foreground`}
                 >
@@ -100,24 +82,6 @@ const Header = () => {
                         className="text-muted-foreground hover:text-foreground"
                     >
                         Dashboard
-                    </NavLink>
-                    <NavLink
-                        to="#"
-                        className="text-muted-foreground hover:text-foreground"
-                    >
-                        Orders
-                    </NavLink>
-                    <NavLink
-                        to="#"
-                        className="text-muted-foreground hover:text-foreground"
-                    >
-                        Products
-                    </NavLink>
-                    <NavLink
-                        to="#"
-                        className="text-muted-foreground hover:text-foreground"
-                    >
-                        Customers
                     </NavLink>
                     <NavLink to="#" className="hover:text-foreground">
                         Settings
