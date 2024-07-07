@@ -7,19 +7,26 @@ const ProtectedRoute: React.FC = () => {
   
   useEffect(() => {
     const checkAuth = async () => {
-      const response = await fetch('api/auth-check', {
-        method: 'GET',
-        mode: 'cors',
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        console.error('Not authenticated');
+      try {
+        const response = await fetch('api/auth-check', {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error('Authentication check failed', error);
         setIsAuthenticated(false);
+      } finally {
+        setAuthChecked(true);
       }
-      setAuthChecked(true);
-      console.log('Authenticated');
-      setIsAuthenticated(true);
     };
+
     checkAuth();
   }, []);
 
@@ -27,8 +34,7 @@ const ProtectedRoute: React.FC = () => {
     return null; // or a loading spinner
   }
 
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" />;
-  // return <Outlet />
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
 export default ProtectedRoute;

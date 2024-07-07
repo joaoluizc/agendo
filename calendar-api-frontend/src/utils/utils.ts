@@ -1,17 +1,14 @@
-const todayISO = (date: string | number | Date | Date[]) => {
-    // check if 'date' is an array
-    if (Array.isArray(date)) return
-
+const todayISO = (date: string | number | Date) => {
     // Get today's date
     const today = new Date(date);
-    today.setHours(0, 0, 0, 0); // Set the time to midnight (00:00:00.000)
+    today.setUTCHours(0, 0, 0, 1); // Set the time to midnight (00:00:00.000)
 
     // Convert to ISO string
     const startOfDayISO = today.toISOString();
 
     // Create a Date object for 24 hours later
     const endOfDay = new Date(today);
-    endOfDay.setHours(24, 0, 0, 0); // Set the time to 24 hours later (midnight next day)
+    endOfDay.setUTCHours(23, 59, 0, 0); // Set the time to 24 hours later (midnight next day)
 
     // Convert to ISO string
     const endOfDayISO = endOfDay.toISOString();

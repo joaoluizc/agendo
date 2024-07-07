@@ -1,11 +1,12 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 // import { useState } from 'react'
-import Login from './Login';
-import Signup from './Signup';
-import Home from './Home';
+import Login from './pages/Login/Login';
+import Signup from './pages/Signup/Signup';
+import Home from './pages/Home/Home';
 import NotFound from './NotFound';
 import ProtectedRoute from './routes/ProtectedRoute';
-import Header from './components/widgets/Header';
+import Header from './components/Header/Header';
+import Settings from './pages/Settings/Settings';
 import './App.css'
 import { ThemeProvider } from "@/components/providers/theme-provider"
 
@@ -18,8 +19,10 @@ function App() {
         <div className="flex min-h-screen w-full flex-col">
           <Header />
           <Routes>
-            <Route path="/" element={<ProtectedRoute />}>
-              <Route path="" element={<Home />} />
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="" element={<ProtectedRoute />}>
+              <Route path="home" element={<Home />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />

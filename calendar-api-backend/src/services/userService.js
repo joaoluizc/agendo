@@ -28,14 +28,34 @@ const findUser = async (email) => {
   return user;
 };
 
+const getAllUsersWithTokens = async () => {
+  const users = await User.find();
+  return users
+    .filter(user => user.gapitoken)
+    .map(user => ({
+        email: user.email,
+        tokens: user.gapitoken
+    }));
+};
+
 const addGapiToken = async (email, token) => {
   let user = await findUser(email);
   user.gapitoken = token;
   await user.save();
 }
 
+const getGapiToken = async (email) => {
+  let user = await findUser(email);
+  if (!user.gapitoken) {
+    return null;
+  }
+  return user.gapitoken;
+}
+
 export default {
   createUser,
   findUser,
   addGapiToken,
+  getGapiToken,
+  getAllUsersWithTokens,
 };

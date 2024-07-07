@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button"
+
 const GoogleAppAuth = () => {
     const signIn = () => {
         const token = localStorage.getItem('token');
@@ -20,7 +22,7 @@ const GoogleAppAuth = () => {
     };
 
     return (
-        <button onClick={signIn}>Sign in with Google</button>
+        <Button onClick={signIn}>Sign in with Google</Button>
     );
 }
 

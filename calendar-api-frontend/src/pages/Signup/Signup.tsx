@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CrossCircledIcon } from "@radix-ui/react-icons";
-import background from "./resources/background-login.jpeg";
+import background from "../../resources/background-login.jpeg"
 import { useNavigate } from "react-router-dom";
 
 const Signup = () => {
@@ -38,7 +38,7 @@ const Signup = () => {
     });
 
     if (response.ok) {
-      navigate('/');
+      navigate('/home');
     } else {
       const error = await response.json();
       console.error('Signup failed:', error);
@@ -52,7 +52,7 @@ const Signup = () => {
   };
 
   return (
-    <div className="w-full lg:grid lg:min-h-[600px] lg:grid-cols-2 xl:min-h-[800px]">
+    <div className="w-full h-[calc(100vh-4rem)] lg:grid lg:min-h-[400px] lg:grid-cols-2 xl:min-h-[500px]">
       <div className="flex items-center justify-center py-12">
         <div className="mx-auto grid w-[350px] gap-6">
           <div className="grid gap-2 text-center">
