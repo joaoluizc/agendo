@@ -46,7 +46,11 @@ const UserSchema = new mongoose.Schema({
   gapitoken: {
     type: GapiTokenSchema,
     required: false,
-  }
+  },
+  slingId: {
+    type: String,
+    required: false,
+  },
 });
 
 // Create the User model

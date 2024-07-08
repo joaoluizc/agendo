@@ -77,4 +77,319 @@
     body {
       @apply bg-background text-foreground;
     }
+    @font-face {
+      font-family: 'SF Pro Display';
+      src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Black.ttf') format('truetype');
+      font-weight: 900;
+      font-style: normal;
+  }
+  
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-BlackItalic.ttf') format('truetype');
+        font-weight: 900;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-BoldItalic.ttf') format('truetype');
+        font-weight: 700;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Heavy.ttf') format('truetype');
+        font-weight: 800;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-HeavyItalic.ttf') format('truetype');
+        font-weight: 800;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Light.ttf') format('truetype');
+        font-weight: 300;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-LightItalic.ttf') format('truetype');
+        font-weight: 300;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Medium.ttf') format('truetype');
+        font-weight: 500;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-MediumItalic.ttf') format('truetype');
+        font-weight: 500;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-RegularItalic.ttf') format('truetype');
+        font-weight: 400;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Semibold.ttf') format('truetype');
+        font-weight: 600;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-SemiboldItalic.ttf') format('truetype');
+        font-weight: 600;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Thin.ttf') format('truetype');
+        font-weight: 100;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-ThinItalic.ttf') format('truetype');
+        font-weight: 100;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-Ultralight.ttf') format('truetype');
+        font-weight: 200;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Display';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Display-UltralightItalic.ttf') format('truetype');
+        font-weight: 200;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Black.ttf') format('truetype');
+        font-weight: 900;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Heavy.ttf') format('truetype');
+        font-weight: 800;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Light.ttf') format('truetype');
+        font-weight: 300;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Medium.ttf') format('truetype');
+        font-weight: 500;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Semibold.ttf') format('truetype');
+        font-weight: 600;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Thin.ttf') format('truetype');
+        font-weight: 100;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Rounded';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Rounded-Ultralight.ttf') format('truetype');
+        font-weight: 200;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Black.ttf') format('truetype');
+        font-weight: 900;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-BlackItalic.ttf') format('truetype');
+        font-weight: 900;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-BoldItalic.ttf') format('truetype');
+        font-weight: 700;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Heavy.ttf') format('truetype');
+        font-weight: 800;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-HeavyItalic.ttf') format('truetype');
+        font-weight: 800;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Light.ttf') format('truetype');
+        font-weight: 300;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-LightItalic.ttf') format('truetype');
+        font-weight: 300;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Medium.ttf') format('truetype');
+        font-weight: 500;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-MediumItalic.ttf') format('truetype');
+        font-weight: 500;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-RegularItalic.ttf') format('truetype');
+        font-weight: 400;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Semibold.ttf') format('truetype');
+        font-weight: 600;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-SemiboldItalic.ttf') format('truetype');
+        font-weight: 600;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Thin.ttf') format('truetype');
+        font-weight: 100;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-ThinItalic.ttf') format('truetype');
+        font-weight: 100;
+        font-style: italic;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-Ultralight.ttf') format('truetype');
+        font-weight: 200;
+        font-style: normal;
+    }
+    
+    @font-face {
+        font-family: 'SF Pro Text';
+        src: url('src/resources/fonts/SanFrancisco/SF-Pro-Text-UltralightItalic.ttf') format('truetype');
+        font-weight: 200;
+        font-style: italic;
+    }
+  
   }

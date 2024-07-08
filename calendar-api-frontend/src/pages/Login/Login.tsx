@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CrossCircledIcon } from "@radix-ui/react-icons"
-import background from "../../resources/background-login.jpeg"
+import background from "../../resources/background-login.svg"
 import { useNavigate } from "react-router-dom";
 
 const Login = () => {
@@ -126,7 +126,7 @@ const Login = () => {
           alt="Image"
           width="1920"
           height="1080"
-          className="h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
+          className="h-full w-full object-cover object-right"
         />
       </div>
     </div>

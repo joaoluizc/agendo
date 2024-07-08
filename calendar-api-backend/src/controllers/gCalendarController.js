@@ -3,6 +3,7 @@ import express from 'express';
 import { google } from 'googleapis';
 import userService from '../services/userService.js';
 import cron from 'node-cron';
+import gCalendarService from '../services/gCalendarService.js';
 
 dotenv.config();
 
@@ -82,7 +83,7 @@ gCalendarRouter.get('/calendars', async (req, res) => {
 gCalendarRouter.get('/events', async (req, res) => {
     const tokens = await userService.getGapiToken(req.user.email);  // Retrieve tokens from the user service
     if (!tokens) {
-        return res.status(401).send('User not authenticated');
+        return res.status(401).send('User not Google authenticated');
     }
     const calendarId = req.query.calendar ?? 'primary';
     const oauth2Client = getOAuth2Client(tokens);
@@ -90,7 +91,7 @@ gCalendarRouter.get('/events', async (req, res) => {
     calendar.events.list({
         calendarId,
         timeMin: (new Date()).toISOString(),
-        maxResults: 15,
+        maxResults: 50,
         singleEvents: true,
         orderBy: 'startTime',
     }, (err, response) => {
@@ -102,6 +103,23 @@ gCalendarRouter.get('/events', async (req, res) => {
         res.json(events);
     });
 });
+
+gCalendarRouter.get('/all-events', async (_req, res) => {
+    try {
+        const events = await gCalendarService.getAllUsersGCalEvents();
+
+        if (Array.isArray(events) && events.length > 0) {
+            res.status(200).json(events);
+        } else {
+            console.warn('No events found');
+            res.status(404).json({ message: 'No events found' });
+        }
+    } catch (error) {
+        console.error('Error fetching all user events:', error);
+        res.status(500).json({ error: 'Failed to fetch events' });
+    }
+});
+
 
 gCalendarRouter.get('/', (req, res) => res.status(200).json({ message: 'hey there :-))))' }));
 

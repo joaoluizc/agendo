@@ -63,7 +63,7 @@ const Schedule = () => {
 
   return (
     <div>
-      <div id="app" className="flex flex-row gap-5 p-5 w-full">
+      <div id="app" className="flex flex-row gap-5 p-5 pl-2 w-full">
         <Label htmlFor="date" className="flex relative">
           <Input id="date" className="" placeholder="Click here to select a date" value={selectedDate.toDateString()} />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2" />
@@ -104,7 +104,7 @@ const Schedule = () => {
               </div>
               <div id="data-column" className="flex-1 overflow-x-auto">
                 <div className="relative">
-                  <div className="absolute inset-0 grid border-b h-12" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
+                  <div className="grid absolute inset-0 grid border-b h-12" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
                     {[...Array(24).keys()].map(() => {
                       return (
                         <div className="border-r"></div>
@@ -112,7 +112,7 @@ const Schedule = () => {
                     })}
                   </div>
                 </div>
-                <div className="grid border-b border-gray-200 h-12" style={{ gridTemplateColumns: 'repeat(48, minmax(0, 1fr))' }}>
+                <div className="grid" style={{ gridTemplateColumns: 'repeat(48, minmax(0, 1fr))' }}>
                   {user.shifts.map((shift, idx) => {
                     const start = calculateGridColumnStart(shift);
                     const span = calculateGridColumnSpan(shift);
@@ -120,7 +120,7 @@ const Schedule = () => {
                     return (
                       <div
                         key={idx}
-                        className={`p-1 m-1 z-10 overflow-hidden whitespace-nowrap truncate rounded text-white`}
+                        className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded text-white`}
                         style={{
                           gridColumnStart: start,
                           gridColumnEnd: `span ${span}`,

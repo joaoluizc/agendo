@@ -16,6 +16,10 @@ module.exports = {
         "2xl": "1400px",
       },
     },
+    fontFamily: {
+      'outfit': ["Outfit", "ui-sans-serif", "sans-serif"],
+      'sf': ["SF Pro Display", "ui-sans-serif", "sans-serif"],
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",

@@ -13,10 +13,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import faviconLight from "../../resources/favicon-light.svg";
+import faviconDark from "../../resources/favicon-dark.svg";
+
+function setFavicon(url: string) {
+    let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement || document.createElement('link');
+    link.type = 'image/x-icon';
+    link.rel = 'shortcut icon';
+    link.href = url;
+    document.getElementsByTagName('head')[0].appendChild(link);
+  }
 
 const Header = () => {
     const { setTheme } = useTheme();
     const navigate = useNavigate();
+
+    const setSiteTheme = (theme: string) => {
+        if (theme === 'light') {
+            setTheme('light');
+            setFavicon(faviconLight);
+        } else if (theme === 'dark') {
+            setTheme('dark');
+            setFavicon(faviconDark);
+        } else {
+            setTheme('system');
+            setFavicon(faviconLight);
+        }
+    }
 
     const logout = async () => {
         const response = await fetch('api/logout', {
@@ -100,13 +123,13 @@ const Header = () => {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setTheme("light")}>
+                            <DropdownMenuItem onClick={() => setSiteTheme("light")}>
                             Light
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setTheme("dark")}>
+                            <DropdownMenuItem onClick={() => setSiteTheme("dark")}>
                             Dark
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setTheme("system")}>
+                            <DropdownMenuItem onClick={() => setSiteTheme("system")}>
                             System
                             </DropdownMenuItem>
                         </DropdownMenuContent>
