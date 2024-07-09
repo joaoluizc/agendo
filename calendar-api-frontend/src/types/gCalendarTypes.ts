@@ -44,13 +44,13 @@ export type GCalendarEvent = {
         self?: boolean;
     };
     start: {
-        date?: string;
-        dateTime?: string;
+        date: string;
+        dateTime: string;
         timeZone?: string;
     };
     end: {
-        date?: string;
-        dateTime?: string;
+        date: string;
+        dateTime: string;
         timeZone?: string;
     };
     recurringEventId?: string;
@@ -105,10 +105,12 @@ export const initialGCalendarEventList: GCalendarEvent[] = [
             self: true
         },
         start: {
-            date: "2024-07-08"
+            date: "2024-07-08",
+            dateTime: "2024-07-08T09:00:00-03:00"
         },
         end: {
-            date: "2024-07-09"
+            date: "2024-07-09",
+            dateTime: "2024-07-08T10:00:00-03:00"
         },
         recurringEventId: "recurring-event-id-placeholder-1",
         originalStartTime: {
@@ -144,11 +146,11 @@ export const initialGCalendarEventList: GCalendarEvent[] = [
         },
         start: {
             dateTime: "2024-07-08T09:00:00-03:00",
-            timeZone: "America/Sao_Paulo"
+            date: "2024-07-08"
         },
         end: {
             dateTime: "2024-07-08T10:00:00-03:00",
-            timeZone: "America/Sao_Paulo"
+            date: "2024-07-08"
         },
         recurringEventId: "recurring-event-id-placeholder-2",
         originalStartTime: {

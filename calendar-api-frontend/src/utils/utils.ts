@@ -1,20 +1,24 @@
 const todayISO = (date: string | number | Date) => {
-    // Get today's date
+    // Get today's date in local time
     const today = new Date(date);
-    today.setUTCHours(0, 0, 0, 1); // Set the time to midnight (00:00:00.000)
+
+    // Calculate the start and end of the day in local time
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+    // Convert the start and end of the day to UTC
+    const startOfDayUTC = new Date(startOfDay.getTime() - (startOfDay.getTimezoneOffset() * 60000));
+    const endOfDayUTC = new Date(endOfDay.getTime() - (endOfDay.getTimezoneOffset() * 60000));
 
     // Convert to ISO string
-    const startOfDayISO = today.toISOString();
-
-    // Create a Date object for 24 hours later
-    const endOfDay = new Date(today);
-    endOfDay.setUTCHours(23, 59, 0, 0); // Set the time to 24 hours later (midnight next day)
-
-    // Convert to ISO string
-    const endOfDayISO = endOfDay.toISOString();
-
-    return `${startOfDayISO}/${endOfDayISO}`;
+    const startOfDayISO = startOfDayUTC.toISOString();
+    const endOfDayISO = endOfDayUTC.toISOString();
+    
+    const todayISO = `${startOfDayISO}/${endOfDayISO}`;
+    console.log(todayISO);
+    return todayISO;
 }
+
 
 const authorization = {
     'Authorization': '2d5a372ef3c544a689115a05868a5d9f',

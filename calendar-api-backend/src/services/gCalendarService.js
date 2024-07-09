@@ -20,11 +20,15 @@ const getUserGCalEvents = async (email) => {
     const calendarId = 'primary';
     const oauth2Client = getOAuth2Client(tokens);
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    // store in 'today' variable the current date in the first hour of the day
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     return new Promise((resolve, reject) => {
         calendar.events.list({
             calendarId,
-            timeMin: (new Date()).toISOString(),
+            // set date to beginning of day
+            timeMin: today.toISOString(),
             maxResults: 50,
             singleEvents: true,
             orderBy: 'startTime',

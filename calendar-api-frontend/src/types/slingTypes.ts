@@ -3,7 +3,7 @@ export type Shift = {
     assigneeNotes: string;
     available: boolean;
     breakDuration: number;
-    dateRequested?: string;
+    dateRequested: string;
     dtend: string;
     dtstart: string;
     fromIntegration: null | boolean;
