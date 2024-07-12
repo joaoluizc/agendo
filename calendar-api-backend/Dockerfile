@@ -1,6 +1,6 @@
-FROM node:16.14-alpine
+FROM node:21.7.3
 
-WORKDIR /app-backend
+WORKDIR /usr/src/app
 
 COPY package*.json ./
 
@@ -10,4 +10,4 @@ COPY . .
 
 EXPOSE 3001
 
-ENTRYPOINT ["npm", "run", "dev"]
+CMD ["npm", "run", "dev"]
