@@ -65,4 +65,4 @@ export const initialPositions = [
   { "positionId": 19072911, "name": "CO Team Outing", "color": "#8D6F4C" },
   { "positionId": 18917440, "name": "wildcard", "color": "#F7C3B2" },
   { "positionId": 18934992, "name": "close channels", "color": "#C2B6F3" }
-]
+];

@@ -10,55 +10,10 @@ import {
 } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import GoogleAppAuth from "@/components/widgets/GoogleAppAuth";
-import { Label } from "@radix-ui/react-label";
-import { useEffect, useState } from "react";
+import GoogleIntegration from "./GoogleIntegration/GoogleIntegration";
+import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCall";
 
 export default function Settings() {
-
-  const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
-  const [userGoogleInfo, setUserGoogleInfo] = useState('');
-
-  const getGoogleUserInfo = async () => {
-    const response = await fetch("api/gcalendar/userinfo", {
-      method: 'GET',
-      mode: 'cors',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) {
-      setIsGoogleAuthenticated(false);
-      return;
-    }
-    setIsGoogleAuthenticated(true);
-    const data = await response.json();
-    setUserGoogleInfo(data.email);
-    console.log('hi');
-    console.log(data);
-    return data;
-  }
-
-  const disconnectGoogle = async () => {
-    const response = await fetch("api/gcalendar/disconnect", {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) {
-      console.error('Failed to disconnect Google account');
-      return;
-    }
-    setIsGoogleAuthenticated(false);
-  };
-
-  useEffect(() => {
-    getGoogleUserInfo();
-  }, []);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -71,61 +26,13 @@ export default function Settings() {
             className="grid gap-4 text-sm text-muted-foreground" x-chunk="dashboard-04-chunk-0"
           >
             <NavLink to="#" className="font-semibold text-primary">
-              General
+              Google Integration
             </NavLink>
-            <NavLink to="#">Google integration</NavLink>
+            <NavLink to="#">Shifts on GCalendar</NavLink>
           </nav>
           <div className="grid gap-6">
-            <Card x-chunk="dashboard-04-chunk-1">
-              <CardHeader>
-                <CardTitle>Google integration</CardTitle>
-                <CardDescription>
-                  Used to authenticate with Google calendar.
-                </CardDescription>
-              </CardHeader>
-              {isGoogleAuthenticated ? (
-                <CardContent>
-                  <Label>Google Email
-                    <Input disabled value={userGoogleInfo}/>
-                  </Label>
-                </CardContent>) : null}
-              <CardFooter className="border-t px-6 py-4 gap-5">
-                {isGoogleAuthenticated ? (
-                  <Button variant="outline" onClick={disconnectGoogle}>Disconnect</Button>
-                ) : (
-                  <GoogleAppAuth></GoogleAppAuth>
-                )}
-              </CardFooter>
-            </Card>
-            <Card x-chunk="dashboard-04-chunk-2">
-              <CardHeader>
-                <CardTitle>Plugins Directory</CardTitle>
-                <CardDescription>
-                  The directory within your project, in which your plugins are
-                  located.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="flex flex-col gap-4">
-                  <Input
-                    placeholder="Project Name"
-                    defaultValue="/content/plugins"
-                  />
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="include" defaultChecked />
-                    <label
-                      htmlFor="include"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      Allow administrators to change the directory.
-                    </label>
-                  </div>
-                </form>
-              </CardContent>
-              <CardFooter className="border-t px-6 py-4">
-                <Button>Save</Button>
-              </CardFooter>
-            </Card>
+            <GoogleIntegration></GoogleIntegration>
+            <ShiftsToAddToCal></ShiftsToAddToCal>
           </div>
         </div>
       </main>
