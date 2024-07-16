@@ -11,24 +11,24 @@ const getOAuth2Client = (tokens) => {
     return oauth2Client;
 };
 
-const getUserGCalEvents = async (email) => {
+const getUserGCalEvents = async (email, date = new Date()) => {
     const tokens = await userService.getGapiToken(email);  // Retrieve tokens from the user service
     if (!tokens) {
         throw new Error('User not Google authenticated');
     }
-
+    
     const calendarId = 'primary';
     const oauth2Client = getOAuth2Client(tokens);
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    // store in 'today' variable the current date in the first hour of the day
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    const selectedDate = new Date(date);
+    console.log(selectedDate)
+    selectedDate.setHours(0, 0, 0, 0);
+    
     return new Promise((resolve, reject) => {
         calendar.events.list({
             calendarId,
             // set date to beginning of day
-            timeMin: today.toISOString(),
+            timeMin: selectedDate.toISOString(),
             maxResults: 50,
             singleEvents: true,
             orderBy: 'startTime',
@@ -45,12 +45,12 @@ const getUserGCalEvents = async (email) => {
 };
 
 
-const getAllUsersGCalEvents = async () => {
+const getAllUsersGCalEvents = async (date) => {
     const users = await userService.getAllUsersWithTokens();
     
     const allEventsPromises = users.map(async (user) => {
         const { email, slingId } = user;
-        const events = await getUserGCalEvents(email);
+        const events = await getUserGCalEvents(email, date);
         return { email, slingId, events };
     });
 
