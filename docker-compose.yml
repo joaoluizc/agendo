@@ -1,13 +1,13 @@
 version: '3.8'
 
 services:
-  mongo:
-    image: mongo:latest
-    container_name: mongo
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
+  # mongo:
+  #   image: mongo:latest
+  #   container_name: mongo
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo-data:/data/db
 
   backend:
     build: ./calendar-api-backend
@@ -15,23 +15,24 @@ services:
     command: sh -c "npm install && npm run dev"
     volumes:
       - ./calendar-api-backend:/usr/src/app
+      - ./calendar-api-backend/.env:/usr/src/app/.env  # Mount .env file
     working_dir: /usr/src/app
-    depends_on:
-      - mongo
+    # depends_on:
+    #   - mongo
     ports:
       - "3001:3001"
 
-  frontend:
-    build: ./calendar-api-frontend
-    container_name: calendar-api-frontend
-    command: sh -c "npm install && npm run dev"
-    volumes:
-      - ./calendar-api-frontend:/usr/src/app
-    working_dir: /usr/src/app
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
+  # frontend:
+  #   build: ./calendar-api-frontend
+  #   container_name: calendar-api-frontend
+  #   command: sh -c "npm install && npm run dev"
+  #   volumes:
+  #     - ./calendar-api-frontend:/usr/src/app
+  #   working_dir: /usr/src/app
+  #   ports:
+  #     - "5173:5173"
+  #   depends_on:
+  #     - backend
 
 volumes:
   mongo-data:
