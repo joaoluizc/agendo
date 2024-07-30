@@ -37,18 +37,20 @@ export const getShifts = async (
 }
 
 export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date) => {
-  const response = await fetch("api/gcalendar/all-events");
+  let selectedDate = utils.todayISO(date)
+  const response = await fetch(`api/gcalendar/all-events?date=${selectedDate}`);
   let data = await response.json();
   data = data
-      .map((user: CalendarUser) => {
-          return {
-              ...user,
-              events: user.events.filter((event: any) => event.eventType === "default")
-                .filter((event: any) => {
-                  return new Date(event.start.dateTime).getDate() === date.getDate()
-                })
-          }
-      });
+    .map((user: CalendarUser) => {
+      return {
+        ...user,
+        events: user.events.filter((event: any) => event.eventType === "default")
+          .filter((event: any) => {
+            console.log(new Date(event.start.dateTime).getDate(), date.getDate());
+            return new Date(event.start.dateTime).getDate() === date.getDate()
+          })
+      }
+    });
   console.log(data);
   setgCalendarEvents(data);
 };
@@ -95,7 +97,7 @@ export const calculateGridColumnSpan = (start: string, end: string, dateToRender
 export const formatGCalTimePretty = (start: string, end: string) => {
   const startAsDate = new Date(start);
   const endAsDate = new Date(end);
-  const firstPart = startAsDate.toLocaleDateString('en-us', { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})
-  const secondPart = endAsDate.toLocaleTimeString('en-us', { hour:"numeric", minute:"2-digit"})
+  const firstPart = startAsDate.toLocaleDateString('en-us', { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+  const secondPart = endAsDate.toLocaleTimeString('en-us', { hour: "numeric", minute: "2-digit" })
   return `${firstPart} to ${secondPart}`;
 }

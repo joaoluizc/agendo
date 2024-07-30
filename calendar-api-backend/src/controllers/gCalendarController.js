@@ -4,6 +4,7 @@ import { google } from 'googleapis';
 import userService from '../services/userService.js';
 import cron from 'node-cron';
 import gCalendarService from '../services/gCalendarService.js';
+import { clouddebugger } from 'googleapis/build/src/apis/clouddebugger/index.js';
 
 dotenv.config();
 
@@ -81,6 +82,7 @@ gCalendarRouter.get('/calendars', async (req, res) => {
 });
 
 gCalendarRouter.get('/events', async (req, res) => {
+    console.log(`Fetching GCalendar events for ${req.user.email}`);
     const tokens = await userService.getGapiToken(req.user.email);  // Retrieve tokens from the user service
     if (!tokens) {
         return res.status(401).send('User not Google authenticated');
@@ -99,16 +101,22 @@ gCalendarRouter.get('/events', async (req, res) => {
             console.log(`Can't fetch events`, err);
             return res.send('Error');
         }
+        console.log(`GCal fetch successful: ${response.data.items.length} events`);
+        console.log(response.data.items);
         const events = response.data.items;
         res.json(events);
     });
 });
 
-gCalendarRouter.get('/all-events', async (_req, res) => {
+gCalendarRouter.get('/all-events', async (req, res) => {
+    const date = new Date(req.query.date.split('/')[0]);
+    console.log(`Fetching GCalendar events for ${req.user.email} on date ${date}`);
     try {
-        const events = await gCalendarService.getAllUsersGCalEvents();
+        const events = await gCalendarService.getAllUsersGCalEvents(date);
 
         if (Array.isArray(events) && events.length > 0) {
+            console.log(`GCal fetch successful for date ${date}: ${events.length} events`);
+            // console.log(events);
             res.status(200).json(events);
         } else {
             console.warn('No events found');

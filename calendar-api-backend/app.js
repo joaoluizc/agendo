@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import connectDB from './src/database/db.js'
 import gCalendarRouter from './src/controllers/gCalendarController.js';
 import slingRouter from './src/controllers/slingController.js';
+import positionRouter from './src/routers/positionRouters.js';
 import userController from './src/controllers/userController.js'
 import verifyUserAuthentication from './src/middlewares/verifyUserAuthentication.js';
 
@@ -24,6 +25,7 @@ connectDB();
 
 app.use('/gcalendar', verifyUserAuthentication, gCalendarRouter);
 app.use('/sling', verifyUserAuthentication, slingRouter);
+app.use('/position', verifyUserAuthentication, positionRouter);
 
 app.post('/register', userController.registerUser)
 app.post('/login', userController.loginUser)
