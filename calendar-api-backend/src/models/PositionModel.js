@@ -18,6 +18,6 @@ const PositionSchema = new Schema({
 
 const Position = mongoose.model('Position', PositionSchema);
 
-export {
+export default {
     Position
 }

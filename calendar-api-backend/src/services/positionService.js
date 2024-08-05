@@ -1,5 +1,5 @@
 // services/positionService.js
-import Position from '../models/Position.js';
+import Position from '../models/PositionModel.js';
 
 const createPosition = async (data) => {
   const { name, color } = data;

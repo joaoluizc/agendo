@@ -1,5 +1,5 @@
 import express from 'express';
-import positionController from 'src/controllers/positionController.js';
+import positionController from '../controllers/positionController.js';
 
 const positionRouter = express.Router();
 
