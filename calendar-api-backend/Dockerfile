@@ -8,7 +8,7 @@ RUN rm -rf node_modules
 
 RUN npm install
 
-COPY . .
+COPY --chown=:.:. . .
 
 EXPOSE 3001
 
