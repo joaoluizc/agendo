@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { initialPositions } from '../seeds/initialPositionToSync.js'
 const { Schema } = mongoose;
 
 const GapiTokenSchema = new Schema({
@@ -24,6 +25,19 @@ const GapiTokenSchema = new Schema({
   },
 });
 
+// Define what positions user wants to sync to google calendar
+const PositionToSyncSchema = new Schema({
+  positionId: {
+    type: String,
+    required: true,
+  },
+  sync: {
+    type: Boolean,
+    required: true,
+    default: true,
+  },
+});
+
 // Define the User schema
 const UserSchema = new mongoose.Schema({
   name: {
@@ -43,6 +57,7 @@ const UserSchema = new mongoose.Schema({
     type: String,
     enum: ['normal', 'admin', 'dev'],
     required: true,
+    default: 'normal',
   },
   date: {
     type: Date,
@@ -51,6 +66,11 @@ const UserSchema = new mongoose.Schema({
   gapitoken: {
     type: GapiTokenSchema,
     required: false,
+  },
+  positionsToSync: {
+    type: [PositionToSyncSchema],
+    required: false,
+    default: initialPositions,
   },
   slingId: {
     type: String,

@@ -7,6 +7,10 @@ positionRouter.get('/', (req, res) => {
     res.status(200).json({message: 'position router working'});
 });
 
+positionRouter.get('/:userId', (req, res) => {
+    positionController.getUserPositionsToSync(req, res);
+});
+
 positionRouter.post('/', (req, res) => {
     positionController.createPosition(req, res);
 });

@@ -1,5 +1,6 @@
 // services/positionService.js
 import Position from '../models/PositionModel.js';
+import { User } from '../models/UserModel.js';
 
 const createPosition = async (data) => {
   const { name, color } = data;
@@ -36,10 +37,19 @@ const deletePosition = async (id) => {
     return position;
 };
 
+const getUserPositionsToSync = async (userId) => {
+    const user = await User.findById(userId);
+    if (!user) {
+        return null;
+    }
+    return user.positionsToSync;
+}
+
 export default {
     createPosition,
     getPositions,
     getPositionById,
     updatePosition,
     deletePosition,
+    getUserPositionsToSync
 };

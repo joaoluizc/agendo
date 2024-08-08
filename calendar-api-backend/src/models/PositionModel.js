@@ -14,6 +14,11 @@ const PositionSchema = new Schema({
     type: String,
     required: true,
   },
+  type: {
+    type: String,
+    required: true,
+    default: 'ticket',
+  },
 });
 
 const Position = mongoose.model('Position', PositionSchema);

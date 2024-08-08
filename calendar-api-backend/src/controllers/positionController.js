@@ -19,6 +19,17 @@ const createPosition = async (req, res) => {
     }
 };
 
+const getUserPositionsToSync = async (req, res) => {
+    const userId = req.query.userId;
+    try {
+        const positions = await positionService.getUserPositionsToSync(userId);
+        res.status(200).json(positions);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
 export default {
     createPosition,
+    getUserPositionsToSync,
 };

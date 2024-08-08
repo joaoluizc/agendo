@@ -12,9 +12,7 @@ mongoose.connect(process.env.MONGO_URI, {
 
 const seedPositions = async () => {
   try {
-    // Clear existing data
     await Position.deleteMany({});
-
     await Position.insertMany(initialPositions);
     console.log('Positions seeded successfully');
   } catch (error) {
