@@ -34,13 +34,17 @@ const PositionToSyncSchema = new Schema({
   sync: {
     type: Boolean,
     required: true,
-    default: true,
+    default: false,
   },
 });
 
 // Define the User schema
 const UserSchema = new mongoose.Schema({
   name: {
+    type: String,
+    required: true,
+  },
+  lastName: {
     type: String,
     required: true,
   },
@@ -55,13 +59,13 @@ const UserSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['normal', 'admin', 'dev'],
+    enum: ['normal', 'admin'],
     required: true,
     default: 'normal',
   },
-  date: {
-    type: Date,
-    default: Date.now,
+  timeZone: {
+    type: Number,
+    default: 0,
   },
   gapitoken: {
     type: GapiTokenSchema,
