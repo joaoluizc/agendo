@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useEffect, useState } from "react"
 import { Position } from "./columns"
+import { useSettings } from "@/components/providers/settings-provider"
 
 interface DataTableProps<TValue> {
     columns: ColumnDef<Position, TValue>[]
@@ -35,7 +36,8 @@ export function DataTable<TValue>({
 }: DataTableProps<TValue>) {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-    const [rowSelection, setRowSelection] = useState({})
+    const { rowSelection, setRowSelection } = useSettings();
+    // const [rowSelection, setRowSelection] = useState<Record<number, boolean>>({});
 
     const table = useReactTable({
         data,
@@ -68,6 +70,8 @@ export function DataTable<TValue>({
 
         preSelectRows()
     }, [data])
+
+    console.log(rowSelection);
     
     return (
         <div>
