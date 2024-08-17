@@ -15,7 +15,6 @@ const todayISO = (date: string | number | Date) => {
     const endOfDayISO = endOfDayUTC.toISOString();
     
     const todayISO = `${startOfDayISO}/${endOfDayISO}`;
-    console.log(todayISO);
     return todayISO;
 }
 

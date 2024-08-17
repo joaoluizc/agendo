@@ -6,29 +6,33 @@ import { Label } from "@radix-ui/react-label"
 import { useEffect, useState } from "react"
 
 const GoogleIntegration = () => {
-    const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
-    const [userGoogleInfo, setUserGoogleInfo] = useState('');
+  const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
+  const [userGoogleInfo, setUserGoogleInfo] = useState('');
 
-    
+
   const getGoogleUserInfo = async () => {
-    const response = await fetch("api/gcalendar/userinfo", {
-      method: 'GET',
-      mode: 'cors',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) {
-      setIsGoogleAuthenticated(false);
-      return;
+    try {
+      const response = await fetch("api/gcalendar/userinfo", {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (response.status === 204) {
+        setIsGoogleAuthenticated(false);
+        return;
+      }
+      setIsGoogleAuthenticated(true);
+      const data = await response.json();
+      setUserGoogleInfo(data.email);
+      console.log('hi');
+      console.log(data);
+      return data;
+    } catch (error) {
+      console.error('Failed to fetch Google user info:', error);
     }
-    setIsGoogleAuthenticated(true);
-    const data = await response.json();
-    setUserGoogleInfo(data.email);
-    console.log('hi');
-    console.log(data);
-    return data;
   }
 
   const disconnectGoogle = async () => {
@@ -50,30 +54,30 @@ const GoogleIntegration = () => {
   useEffect(() => {
     getGoogleUserInfo();
   }, []);
-    
-    return (
-        <Card x-chunk="dashboard-04-chunk-1">
-        <CardHeader>
-          <CardTitle>Google integration</CardTitle>
-          <CardDescription>
-            Used to authenticate with Google calendar.
-          </CardDescription>
-        </CardHeader>
+
+  return (
+    <Card x-chunk="dashboard-04-chunk-1">
+      <CardHeader>
+        <CardTitle>Google integration</CardTitle>
+        <CardDescription>
+          Used to authenticate with Google calendar.
+        </CardDescription>
+      </CardHeader>
+      {isGoogleAuthenticated ? (
+        <CardContent>
+          <Label>Google Email
+            <Input disabled value={userGoogleInfo} />
+          </Label>
+        </CardContent>) : null}
+      <CardFooter className="border-t px-6 py-4 gap-5">
         {isGoogleAuthenticated ? (
-          <CardContent>
-            <Label>Google Email
-              <Input disabled value={userGoogleInfo}/>
-            </Label>
-          </CardContent>) : null}
-        <CardFooter className="border-t px-6 py-4 gap-5">
-          {isGoogleAuthenticated ? (
-            <Button variant="outline" onClick={disconnectGoogle}>Disconnect</Button>
-          ) : (
-            <GoogleAppAuth></GoogleAppAuth>
-          )}
-        </CardFooter>
-      </Card>
-    )
+          <Button variant="outline" onClick={disconnectGoogle}>Disconnect</Button>
+        ) : (
+          <GoogleAppAuth></GoogleAppAuth>
+        )}
+      </CardFooter>
+    </Card>
+  )
 }
 
 export default GoogleIntegration;

@@ -3,7 +3,7 @@ const { Schema } = mongoose;
 
 const PositionSchema = new Schema({
   positionId: {
-    type: Schema.Types.ObjectId,
+    type: String,
     auto: true,
   },
   name: {
@@ -23,6 +23,4 @@ const PositionSchema = new Schema({
 
 const Position = mongoose.model('Position', PositionSchema);
 
-export default {
-    Position
-}
+export default Position;

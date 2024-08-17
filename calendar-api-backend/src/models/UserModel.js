@@ -40,7 +40,7 @@ const PositionToSyncSchema = new Schema({
 
 // Define the User schema
 const UserSchema = new mongoose.Schema({
-  name: {
+  firstName: {
     type: String,
     required: true,
   },

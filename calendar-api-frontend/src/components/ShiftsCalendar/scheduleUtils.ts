@@ -33,12 +33,15 @@ export const getShifts = async (
   })).sort((a: User, b: User) => new Date(a.shifts[0].dtstart).getTime() - new Date(b.shifts[0].dtstart).getTime());
   setSortedCalendar(data);
   setIsLoading(false);
-  console.log(data);
 }
 
 export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date) => {
   let selectedDate = utils.todayISO(date)
   const response = await fetch(`api/gcalendar/all-events?date=${selectedDate}`);
+  if (response.status === 204) {
+    setgCalendarEvents([]);
+    return;
+  };
   let data = await response.json();
   data = data
     .map((user: CalendarUser) => {

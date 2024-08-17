@@ -21,7 +21,6 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Button } from '../ui/button';
 
 const userHasGcal = (user: User, gCalendarEvents: CalendarUser[]) => {
-  console.log(user, gCalendarEvents);
   return gCalendarEvents.some((calUser: CalendarUser) => Number(calUser.slingId) === user.id);
 }
 

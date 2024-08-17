@@ -7,6 +7,8 @@ export type Position = {
     positionId: string
     name: string
     type: "live channel" | "tickets" | "meeting" | "break" | "development" | "training"
+    color: string
+    sync: boolean
 }
 
 export const columns: ColumnDef<Position>[] = [
@@ -25,7 +27,10 @@ export const columns: ColumnDef<Position>[] = [
         cell: ({ row }) => (
             <Checkbox
                 checked={row.getIsSelected()}
-                onCheckedChange={(value) => row.toggleSelected(!!value)}
+                onCheckedChange={(value) => {
+                    row.toggleSelected(!!value);
+                    row.original.sync = !!value;
+                }}
                 aria-label="Select row"
             />
         ),

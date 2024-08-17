@@ -8,6 +8,7 @@ import slingRouter from './src/controllers/slingController.js';
 import positionRouter from './src/routers/positionRouters.js';
 import userController from './src/controllers/userController.js'
 import verifyUserAuthentication from './src/middlewares/verifyUserAuthentication.js';
+import seedPositions from './src/seeds/seedPositions.js';
 
 const port = 3001;
 
@@ -22,6 +23,8 @@ app.use(cors(corsOptions));
 app.use(cookieParser());
 
 connectDB();
+
+await seedPositions();
 
 app.use('/gcalendar', verifyUserAuthentication, gCalendarRouter);
 app.use('/sling', verifyUserAuthentication, slingRouter);

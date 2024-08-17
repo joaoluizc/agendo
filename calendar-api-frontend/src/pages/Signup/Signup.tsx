@@ -8,7 +8,8 @@ import background from "../../resources/background-login.jpeg"
 import { useNavigate } from "react-router-dom";
 
 const Signup = () => {
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,7 +35,7 @@ const Signup = () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ firstName, lastName, email, password }),
     });
 
     if (response.ok) {
@@ -90,13 +91,24 @@ const Signup = () => {
           ) : null}
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">First Name</Label>
               <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                id="first-name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
                 type="text"
-                placeholder="John Doe"
+                placeholder="John"
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="name">Last Name</Label>
+              <Input
+                id="last-name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                type="text"
+                placeholder="Doe"
                 required
               />
             </div>

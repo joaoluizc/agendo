@@ -1,4 +1,14 @@
 import positionService from '../services/positionService.js';
+import userService from '../services/userService.js';
+
+const getAllPositions = async (req, res) => {
+    try {
+        const positions = await positionService.getPositions();
+        res.status(200).json(positions);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
 
 const createPosition = async (req, res) => {
     const positionData = req.body;
@@ -20,7 +30,9 @@ const createPosition = async (req, res) => {
 };
 
 const getUserPositionsToSync = async (req, res) => {
-    const userId = req.query.userId;
+    const user = await userService.findUser(req.user.email);
+    const userId = user.id;
+    console.log('userId: ', userId);
     try {
         const positions = await positionService.getUserPositionsToSync(userId);
         res.status(200).json(positions);
@@ -32,4 +44,5 @@ const getUserPositionsToSync = async (req, res) => {
 export default {
     createPosition,
     getUserPositionsToSync,
+    getAllPositions,
 };

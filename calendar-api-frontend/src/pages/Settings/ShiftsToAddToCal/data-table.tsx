@@ -21,17 +21,18 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { Position } from "./columns"
 
-interface DataTableProps<TData, TValue> {
-    columns: ColumnDef<TData, TValue>[]
-    data: TData[]
+interface DataTableProps<TValue> {
+    columns: ColumnDef<Position, TValue>[]
+    data: Position[]
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TValue>({
     columns,
     data,
-}: DataTableProps<TData, TValue>) {
+}: DataTableProps<TValue>) {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [rowSelection, setRowSelection] = useState({})
@@ -53,6 +54,21 @@ export function DataTable<TData, TValue>({
         }
     })
 
+    useEffect(() => {
+        const preSelectRows = () => {
+            const newSelection = data.reduce((acc, row, index) => {
+                if (row.sync) {
+                    acc[index] = true
+                }
+                return acc
+            }, {} as Record<number, boolean>)
+            setRowSelection(newSelection)
+            console.log(rowSelection);
+        }
+
+        preSelectRows()
+    }, [data])
+    
     return (
         <div>
             <div className="flex items-center py-4">

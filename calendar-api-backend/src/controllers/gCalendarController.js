@@ -48,7 +48,7 @@ gCalendarRouter.get('/redirect', (req, res) => {
 gCalendarRouter.get('/userinfo', async (req, res) => {
     const tokens = await userService.getGapiToken(req.user.email);
     if (!tokens) {
-        return res.status(401).send('User not authenticated with Google');
+        return res.status(204).send('User not authenticated with Google');
     }
     const response = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
         headers: {
@@ -120,7 +120,7 @@ gCalendarRouter.get('/all-events', async (req, res) => {
             res.status(200).json(events);
         } else {
             console.warn('No events found');
-            res.status(404).json({ message: 'No events found' });
+            res.status(204).json({ message: 'No events found' });
         }
     } catch (error) {
         console.error('Error fetching all user events:', error);

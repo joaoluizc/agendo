@@ -4,12 +4,12 @@ import jwt from 'jsonwebtoken'
 import { sendCookies } from '../middlewares/sendCookies.js';
 
 const registerUser = async (req, res) => {
-  const {name, email, password, } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({message: "name, email, and password are required fields"});
+  const {firstName, lastName, email, password, } = req.body;
+  if (!firstName || !lastName || !email || !password) {
+    return res.status(400).json({message: "firstName, lastName, email, and password are required fields"});
   }
   try {
-    console.log({ name, email, password});
+    console.log({ firstName, lastName, email, password});
     const user = await userService.createUser(req.body);
     sendCookies(req, res);
   } catch (err) {

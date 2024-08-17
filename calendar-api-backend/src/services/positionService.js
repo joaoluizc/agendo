@@ -39,8 +39,9 @@ const deletePosition = async (id) => {
 
 const getUserPositionsToSync = async (userId) => {
     const user = await User.findById(userId);
+    console.log('in getUserPositionsToSync: user: ', user);
     if (!user) {
-        return null;
+        throw new Error('User not found');
     }
     return user.positionsToSync;
 }
