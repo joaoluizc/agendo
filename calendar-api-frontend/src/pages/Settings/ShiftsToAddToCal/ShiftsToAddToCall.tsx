@@ -3,18 +3,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { columns, Position } from "./columns";
 import { DataTable } from "./data-table";
 import { useEffect, useState } from "react";
-import { initialPositionsNewType } from "./initialPositions";
-
-async function getPositions(): Promise<Position[]> {
-    return (initialPositionsNewType)
-}
+import { getPositionsToSync } from "./initialPositions";
 
 export default function ShiftsToAddToCal() {
     const [positions, setPositions] = useState<Position[]>([]);
 
     useEffect(() => {
         async function getData() {
-            const positions = await getPositions();
+            const positions = await getPositionsToSync();
             setPositions(positions);
         }
         getData();

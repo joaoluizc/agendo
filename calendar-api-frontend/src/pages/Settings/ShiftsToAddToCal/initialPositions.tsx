@@ -1,7 +1,6 @@
 import { Position } from "./columns";
 
-
-const getPositionsToSync = async () => {
+export async function  getPositionsToSync(): Promise<Position[]> {
   console.log('fetching positions to sync');
   try {
     const positionsResponse = await fetch("/api/position", {
@@ -35,5 +34,3 @@ const getPositionsToSync = async () => {
     return [];
   }
 };
-
-export const initialPositionsNewType: Position[] = await getPositionsToSync();
