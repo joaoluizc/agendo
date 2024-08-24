@@ -1,3 +1,4 @@
+import React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@radix-ui/react-avatar';
 import AirDatepicker from 'air-datepicker';
 import 'air-datepicker/air-datepicker.css';
@@ -147,7 +148,7 @@ const Schedule = () => {
                       const start = calculateGridColumnStart(event.start.dateTime, selectedDate.toString());
                       const span = calculateGridColumnSpan(event.start.dateTime, event.end.dateTime, selectedDate.toString());
                       return (
-                        <HoverCard>
+                        <HoverCard key={idx}>
                           <HoverCardTrigger asChild>
                             <div
                               key={idx}
@@ -192,11 +193,11 @@ const Schedule = () => {
                             </p>
                             <div className="flex gap-4">
                               <Button asChild variant="link">
-                                <a href={event.htmlLink} target='_blank'>See more</a>
+                                <a href={event.htmlLink} target='_blank' rel="noreferrer">See more</a>
                               </Button>
                               {event.hangoutLink && (
                                 <Button>
-                                  <a href={event.hangoutLink} target='_blank'>Join meeting</a>
+                                  <a href={event.hangoutLink} target='_blank' rel="noreferrer">Join meeting</a>
                                 </Button>
                               )}
                             </div>
