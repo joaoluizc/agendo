@@ -5,7 +5,15 @@ import pluginReact from "eslint-plugin-react";
 
 
 export default [
-  {files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"]},
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"],
+  },
+  { rules: 
+    {
+      'react/jsx-uses-react': 0,
+      'react/react-in-jsx-scope': 0,
+    }
+  },
   {languageOptions: { globals: globals.browser }},
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
