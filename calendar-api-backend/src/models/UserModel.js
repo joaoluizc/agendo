@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { initialPositions } from '../seeds/initialPositionToSync.js'
+import { initialPositions } from '../database/seeds/initialPositions.js';
 const { Schema } = mongoose;
 
 const GapiTokenSchema = new Schema({

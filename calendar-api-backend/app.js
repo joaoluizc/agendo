@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 
 import connectDB from './src/database/db.js'
 import gCalendarRouter from './src/controllers/gCalendarController.js';
-import slingRouter from './src/services/slingService.js';
+import slingRouter from './src/routers/slingRouter.js'
 import positionRouter from './src/routers/positionRouters.js';
 import userController from './src/controllers/userController.js'
 import verifyUserAuthentication from './src/middlewares/verifyUserAuthentication.js';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@radix-ui/react-avatar';
 import AirDatepicker from 'air-datepicker';
 import 'air-datepicker/air-datepicker.css';
@@ -20,6 +19,7 @@ import {
 import { CalendarUser } from '@/types/gCalendarTypes';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Button } from '../ui/button';
+import CalendarHeader from './calendar-components/CalendarHeader';
 
 const userHasGcal = (user: User, gCalendarEvents: CalendarUser[]) => {
   return gCalendarEvents.some((calUser: CalendarUser) => Number(calUser.slingId) === user.id);
@@ -50,34 +50,16 @@ const Schedule = () => {
     getGCalendarEvents(setgCalendarEvents, new Date());
   }, []);
 
-  // Array to represent hours of the day
-  const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
-
   return (
     <div>
       <div id="app" className="flex flex-row gap-5 p-5 pl-2 w-full">
         <Label htmlFor="date" className="flex relative">
-          <Input id="date" className="" placeholder="Click here to select a date" value={selectedDate.toDateString()} onChange={() => 1 + 1} />
+          <Input id="date" className="" placeholder="Select a date" value={selectedDate.toDateString()} onChange={() => 1 + 1} />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2" />
         </Label>
       </div>
       {/* Header with hours */}
-      <div className="flex">
-        <div className="p-2" style={{ width: '12%' }}></div>
-        <div className="flex-1 overflow-x-auto">
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(48, minmax(0, 1fr))' }}>
-            {Array.from({ length: 48 }, (_, i) => (
-              <div
-                key={i}
-                className={`col-span-2 border-r text-center text-xs font-bold truncate font-semibold ${i % 2 === 0 ? '' : 'hidden'}`}
-                style={{ gridColumn: `span 2` }}
-              >
-                {i % 2 === 0 && hours[i / 2]}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <CalendarHeader />
       {!isLoading ? (
         <div className="flex flex-col">
           {/* User rows */}

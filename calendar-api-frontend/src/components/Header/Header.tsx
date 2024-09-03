@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { CircleUser, Menu, CalendarHeart, Sun, Moon } from "lucide-react"
-import { useTheme } from "@/components/providers/theme-provider"
+import { useTheme } from "../providers/useTheme";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button"

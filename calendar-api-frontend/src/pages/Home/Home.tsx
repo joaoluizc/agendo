@@ -1,4 +1,4 @@
-import Schedule from "../../components/ShiftsCalendar/Schedule";
+import Schedule from "../../components/ScheduleCalendar/ScheduleCalendar";
 
 const Home = () => {
     return (

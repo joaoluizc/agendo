@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-// import { useState } from 'react'
 import Login from './pages/Login/Login';
 import Signup from './pages/Signup/Signup';
 import Home from './pages/Home/Home';
@@ -7,13 +6,12 @@ import NotFound from './NotFound';
 import ProtectedRoute from './routes/ProtectedRoute';
 import Header from './components/Header/Header';
 import Settings from './pages/Settings/Settings';
-import './App.css'
-import { ThemeProvider } from "@/components/providers/theme-provider"
 import Calendar from './pages/Calendar/Calendar';
+import { ThemeProvider } from "@/components/providers/theme-provider"
 import { SettingsProvider } from './components/providers/settings-provider';
+import './App.css'
 
 function App() {
-  // const [currentScreen, setCurrentScreen] = useState('login');
 
   return (
     <Router>
