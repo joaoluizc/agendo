@@ -1,4 +1,4 @@
-import Position from '../models/PositionModel.js';
+import Position from '../../models/PositionModel.js';
 import { initialPositions } from './initialPositions.js';
 
 const seedPositions = async () => {

@@ -4,7 +4,6 @@ import positionController from '../controllers/positionController.js';
 const positionRouter = express.Router();
 
 positionRouter.get('/', (req, res) => {
-    // res.status(200).json({message: 'position router working'});
     positionController.getAllPositions(req, res);
 });
 

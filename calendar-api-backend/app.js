@@ -8,7 +8,7 @@ import slingRouter from './src/services/slingService.js';
 import positionRouter from './src/routers/positionRouters.js';
 import userController from './src/controllers/userController.js'
 import verifyUserAuthentication from './src/middlewares/verifyUserAuthentication.js';
-import seedPositions from './src/seeds/seedPositions.js';
+import seedPositions from './src/database/seeds/seedPositions.js';
 
 const port = 3001;
 

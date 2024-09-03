@@ -16,11 +16,6 @@ const todayISO = (date) => {
     return `${startOfDayISO}/${endOfDayISO}`;
 }
 
-const authorization = {
-    'Authorization': '2d5a372ef3c544a689115a05868a5d9f',
-};
-
 export default {
     todayISO,
-    authorization,
 };
