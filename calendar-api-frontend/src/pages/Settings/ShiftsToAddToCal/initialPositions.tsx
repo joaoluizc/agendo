@@ -1,4 +1,4 @@
-import { Position } from "./columns";
+import { Position, PositionSync } from "@/types/positionTypes";
 
 export async function  getPositionsToSync(): Promise<Position[]> {
   console.log('fetching positions to sync');
@@ -19,18 +19,18 @@ export async function  getPositionsToSync(): Promise<Position[]> {
         "Content-Type": "application/json",
       },
     });
-    const positionsData = await positionsResponse.json();
-    const toSyncData = await toSyncResponse.json();
-    const positions = positionsData.map((position: any) => ({
+    const positionsData = await positionsResponse.json() as Position[];
+    const toSyncData = await toSyncResponse.json() as PositionSync[];
+    const positions = positionsData.map((position) => ({
       positionId: position.positionId,
       name: position.name,
       type: position.type,
       color: position.color,
-      sync: toSyncData.find((toSync: any) => toSync.positionId === position.positionId)?.sync ?? false,
+      sync: toSyncData.find((toSync) => toSync.positionId === position.positionId)?.sync ?? false,
     }));
     return positions;
   } catch (error) {
     console.error("Failed to fetch positions:", error);
     return [];
   }
-};
+}

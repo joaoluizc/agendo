@@ -22,8 +22,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useEffect, useState } from "react"
-import { Position } from "./columns"
-import { useSettings } from "@/components/providers/settings-provider"
+import { Position } from "@/types/positionTypes"
+import { useSettings } from "@/components/providers/useSettings"
 
 interface DataTableProps<TValue> {
     columns: ColumnDef<Position, TValue>[]
@@ -69,6 +69,7 @@ export function DataTable<TValue>({
         }
 
         preSelectRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data])
 
     console.log(rowSelection);

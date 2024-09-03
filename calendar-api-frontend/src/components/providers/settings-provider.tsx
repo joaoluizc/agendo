@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useState } from 'react';
 import { RowSelectionState, Updater } from '@tanstack/react-table';
 
 type SettingsProviderProps = {
@@ -15,7 +15,7 @@ const initialState: SettingsProviderState = {
     setRowSelection: () => null,
 }
 
-const SettingsContext = createContext<SettingsProviderState>(initialState);
+export const SettingsContext = createContext<SettingsProviderState>(initialState);
 
 export function SettingsProvider({ children }: SettingsProviderProps) {
     const [rowSelection, setRowSelectionState] = useState<RowSelectionState>({});
@@ -37,11 +37,3 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
         </SettingsContext.Provider>
     )
 }
-
-export const useSettings = () => {
-    const context = useContext(SettingsContext);
-    if (context === undefined) {
-      throw new Error('useSettings must be used within an SettingsProvider');
-    }
-    return context;
-  };

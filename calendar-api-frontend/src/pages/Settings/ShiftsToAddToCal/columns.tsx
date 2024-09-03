@@ -2,14 +2,7 @@ import { Button } from "@/components/ui/button"
 import { ColumnDef } from "@tanstack/react-table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowUpDown } from "lucide-react"
-
-export type Position = {
-    positionId: string
-    name: string
-    type: "live channel" | "tickets" | "meeting" | "break" | "development" | "training"
-    color: string
-    sync: boolean
-}
+import { Position } from "@/types/positionTypes"
 
 export const columns: ColumnDef<Position>[] = [
     {

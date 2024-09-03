@@ -12,7 +12,7 @@ const Calendar = () => {
             .map((user: CalendarUser) => {
                 return {
                     ...user,
-                    events: user.events.filter((event: any) => event.eventType === "default")
+                    events: user.events.filter((event) => event.eventType === "default")
                 }
             });
         console.log(data);

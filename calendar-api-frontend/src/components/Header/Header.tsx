@@ -17,7 +17,7 @@ import faviconLight from "../../resources/favicon-light.svg";
 import faviconDark from "../../resources/favicon-dark.svg";
 
 function setFavicon(url: string) {
-    let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement || document.createElement('link');
+    const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement || document.createElement('link');
     link.type = 'image/x-icon';
     link.rel = 'shortcut icon';
     link.href = url;

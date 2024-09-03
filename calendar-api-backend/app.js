@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 
 import connectDB from './src/database/db.js'
 import gCalendarRouter from './src/controllers/gCalendarController.js';
-import slingRouter from './src/controllers/slingController.js';
+import slingRouter from './src/services/slingService.js';
 import positionRouter from './src/routers/positionRouters.js';
 import userController from './src/controllers/userController.js'
 import verifyUserAuthentication from './src/middlewares/verifyUserAuthentication.js';
@@ -14,13 +14,13 @@ const port = 3001;
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
 const corsOptions = {
   origin: 'http://localhost:3001',
   optionsSuccessStatus: 200,
   credentials: true,
 };
 app.use(cors(corsOptions));
-app.use(cookieParser());
 
 connectDB();
 

@@ -1,11 +1,8 @@
 import dotenv from 'dotenv';
-import express from 'express';
 import fetch from 'node-fetch';
-import utils from '../utils/utils.js';
+import process from 'process';
 
 dotenv.config();
-
-const slingRouter = express.Router();
 
 class SlingService {
   constructor() {
@@ -114,22 +111,4 @@ class SlingService {
   }
 }
 
-const slingService = new SlingService();
-slingService.init();
-
-slingRouter.get('/positions', async (req, res) => {
-  res.status(200).json({ response: slingService.positions });
-});
-
-slingRouter.get('/users', async (req, res) => {
-  res.status(200).json({ response: slingService.users });
-});
-
-slingRouter.get('/calendar/', async (req, res) => {
-  const date = req.query.date || utils.todayISO(new Date());
-  const calendar = await slingService.fetchTodaysCalendar(date);
-  const sortedCalendar = slingService.sortCalendarByUser(calendar);
-  res.status(200).json(sortedCalendar);
-});
-
-export default slingRouter;
+export default SlingService;

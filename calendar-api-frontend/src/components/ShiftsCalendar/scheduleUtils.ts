@@ -36,19 +36,19 @@ export const getShifts = async (
 }
 
 export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date) => {
-  let selectedDate = utils.todayISO(date)
+  const selectedDate = utils.todayISO(date)
   const response = await fetch(`api/gcalendar/all-events?date=${selectedDate}`);
   if (response.status === 204) {
     setgCalendarEvents([]);
     return;
-  };
+  }
   let data = await response.json();
   data = data
     .map((user: CalendarUser) => {
       return {
         ...user,
-        events: user.events.filter((event: any) => event.eventType === "default")
-          .filter((event: any) => {
+        events: user.events.filter((event) => event.eventType === "default")
+          .filter((event) => {
             console.log(new Date(event.start.dateTime).getDate(), date.getDate());
             return new Date(event.start.dateTime).getDate() === date.getDate()
           })

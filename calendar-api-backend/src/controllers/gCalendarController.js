@@ -4,7 +4,7 @@ import { google } from 'googleapis';
 import userService from '../services/userService.js';
 import cron from 'node-cron';
 import gCalendarService from '../services/gCalendarService.js';
-import { clouddebugger } from 'googleapis/build/src/apis/clouddebugger/index.js';
+import process from 'process';
 
 dotenv.config();
 
