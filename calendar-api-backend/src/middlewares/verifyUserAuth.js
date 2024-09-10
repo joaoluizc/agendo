@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
+import process from 'process';
 
-const verifyUserAuthentication = async (req, res, next) => {
+const verifyUserAuth = async (req, res, next) => {
     const token = req.cookies.jwt;
     if (!token) {
         return res.status(401).send('Unauthorized');
@@ -14,4 +15,4 @@ const verifyUserAuthentication = async (req, res, next) => {
     }
 }
 
-export default verifyUserAuthentication;
+export default verifyUserAuth;

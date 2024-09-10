@@ -1,25 +1,21 @@
 import express from 'express';
-import SlingService from '../services/slingService.js';
-import utils from '../utils/utils.js';
+import slingController from '../controllers/slingController.js';
 
 const slingRouter = express.Router();
 
-const slingService = new SlingService();
-slingService.init();
-
 slingRouter.get('/positions', async (req, res) => {
-  res.status(200).json({ response: slingService.positions });
+  const positions = slingController.getPositions();
+  res.status(200).json({ response: positions });
 });
 
 slingRouter.get('/users', async (req, res) => {
-  res.status(200).json({ response: slingService.users });
+  const users = slingController.getUsers();
+  res.status(200).json({ response: users });
 });
 
 slingRouter.get('/calendar/', async (req, res) => {
-  const date = req.query.date || utils.todayISO(new Date());
-  const calendar = await slingService.fetchTodaysCalendar(date);
-  const sortedCalendar = slingService.sortCalendarByUser(calendar);
-  res.status(200).json(sortedCalendar);
+  const calendar = await slingController.getCalendar();
+  res.status(200).json(calendar);
 });
 
 export default slingRouter;

@@ -10,11 +10,11 @@ import { CalendarIcon, CalendarSearch, RepeatIcon } from 'lucide-react';
 import { Markup } from 'interweave';
 import {
   getShifts,
-  startEndPretty,
+  prettyTimeRange,
   calculateGridColumnSpan,
   calculateGridColumnStart,
   getGCalendarEvents,
-  formatGCalTimePretty
+  prettyGCalTime
 } from './scheduleUtils';
 import { CalendarUser } from '@/types/gCalendarTypes';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
@@ -112,7 +112,7 @@ const Schedule = () => {
                         <div
                           className="font-bold truncate"
                         >
-                          {startEndPretty(shift.dtstart, shift.dtend)}
+                          {prettyTimeRange(shift.dtstart, shift.dtend)}
                         </div>
                         <div
                           className="truncate"
@@ -166,7 +166,7 @@ const Schedule = () => {
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   <CalendarIcon className="w-4 h-4" />
-                                  <span>{ formatGCalTimePretty(event.start.dateTime, event.end.dateTime) }</span>
+                                  <span>{ prettyGCalTime(event.start.dateTime, event.end.dateTime) }</span>
                                 </div>
                               </div>
                             </div>

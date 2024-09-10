@@ -12,7 +12,7 @@ const getOAuth2Client = (tokens) => {
     return oauth2Client;
 };
 
-const getUserGCalEvents = async (email, date = new Date()) => {
+const getUserEvents = async (email, date = new Date()) => {
     const tokens = await userService.getGapiToken(email);  // Retrieve tokens from the user service
     if (!tokens) {
         throw new Error('User not Google authenticated');
@@ -45,13 +45,12 @@ const getUserGCalEvents = async (email, date = new Date()) => {
     });
 };
 
-
-const getAllUsersGCalEvents = async (date) => {
+const getAllUsersEvents = async (date) => {
     const users = await userService.getAllUsersWithTokens();
     
     const allEventsPromises = users.map(async (user) => {
         const { email, slingId } = user;
-        const events = await getUserGCalEvents(email, date);
+        const events = await getUserEvents(email, date);
         return { email, slingId, events };
     });
 
@@ -59,8 +58,64 @@ const getAllUsersGCalEvents = async (date) => {
     return allEvents;
 }
 
+/**
+ * Adds one event to user's calendar
+ * @param {Object} user - object containing email, tokens (gapi token), and slingId
+ * @param {Object} event - object containing summary, start, and end. start and end should contain dateTime and timeZone
+ * To add multiple events, consider using addEvents for efficiency
+ */
+const addEvent = async (user, event) => {
+    const { tokens } = user;
+    const oauth2Client = getOAuth2Client(tokens);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    return new Promise((resolve, reject) => {
+        calendar.events.insert({
+            calendarId: 'primary',
+            resource: event,
+        }, (err, response) => {
+            if (err) {
+                console.log(`Error adding event`, err);
+                reject(err);
+            } else {
+                resolve(response);
+            }
+        });
+    });
+}
+
+
+/**
+ * Add multiple events to user's calendar
+ * @param {Object} user 
+ * @param {Array} events 
+ * @returns {Array} - array of responses from adding
+ */
+const addEvents = async (user, events) => {
+    const { tokens } = user;
+    const oauth2Client = getOAuth2Client(tokens);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const eventsPromises = events.map(async (event) => {
+        return new Promise((resolve, reject) => {
+            calendar.events.insert({
+                calendarId: 'primary',
+                resource: event,
+            }, (err, response) => {
+                if (err) {
+                    console.log(`Error adding event`, err);
+                    reject(err);
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+    });
+
+    return Promise.all(eventsPromises);
+}
 
 export default {
-    getUserGCalEvents,
-    getAllUsersGCalEvents,
+    getUserEvents,
+    getAllUsersEvents,
+    addEvent,
+    addEvents,
 };

@@ -1,4 +1,4 @@
-const todayISO = (date: string | number | Date) => {
+const getLocalTimeframeISO = (date: string | number | Date) => {
     // Get today's date in local time
     const today = new Date(date);
 
@@ -20,5 +20,5 @@ const todayISO = (date: string | number | Date) => {
 
 
 export default {
-    todayISO,
+    getLocalTimeframeISO,
 };

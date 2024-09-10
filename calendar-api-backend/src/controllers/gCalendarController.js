@@ -1,15 +1,17 @@
 import dotenv from 'dotenv';
 import express from 'express';
 import { google } from 'googleapis';
-import userService from '../services/userService.js';
 import cron from 'node-cron';
-import gCalendarService from '../services/gCalendarService.js';
 import process from 'process';
+import gCalendarService from '../services/gCalendarService.js';
+import userService from '../services/userService.js';
+import slingController from './slingController.js';
+import utils from '../utils/utils.js';
 
 dotenv.config();
 
 const SCOPES = [
-    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile'
   ];
@@ -112,7 +114,7 @@ gCalendarRouter.get('/all-events', async (req, res) => {
     const date = new Date(req.query.date.split('/')[0]);
     console.log(`Fetching GCalendar events for ${req.user.email} on date ${date}`);
     try {
-        const events = await gCalendarService.getAllUsersGCalEvents(date);
+        const events = await gCalendarService.getAllUsersEvents(date);
 
         if (Array.isArray(events) && events.length > 0) {
             console.log(`GCal fetch successful for date ${date}: ${events.length} events`);
@@ -128,6 +130,31 @@ gCalendarRouter.get('/all-events', async (req, res) => {
     }
 });
 
+gCalendarRouter.post('/all-shifts-to-gcal', async (req, res) => {
+    const date = req.body.date || utils.todayISO(new Date());
+    try {
+        const calendar = await slingController.getCalendar(date);
+        const usersWithGoogle = await userService.getAllUsersWithTokens();
+        usersWithGoogle.forEach(async (user) => {
+            const slingUser = calendar.filter(slingUserCal => Number(slingUserCal.id) === Number(user.slingId))[0];
+            if (!slingUser) {
+                res.status(200).json({ message: 'No shifts found for user, no event was added to calendar' });
+                return;
+            }
+            const userShifts = slingUser.shifts;
+
+            const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());
+            const shiftsToAdd = userShifts.filter(event => positionsToSync.includes(event.position.id.toString()));
+            const userEvents = shiftsToAdd.map(shift => utils.shiftToEvent(shift));
+
+            console.log(`Adding shifts to GCal for ${user.email}`);
+            userEvents.forEach(async (event) => await gCalendarService.addEvent(user, event));
+        });
+        res.status(200).json();
+    } catch(e) {
+        console.log('Error adding shifts to GCal: ', e.message);
+    }
+});
 
 gCalendarRouter.get('/', (req, res) => res.status(200).json({ message: 'hey there :-))))' }));
 

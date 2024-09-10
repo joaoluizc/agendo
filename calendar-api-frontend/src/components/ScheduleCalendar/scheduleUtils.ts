@@ -2,15 +2,36 @@ import utils from '../../utils/utils';
 import { Shift, User } from '../../types/slingTypes';
 import { CalendarUser } from '@/types/gCalendarTypes';
 
+/** Sort shifts for each user by start time
+ * @param {User[]} data - array of users with shifts
+ * @param {string} selectedDate - date selected by the user
+ * @returns {User[]} - array of users with sorted shifts
+ * shifts are sorted by user and then by start time
+*/
+function sortShifts(data: User[], selectedDate: string): User[] {
+  return data.map((user: User) => ({
+    ...user,
+    shifts: user.shifts.sort(
+      (a: Shift, b: Shift) => new Date(a.dtstart).getTime() - new Date(b.dtstart).getTime()
+    ).map((shift: Shift) => ({ ...shift, dateRequested: selectedDate })),
+  })).sort((a: User, b: User) => new Date(a.shifts[0].dtstart).getTime() - new Date(b.shifts[0].dtstart).getTime());
+}
 
+/** Fetches shifts for a given date and sets the state
+ * @param {Date} date - date selected by the user
+ * @param {Function} setIsLoading - function to set loading state
+ * @param {Function} setSortedCalendar - function to set the state with sorted shifts
+ * @returns {Promise<User[]>}
+*/
 export const getShifts = async (
   date: Date,
   setIsLoading: (isLoading: boolean) => void,
   setSortedCalendar: (data: User[]) => void
-): Promise<void> => {
+): Promise<User[]> => {
+
   setIsLoading(true);
-  console.log('start shift fetch');
-  const selectedDate = utils.todayISO(date);
+  const selectedDate = utils.getLocalTimeframeISO(date);
+  console.log(`start shift fetch for ${date.toLocaleTimeString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`);
   const endpoint = `/api/sling/calendar?date=${selectedDate}`;
   const response = await fetch(endpoint, {
     method: 'GET',
@@ -20,45 +41,60 @@ export const getShifts = async (
       'Content-Type': 'application/json',
     },
   });
+
   if (!response.ok) {
     throw new Error('Failed to fetch shifts' + response.statusText);
   }
-  let data: User[] = await response.json();
-  // Sort shifts for each user by start time
-  data = data.map((user: User) => ({
-    ...user,
-    shifts: user.shifts.sort(
-      (a: Shift, b: Shift) => new Date(a.dtstart).getTime() - new Date(b.dtstart).getTime()
-    ).map((shift: Shift) => ({ ...shift, dateRequested: selectedDate })),
-  })).sort((a: User, b: User) => new Date(a.shifts[0].dtstart).getTime() - new Date(b.shifts[0].dtstart).getTime());
-  setSortedCalendar(data);
+  const data: User[] = await response.json();
+  const sortedData = sortShifts(data, selectedDate);
+
+  console.log('successfully fetched shifts');
+  setSortedCalendar(sortedData);
   setIsLoading(false);
+  console.log(sortedData);
+  return sortedData;
 }
 
-export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date) => {
-  const selectedDate = utils.todayISO(date)
+/** Fetches Google Calendar events for a given date and sets the state
+ * @param {Function} setgCalendarEvents - function to set the state with Google Calendar events
+ * @param {Date} date - date selected by the user
+ * @returns {Promise<CalendarUser[]>}
+*/
+export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date): Promise<CalendarUser[]> => {
+  const selectedDate = utils.getLocalTimeframeISO(date)
   const response = await fetch(`api/gcalendar/all-events?date=${selectedDate}`);
   if (response.status === 204) {
     setgCalendarEvents([]);
-    return;
+    return [];
   }
   let data = await response.json();
-  data = data
-    .map((user: CalendarUser) => {
-      return {
-        ...user,
-        events: user.events.filter((event) => event.eventType === "default")
-          .filter((event) => {
-            console.log(new Date(event.start.dateTime).getDate(), date.getDate());
-            return new Date(event.start.dateTime).getDate() === date.getDate()
-          })
-      }
+
+  // Filter out events that are not of type 'default' and do not match the selected date
+  data = data.map((user: CalendarUser) => {
+    const filteredEvents = user.events.filter((event) => {
+      const eventDate = new Date(event.start.dateTime).getDate();
+      const selectedDate = date.getDate();
+      return event.eventType === "default" && eventDate === selectedDate;
     });
-  console.log(data);
+
+    return {
+      ...user,
+      events: filteredEvents,
+    };
+  });
   setgCalendarEvents(data);
+  return data;
 };
 
-const formatDatePretty = (date: string) => {
+/** 
+ * Formats Date as 'pretty' string, removing minutes for round hours
+ * @param {string} date - date to format
+ * @returns {string} - formatted date
+ * examples:
+ * date: 2021-09-30T10:00:00Z -> 10 AM
+ * date: 2021-09-30T10:30:00Z -> 10:30 AM
+ */
+const prettyHour = (date: string): string => {
   const dateObj = new Date(date);
   let timeString = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -69,15 +105,14 @@ const formatDatePretty = (date: string) => {
   return timeString;
 }
 
-export const startEndPretty = (startRaw: string, endRaw: string) => {
-  const start = formatDatePretty(startRaw);
-  const end = formatDatePretty(endRaw);
+export const prettyTimeRange = (startRaw: string, endRaw: string) => {
+  const start = prettyHour(startRaw);
+  const end = prettyHour(endRaw);
   if (start.slice(-2) === end.slice(-2)) {
     return `${start.slice(0, -3)}-${end.slice(0, -3)} ${end.slice(-2)}`;
   }
   return `${start} - ${end}`;
 }
-
 
 export const calculateGridColumnStart = (start: string, dateToRender: string) => {
   const startAsDate = new Date(start);
@@ -97,7 +132,16 @@ export const calculateGridColumnSpan = (start: string, end: string, dateToRender
   return Math.ceil(durationInMinutes / 30); // Assuming each column represents 30 minutes
 };
 
-export const formatGCalTimePretty = (start: string, end: string) => {
+/** Formats Google Calendar event start and end times as 'pretty' string
+ * @param {string} start - start time of the event
+ * @param {string} end - end time of the event
+ * @returns {string} - formatted time range
+ * examples:
+ * startDate: 2021-09-30T10:00:00-04:00 -> Thu, Sep 30, 10:00 AM
+ * endDate: 2021-09-30T12:00:00-04:00 -> 12:00 PM
+ * result: Thu, Sep 30, 10:00 AM to 12:00 PM
+*/
+export const prettyGCalTime = (start: string, end: string) => {
   const startAsDate = new Date(start);
   const endAsDate = new Date(end);
   const firstPart = startAsDate.toLocaleDateString('en-us', { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })

@@ -48,6 +48,7 @@ class SlingService {
       acc[curr.id] = {};
       acc[curr.id].name = curr.name;
       acc[curr.id].color = '#'+(Math.random() * 0xFFFFFF << 0).toString(16).padStart(6, '0');
+      acc[curr.id].id = curr.id;
       return acc;
     }, {});
   }

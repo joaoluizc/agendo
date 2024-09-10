@@ -1,6 +1,5 @@
 import userService from '../services/userService.js'
 import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
 import { sendCookies } from '../middlewares/sendCookies.js';
 
 const registerUser = async (req, res) => {

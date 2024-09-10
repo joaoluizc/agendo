@@ -16,6 +16,23 @@ const todayISO = (date) => {
     return `${startOfDayISO}/${endOfDayISO}`;
 }
 
+const shiftToEvent = (shift) => {
+    const event = {
+        summary: shift.position.name,
+        // description: 'optional',
+        start: {
+            dateTime: shift.dtstart,
+            timeZone: 'Brazil/East'
+        },
+        end: {
+            dateTime: shift.dtend,
+            timeZone: 'Brazil/East'
+        },
+    };
+    return event;
+};
+
 export default {
     todayISO,
+    shiftToEvent,
 };
