@@ -7,8 +7,8 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import Header from './components/Header/Header';
 import Settings from './pages/Settings/Settings';
 import Calendar from './pages/Calendar/Calendar';
-import { ThemeProvider } from "@/components/providers/theme-provider"
-import { SettingsProvider } from './components/providers/settings-provider';
+import { ThemeProvider } from "@/providers/theme-provider"
+import { SettingsProvider } from './providers/settings-provider';
 import './App.css'
 
 function App() {
