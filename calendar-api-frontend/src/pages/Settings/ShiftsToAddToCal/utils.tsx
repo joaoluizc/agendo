@@ -1,4 +1,5 @@
 import { Position, PositionSync } from "@/types/positionTypes";
+import { RowSelectionState } from "@tanstack/react-table";
 
 export async function  getPositionsToSync(): Promise<Position[]> {
   console.log('fetching positions to sync');
@@ -32,5 +33,26 @@ export async function  getPositionsToSync(): Promise<Position[]> {
   } catch (error) {
     console.error("Failed to fetch positions:", error);
     return [];
+  }
+}
+
+export async function savePositionsToSync(positions: RowSelectionState): Promise<void> {
+  // ai generated - untested
+  console.log('saving positions to sync');
+  try {
+    await fetch("/api/position/sync", {
+      method: "PUT",
+      mode: 'cors',
+      credentials: 'include',
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(positions.map((position) => ({
+        positionId: position.positionId,
+        sync: position.sync,
+      }))),
+    });
+  } catch (error) {
+    console.error("Failed to save positions:", error);
   }
 }

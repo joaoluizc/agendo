@@ -3,10 +3,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { columns, Position } from "./columns";
 import { DataTable } from "./data-table";
 import { useEffect, useState } from "react";
-import { getPositionsToSync } from "./initialPositions";
+import { getPositionsToSync, savePositionsToSync } from "./utils";
+import { useSettings } from "@/providers/useSettings";
 
 export default function ShiftsToAddToCal() {
     const [positions, setPositions] = useState<Position[]>([]);
+    const { rowSelection } = useSettings();
 
     useEffect(() => {
         async function getData() {
@@ -28,7 +30,7 @@ export default function ShiftsToAddToCal() {
                 <DataTable columns={columns} data={positions} />
             </CardContent>
             <CardFooter className="border-t px-6 py-4">
-                <Button>Save</Button>
+                <Button onClick={() => savePositionsToSync(rowSelection)}>Save</Button>
             </CardFooter>
         </Card>
     )

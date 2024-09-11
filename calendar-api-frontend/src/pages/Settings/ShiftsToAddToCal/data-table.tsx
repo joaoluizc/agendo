@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useEffect, useState } from "react"
 import { Position } from "@/types/positionTypes"
-import { useSettings } from "@/providers/useSettings"
+import { useSettings } from "../../../providers/useSettings"
 
 interface DataTableProps<TValue> {
     columns: ColumnDef<Position, TValue>[]

@@ -17,8 +17,6 @@ const getLocalTimeframeISO = (date: string | number | Date) => {
     const todayISO = `${startOfDayISO}/${endOfDayISO}`;
     return todayISO;
 }
-
-
 export default {
     getLocalTimeframeISO,
 };

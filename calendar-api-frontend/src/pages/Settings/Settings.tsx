@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import GoogleIntegration from "./GoogleIntegration/GoogleIntegration";
-import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCall";
+import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal";
 
 export default function Settings() {
 
