@@ -41,8 +41,24 @@ const getUserPositionsToSync = async (req, res) => {
     }
 };
 
+const setUserPositionsToSync = async (req, res) => {
+    const user = await userService.findUser(req.user.email);
+    const userId = user.id;
+    const positions = req.body;
+    if (!positions) {
+        return res.status(400).json({ message: 'Positions are required' });
+    }
+    try {
+        await positionService.setUserPositionsToSync(userId, positions);
+        res.status(200).json({ message: 'Positions updated' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+}
+
 export default {
     createPosition,
     getUserPositionsToSync,
     getAllPositions,
+    setUserPositionsToSync,
 };

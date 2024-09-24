@@ -14,7 +14,8 @@ slingRouter.get('/users', async (req, res) => {
 });
 
 slingRouter.get('/calendar/', async (req, res) => {
-  const calendar = await slingController.getCalendar();
+  const date = req.query.date;
+  const calendar = await slingController.getCalendar(date);
   res.status(200).json(calendar);
 });
 

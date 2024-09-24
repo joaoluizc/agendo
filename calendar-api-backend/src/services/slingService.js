@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';
 import process from 'process';
+import positionService from './positionService.js';
 
 dotenv.config();
 
@@ -43,11 +44,13 @@ class SlingService {
     const response = await fetch(endpoint, options);
     if (!response.ok) { throw new Error('Error fetching positions'); }
     const data = await response.json();
+    const mappedPositions = await positionService.getPositions();
 
     return data.reduce((acc, curr) => {
       acc[curr.id] = {};
       acc[curr.id].name = curr.name;
-      acc[curr.id].color = '#'+(Math.random() * 0xFFFFFF << 0).toString(16).padStart(6, '0');
+      const mappedPosition = mappedPositions.find((position) => String(position.positionId) === String(curr.id));
+      acc[curr.id].color = mappedPosition ? mappedPosition.color : '#'+(Math.random() * 0xFFFFFF << 0).toString(16).padStart(6, '0');
       acc[curr.id].id = curr.id;
       return acc;
     }, {});
@@ -78,7 +81,7 @@ class SlingService {
   async fetchTodaysCalendar(date) {
     const orgId = parseInt(this.user.orgs[0].id);
     const userId = this.user.id;
-    const endpoint = `https://api.getsling.com/v1/calendar/${orgId}/users/${userId}?dates=${date}`;
+    const endpoint = `https://api.getsling.com/v1/calendar/${orgId}/users/${userId}?dates=${date}&eventTypes=shift`;
     const options = {
       method: 'GET',
       headers: {
@@ -90,7 +93,7 @@ class SlingService {
     if (!response.ok) { throw new Error('Error fetching calendar'); }
     
     const calendarData = await response.json();
-    return calendarData.filter(shift => shift.status === 'published' && shift.type === 'shift');
+    return calendarData.filter(shift => shift.status === 'published');
   }
 
   sortCalendarByUser(calendar) {

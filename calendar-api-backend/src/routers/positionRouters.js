@@ -11,6 +11,10 @@ positionRouter.get('/sync', (req, res) => {
     positionController.getUserPositionsToSync(req, res);
 });
 
+positionRouter.put('/sync', (req, res) => {
+    positionController.setUserPositionsToSync(req, res);
+});
+
 positionRouter.post('/', (req, res) => {
     positionController.createPosition(req, res);
 });

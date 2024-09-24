@@ -3,10 +3,10 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser';
 
 import connectDB from './src/database/db.js'
+import userRouter from './src/routers/userRouter.js';
 import gCalendarRouter from './src/controllers/gCalendarController.js';
 import slingRouter from './src/routers/slingRouter.js'
 import positionRouter from './src/routers/positionRouters.js';
-import userController from './src/controllers/userController.js'
 import verifyUserAuth from './src/middlewares/verifyUserAuth.js';
 import seedPositions from './src/database/seeds/seedPositions.js';
 
@@ -29,10 +29,8 @@ await seedPositions();
 app.use('/gcalendar', verifyUserAuth, gCalendarRouter);
 app.use('/sling', verifyUserAuth, slingRouter);
 app.use('/position', verifyUserAuth, positionRouter);
+app.use('/user', userRouter);
 
-app.post('/register', userController.registerUser)
-app.post('/login', userController.loginUser)
-app.post('/logout', userController.logoutUser)
 app.get('/auth-check', verifyUserAuth, (req, res) => res.status(200).json({message: 'authenticated'}));
 
 app.get('/', (req, res) => res.status(200).json({message: 'hey there :-))))'}));

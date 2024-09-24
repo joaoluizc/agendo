@@ -1,11 +1,11 @@
-import Schedule from "../../components/ScheduleCalendar/ScheduleCalendar";
+import Schedule from "../../components/scheduleCalendar/ScheduleCalendar";
 
 const Home = () => {
-    return (
-        <div className="p-5">
-            <Schedule />
-        </div>
-    )
-}
+  return (
+    <div className="p-5">
+      <Schedule />
+    </div>
+  );
+};
 
 export default Home;

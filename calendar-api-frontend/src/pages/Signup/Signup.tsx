@@ -1,19 +1,20 @@
-import { useState } from 'react';
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CrossCircledIcon } from "@radix-ui/react-icons";
-import background from "../../resources/background-login.jpeg"
+import background from "../../resources/background-login.jpeg";
 import { useNavigate } from "react-router-dom";
 
 const Signup = () => {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPasswordMismatchAlert, setShowPasswordMismatchAlert] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswordMismatchAlert, setShowPasswordMismatchAlert] =
+    useState(false);
   const [showEmailExistsAlert, setShowEmailExistsAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
   const navigate = useNavigate();
@@ -28,26 +29,26 @@ const Signup = () => {
       return;
     }
 
-    const response = await fetch('api/register', {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'include',
+    const response = await fetch("api/user/register", {
+      method: "POST",
+      mode: "cors",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ firstName, lastName, email, password }),
     });
 
     if (response.ok) {
-      navigate('/home');
+      navigate("/home");
     } else {
       const error = await response.json();
-      console.error('Signup failed:', error);
-      if (error.msg === 'Email already exists.') {
+      console.error("Signup failed:", error);
+      if (error.msg === "Email already exists.") {
         setShowEmailExistsAlert(true);
       } else {
         setShowErrorAlert(true);
-        console.log('Signup failed:', error);
+        console.log("Signup failed:", error);
       }
     }
   };
@@ -152,7 +153,10 @@ const Signup = () => {
           </div>
           <div className="mt-4 text-center text-sm">
             Already have an account?{" "}
-            <a onClick={() => navigate('/login')} className="underline cursor-pointer">
+            <a
+              onClick={() => navigate("/login")}
+              className="underline cursor-pointer"
+            >
               Log in
             </a>
           </div>

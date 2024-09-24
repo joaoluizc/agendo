@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "calendar-api-backend"
+		},
+		{
+			"path": "calendar-api-frontend"
+		}
+	],
+	"settings": {}
+}

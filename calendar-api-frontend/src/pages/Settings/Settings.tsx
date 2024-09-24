@@ -1,8 +1,66 @@
-import { NavLink } from "react-router-dom";
+import { Blocker, useBlocker } from "react-router-dom";
 import GoogleIntegration from "./GoogleIntegration/GoogleIntegration";
 import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal";
+import { useUserSettings } from "@/providers/useUserSettings";
+import { useEffect } from "react";
+import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges";
+import { useIntersectionObserver } from "../../hooks/useIntersectionObserver";
 
 export default function Settings() {
+  const {
+    positionsToSync,
+    originalPositionsToSync,
+    setUnsavedChangesAlertOpen,
+  } = useUserSettings();
+  const activeId = useIntersectionObserver(
+    ["google-integration", "shifts-to-add-to-cal"],
+    {
+      threshold: 0.5,
+      root: null,
+    }
+  );
+
+  const hasUnsavedChanges = () => {
+    return (
+      JSON.stringify(positionsToSync) !==
+      JSON.stringify(originalPositionsToSync)
+    );
+  };
+
+  const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (hasUnsavedChanges()) {
+      e.preventDefault();
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [positionsToSync, originalPositionsToSync]);
+
+  const blocker: Blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (
+      hasUnsavedChanges() &&
+      nextLocation.pathname !== currentLocation.pathname
+    ) {
+      setUnsavedChangesAlertOpen(true);
+      return true;
+    }
+    setUnsavedChangesAlertOpen(false);
+    return false;
+  });
+
+  const handleStay = () => {
+    setUnsavedChangesAlertOpen(false);
+    if (blocker.reset) blocker.reset();
+  };
+
+  const handleLeave = () => {
+    setUnsavedChangesAlertOpen(false);
+    if (blocker.proceed) blocker.proceed();
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -11,20 +69,45 @@ export default function Settings() {
           <h1 className="text-3xl font-semibold">Settings</h1>
         </div>
         <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
-          <nav
-            className="grid gap-4 text-sm text-muted-foreground" x-chunk="dashboard-04-chunk-0"
-          >
-            <NavLink to="#" className="font-semibold text-primary">
+          <nav className="grid gap-4 text-sm text-muted-foreground sticky top-20">
+            <a
+              href="#google-integration"
+              className={
+                activeId === "google-integration"
+                  ? "font-semibold text-primary"
+                  : ""
+              }
+            >
               Google Integration
-            </NavLink>
-            <NavLink to="#">Shifts on GCalendar</NavLink>
+            </a>
+            <a
+              href="#shifts-to-add-to-cal"
+              className={
+                activeId === "shifts-to-add-to-cal"
+                  ? "font-semibold text-primary"
+                  : ""
+              }
+            >
+              Shifts on GCalendar
+            </a>
           </nav>
-          <div className="grid gap-6">
+          <div className="grid gap-6" id="settings-wrapper">
             <GoogleIntegration></GoogleIntegration>
             <ShiftsToAddToCal></ShiftsToAddToCal>
           </div>
         </div>
       </main>
+      {blocker.state === "blocked" ? (
+        <ProceedWithUnsavedChanges
+          title="Are you sure you want to leave?"
+          description="You have unsaved changes. Are you sure you want to leave?"
+          action="Stay"
+          cancel="Leave"
+          actionCallback={handleStay}
+          cancelCallback={handleLeave}
+          // blocker={blocker}
+        />
+      ) : null}
     </div>
-  )
+  );
 }

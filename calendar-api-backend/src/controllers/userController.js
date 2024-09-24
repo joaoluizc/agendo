@@ -9,7 +9,7 @@ const registerUser = async (req, res) => {
   }
   try {
     console.log({ firstName, lastName, email, password});
-    const user = await userService.createUser(req.body);
+    await userService.createUser(req.body);
     sendCookies(req, res);
   } catch (err) {
     console.error(err.message);
@@ -43,8 +43,23 @@ const logoutUser = async (req, res) => {
   res.status(200).send('Logged out');
 };
 
+const userInfo = async (req, res) => {
+  const userEmail = req.user.email;
+  const user = await userService.findUser(userEmail);
+  const response = {
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    slingId: user.slingId,
+    timeZone: user.timeZone,
+    type: user.type,
+  };
+  res.status(200).json(response);
+};
+
 export default {
   registerUser,
   loginUser,
   logoutUser,
+  userInfo,
 };

@@ -39,11 +39,19 @@ const deletePosition = async (id) => {
 
 const getUserPositionsToSync = async (userId) => {
     const user = await User.findById(userId);
-    console.log('in getUserPositionsToSync: user: ', user);
     if (!user) {
         throw new Error('User not found');
     }
     return user.positionsToSync;
+}
+
+const setUserPositionsToSync = async (userId, positions) => {
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new Error('User not found');
+    }
+    user.positionsToSync = positions;
+    await user.save();
 }
 
 export default {
@@ -52,5 +60,6 @@ export default {
     getPositionById,
     updatePosition,
     deletePosition,
-    getUserPositionsToSync
+    getUserPositionsToSync,
+    setUserPositionsToSync,
 };

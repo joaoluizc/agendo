@@ -1,15 +1,15 @@
-import { useState } from 'react';
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CrossCircledIcon } from "@radix-ui/react-icons"
-import background from "../../resources/background-login.svg"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CrossCircledIcon } from "@radix-ui/react-icons";
+import background from "../../resources/background-login.svg";
 import { useNavigate } from "react-router-dom";
 
 const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showWrongPswdAlert, setShowWrongPswdAlert] = useState(false);
   const [showEmailNotFoundAlert, setShowEmailNotFoundAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
@@ -19,28 +19,28 @@ const Login = () => {
     setShowWrongPswdAlert(false);
     setShowEmailNotFoundAlert(false);
     setShowErrorAlert(false);
-    const response = await fetch('api/login', {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'include',
+    const response = await fetch("api/user/login", {
+      method: "POST",
+      mode: "cors",
+      credentials: "include",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ email, password }),
     });
 
     if (response.ok) {
-      navigate('/home');
+      navigate("/home");
     } else {
       const error = await response.json();
-      console.error('Login failed:', error);
-      if (error.msg === 'Invalid credentials. Wrong password.') {
+      console.error("Login failed:", error);
+      if (error.msg === "Invalid credentials. Wrong password.") {
         setShowWrongPswdAlert(true);
-      } else if (error.msg === 'Invalid credentials. Email not found.') {
+      } else if (error.msg === "Invalid credentials. Email not found.") {
         setShowEmailNotFoundAlert(true);
       } else {
         setShowErrorAlert(true);
-        console.log('Login failed:', error);
+        console.log("Login failed:", error);
       }
     }
   };
@@ -55,27 +55,31 @@ const Login = () => {
               Enter your email below to login to your account
             </p>
           </div>
-          {showEmailNotFoundAlert ? <Alert>
-            <CrossCircledIcon className="w-5 h-5 text-red-500" />
-            <AlertTitle>Uh oh</AlertTitle>
-            <AlertDescription>
-              Email not found. Please check it or sign up.
-            </AlertDescription>
-          </Alert> : null}
-          {showWrongPswdAlert ? <Alert>
-            <CrossCircledIcon className="w-5 h-5 text-red-500" />
-            <AlertTitle>Uh oh</AlertTitle>
-            <AlertDescription>
-              Wrong password. Try again.
-            </AlertDescription>
-          </Alert> : null}
-          {showErrorAlert ? <Alert>
-            <CrossCircledIcon className="w-5 h-5 text-red-500" />
-            <AlertTitle>Uh oh</AlertTitle>
-            <AlertDescription>
-              Internal error. Try again later.
-            </AlertDescription>
-          </Alert> : null}
+          {showEmailNotFoundAlert ? (
+            <Alert>
+              <CrossCircledIcon className="w-5 h-5 text-red-500" />
+              <AlertTitle>Uh oh</AlertTitle>
+              <AlertDescription>
+                Email not found. Please check it or sign up.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {showWrongPswdAlert ? (
+            <Alert>
+              <CrossCircledIcon className="w-5 h-5 text-red-500" />
+              <AlertTitle>Uh oh</AlertTitle>
+              <AlertDescription>Wrong password. Try again.</AlertDescription>
+            </Alert>
+          ) : null}
+          {showErrorAlert ? (
+            <Alert>
+              <CrossCircledIcon className="w-5 h-5 text-red-500" />
+              <AlertTitle>Uh oh</AlertTitle>
+              <AlertDescription>
+                Internal error. Try again later.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -103,7 +107,8 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 type="password"
-                required />
+                required
+              />
             </div>
             <Button type="submit" className="w-full" onClick={handleSubmit}>
               Login
@@ -114,7 +119,10 @@ const Login = () => {
           </div>
           <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{" "}
-            <a onClick={() => navigate('/signup')} className="underline cursor-pointer">
+            <a
+              onClick={() => navigate("/signup")}
+              className="underline cursor-pointer"
+            >
               Sign up
             </a>
           </div>

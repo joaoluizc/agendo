@@ -32,6 +32,7 @@ export const getShifts = async (
   setIsLoading(true);
   const selectedDate = utils.getLocalTimeframeISO(date);
   console.log(`start shift fetch for ${date.toLocaleTimeString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`);
+  console.log(selectedDate);
   const endpoint = `/api/sling/calendar?date=${selectedDate}`;
   const response = await fetch(endpoint, {
     method: 'GET',

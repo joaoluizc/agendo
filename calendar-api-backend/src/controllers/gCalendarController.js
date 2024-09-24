@@ -131,7 +131,10 @@ gCalendarRouter.get('/all-events', async (req, res) => {
 });
 
 gCalendarRouter.post('/all-shifts-to-gcal', async (req, res) => {
-    const date = req.body.date || utils.todayISO(new Date());
+    console.log('req.body: ', req.body);
+    const date = req.body.date ? utils.todayISO(req.body.date) : utils.todayISO(new Date());
+    // const date = utils.todayISO(req.body.date) || utils.todayISO(new Date());
+    console.log('date: ', date);
     try {
         const calendar = await slingController.getCalendar(date);
         const usersWithGoogle = await userService.getAllUsersWithTokens();
@@ -147,7 +150,7 @@ gCalendarRouter.post('/all-shifts-to-gcal', async (req, res) => {
             const shiftsToAdd = userShifts.filter(event => positionsToSync.includes(event.position.id.toString()));
             const userEvents = shiftsToAdd.map(shift => utils.shiftToEvent(shift));
 
-            console.log(`Adding shifts to GCal for ${user.email}`);
+            console.log(`Adding shifts to GCal for ${user.email} on date ${date}`);
             userEvents.forEach(async (event) => await gCalendarService.addEvent(user, event));
         });
         res.status(200).json();
@@ -158,6 +161,7 @@ gCalendarRouter.post('/all-shifts-to-gcal', async (req, res) => {
 
 gCalendarRouter.get('/', (req, res) => res.status(200).json({ message: 'hey there :-))))' }));
 
+// Cron job to check and refresh gapi tokens every 30 minutes
 cron.schedule('*/30 * * * *', async () => {
     console.log('Running cron job to check and refresh tokens');
     const users = await userService.getAllUsersWithTokens();
