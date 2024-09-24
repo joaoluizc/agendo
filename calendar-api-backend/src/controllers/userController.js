@@ -45,6 +45,9 @@ const logoutUser = async (req, res) => {
 
 const userInfo = async (req, res) => {
   const userEmail = req.user.email;
+  if (!userEmail) {
+    return res.status(400).json({message: 'email is required'});
+  }
   const user = await userService.findUser(userEmail);
   const response = {
     email: user.email,
