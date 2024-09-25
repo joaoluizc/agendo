@@ -43,7 +43,7 @@ gCalendarRouter.get('/redirect', (req, res) => {
         }
         oauth2Client.setCredentials(tokens);
         userService.addGapiToken(req.user.email, tokens);
-        res.redirect('http://localhost:5173/');
+        res.redirect(process.env.REDIRECT_FRONTEND);
     });
 });
 
