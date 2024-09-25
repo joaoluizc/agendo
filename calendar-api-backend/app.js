@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors'
 import cookieParser from 'cookie-parser';
+import process from 'process'
 
 import connectDB from './src/database/db.js'
 import userRouter from './src/routers/userRouter.js';
@@ -10,7 +11,7 @@ import positionRouter from './src/routers/positionRouters.js';
 import verifyUserAuth from './src/middlewares/verifyUserAuth.js';
 import seedPositions from './src/database/seeds/seedPositions.js';
 
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 const app = express();
 app.use(express.json());
