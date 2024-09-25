@@ -9,7 +9,7 @@ import Signup from "./pages/Signup/Signup.tsx";
 import Home from "./pages/Home/Home.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
-import Header from "./components/header/Header.tsx";
+import Header from "./components/Header/Header.tsx";
 import Settings from "./pages/Settings/Settings.tsx";
 import Calendar from "./pages/Calendar/Calendar.tsx";
 import "./App.css";
