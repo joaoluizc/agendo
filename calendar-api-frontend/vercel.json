@@ -1,0 +1,8 @@
+{
+    "rewrites": [
+      {
+        "source": "/api/*",
+        "destination": "https://agendo-backend.onrender.com/*"
+      }
+    ]
+}
