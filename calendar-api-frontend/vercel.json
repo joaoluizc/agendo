@@ -3,6 +3,10 @@
       {
         "source": "/api/:match*",
         "destination": "https://agendo-backend.onrender.com/:match*"
+      },
+      {
+        "source": "/(*)",
+        "destination": "https://agendo-navy.vercel.app/"
       }
     ]
 }
