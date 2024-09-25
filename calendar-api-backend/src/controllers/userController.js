@@ -45,10 +45,14 @@ const logoutUser = async (req, res) => {
 
 const userInfo = async (req, res) => {
   const userEmail = req.user.email;
+  console.log(userEmail);
   if (!userEmail) {
     return res.status(400).json({message: 'email is required'});
   }
   const user = await userService.findUser(userEmail);
+  if (!user) {
+    return res.status(400).json({message: 'User not found'});
+  }
   const response = {
     email: user.email,
     firstName: user.firstName,

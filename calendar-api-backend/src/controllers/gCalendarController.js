@@ -131,26 +131,29 @@ gCalendarRouter.get('/all-events', async (req, res) => {
 });
 
 gCalendarRouter.post('/all-shifts-to-gcal', async (req, res) => {
-    console.log('req.body: ', req.body);
     const date = req.body.date ? utils.todayISO(req.body.date) : utils.todayISO(new Date());
-    // const date = utils.todayISO(req.body.date) || utils.todayISO(new Date());
-    console.log('date: ', date);
+    console.log(`gCalendarController 1: Adding all shifts to GCal for date ${date}. Request from user ${req.user.email}`);
     try {
         const calendar = await slingController.getCalendar(date);
+        console.log(`gCalendarController 2: Found ${calendar.length} shifts for date ${date}`);
         const usersWithGoogle = await userService.getAllUsersWithTokens();
+        console.log(`gCalendarController 3: Found ${usersWithGoogle.length} users authenticated with Google`);
         usersWithGoogle.forEach(async (user) => {
             const slingUser = calendar.filter(slingUserCal => Number(slingUserCal.id) === Number(user.slingId))[0];
             if (!slingUser) {
+                console.log(`Found no shifts for user ${user.email}, no event was added to calendar`);
                 res.status(200).json({ message: 'No shifts found for user, no event was added to calendar' });
                 return;
             }
             const userShifts = slingUser.shifts;
+            console.log(`gCalendarController 4: Found ${userShifts.length} shifts for user ${user.email}`);
 
+            console.log(`gCalendarController 5: Filtering shifts for user ${user.email} to what user wants to sync`);
             const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());
             const shiftsToAdd = userShifts.filter(event => positionsToSync.includes(event.position.id.toString()));
             const userEvents = shiftsToAdd.map(shift => utils.shiftToEvent(shift));
 
-            console.log(`Adding shifts to GCal for ${user.email} on date ${date}`);
+            console.log(`gCalendarController 6: Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`);
             userEvents.forEach(async (event) => await gCalendarService.addEvent(user, event));
         });
         res.status(200).json();
