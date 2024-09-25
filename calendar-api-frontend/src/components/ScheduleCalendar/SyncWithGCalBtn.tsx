@@ -1,5 +1,5 @@
-import { useUserSettings } from "@/providers/useUserSettings";
-import { Button } from "../ui/button";
+import { useUserSettings } from "@/providers/useUserSettings.tsx";
+import { Button } from "../ui/button.tsx";
 
 type SyncWithGCalBtnProps = {
   selectedDate: Date;

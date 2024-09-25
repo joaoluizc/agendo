@@ -1,10 +1,10 @@
 import { Blocker, useBlocker } from "react-router-dom";
-import GoogleIntegration from "./GoogleIntegration/GoogleIntegration";
-import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal";
-import { useUserSettings } from "@/providers/useUserSettings";
+import GoogleIntegration from "./GoogleIntegration/GoogleIntegration.tsx";
+import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal.tsx";
+import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useEffect } from "react";
-import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges";
-import { useIntersectionObserver } from "../../hooks/useIntersectionObserver";
+import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges.tsx";
+import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
   const {

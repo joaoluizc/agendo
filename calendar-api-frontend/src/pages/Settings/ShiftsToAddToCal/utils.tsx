@@ -1,4 +1,4 @@
-import { Position, PositionSync } from "@/types/positionTypes";
+import { Position, PositionSync } from "@/types/positionTypes.ts";
 import { RowSelectionState } from "@tanstack/react-table";
 
 export async function getPositionsToSync(): Promise<Position[]> {

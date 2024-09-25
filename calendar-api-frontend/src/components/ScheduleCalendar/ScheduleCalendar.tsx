@@ -3,9 +3,9 @@ import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
 import { useEffect, useState } from "react";
-import { User } from "../../types/slingTypes";
+import { User } from "../../types/slingTypes.ts";
 import { Label } from "@radix-ui/react-label";
-import { Input } from "../ui/input";
+import { Input } from "../ui/input.tsx";
 import { CalendarIcon, CalendarSearch, RepeatIcon } from "lucide-react";
 import { Markup } from "interweave";
 import {
@@ -15,16 +15,16 @@ import {
   calculateGridColumnStart,
   getGCalendarEvents,
   prettyGCalTime,
-} from "./scheduleUtils";
-import { CalendarUser } from "@/types/gCalendarTypes";
+} from "./scheduleUtils.ts";
+import { CalendarUser } from "@/types/gCalendarTypes.ts";
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { Button } from "../ui/button";
-import CalendarHeader from "./calendar-components/CalendarHeader";
-import SyncWithGCalBtn from "./SyncWithGCalBtn";
+import { Button } from "../ui/button.tsx";
+import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
+import SyncWithGCalBtn from "./SyncWithGCalBtn.tsx";
 
 const userHasGcal = (user: User, gCalendarEvents: CalendarUser[]) => {
   return gCalendarEvents.some(

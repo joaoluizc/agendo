@@ -1,6 +1,6 @@
-import utils from '../../utils/utils';
-import { Shift, User } from '../../types/slingTypes';
-import { CalendarUser } from '@/types/gCalendarTypes';
+import utils from '../../utils/utils.ts';
+import { Shift, User } from '../../types/slingTypes.ts';
+import { CalendarUser } from '@/types/gCalendarTypes.ts';
 
 /** Sort shifts for each user by start time
  * @param {User[]} data - array of users with shifts

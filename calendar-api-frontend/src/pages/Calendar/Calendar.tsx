@@ -1,4 +1,4 @@
-import { CalendarUser, initialCalendarUser } from "@/types/gCalendarTypes";
+import { CalendarUser, initialCalendarUser } from "@/types/gCalendarTypes.ts";
 import { useState } from "react";
 
 const Calendar = () => {

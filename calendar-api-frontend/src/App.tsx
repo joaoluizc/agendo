@@ -4,16 +4,16 @@ import {
   createRoutesFromElements,
   RouterProvider,
 } from "react-router-dom";
-import Login from "./pages/Login/Login";
-import Signup from "./pages/Signup/Signup";
-import Home from "./pages/Home/Home";
-import NotFound from "./NotFound";
-import ProtectedRoute from "./routes/ProtectedRoute";
-import Header from "./components/header/Header";
-import Settings from "./pages/Settings/Settings";
-import Calendar from "./pages/Calendar/Calendar";
+import Login from "./pages/Login/Login.tsx";
+import Signup from "./pages/Signup/Signup.tsx";
+import Home from "./pages/Home/Home.tsx";
+import NotFound from "./NotFound.tsx";
+import ProtectedRoute from "./routes/ProtectedRoute.tsx";
+import Header from "./components/header/Header.tsx";
+import Settings from "./pages/Settings/Settings.tsx";
+import Calendar from "./pages/Calendar/Calendar.tsx";
 import "./App.css";
-import { Providers } from "./providers/Providers";
+import { Providers } from "./providers/Providers.tsx";
 
 const router = createBrowserRouter(
   createRoutesFromElements(

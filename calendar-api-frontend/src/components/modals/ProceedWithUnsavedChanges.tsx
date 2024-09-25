@@ -9,7 +9,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { useUserSettings } from "@/providers/useUserSettings";
+import { useUserSettings } from "@/providers/useUserSettings.tsx";
 
 type PropsType = {
   title: string;

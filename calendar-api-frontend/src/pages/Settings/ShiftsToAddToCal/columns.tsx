@@ -1,8 +1,8 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 import { ColumnDef } from "@tanstack/react-table";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { ArrowUpDown } from "lucide-react";
-import { Position } from "@/types/positionTypes";
+import { Position } from "@/types/positionTypes.tsx";
 
 export const columns: ColumnDef<Position>[] = [
   {

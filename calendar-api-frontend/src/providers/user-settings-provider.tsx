@@ -1,5 +1,5 @@
 import { createContext, useState } from "react";
-import { Position } from "@/types/positionTypes";
+import { Position } from "@/types/positionTypes.ts";
 
 type UserSettingsProviderProps = {
   children: React.ReactNode;

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 import {
   Card,
   CardContent,
@@ -6,13 +6,13 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { columns } from "./columns";
-import { DataTable } from "./data-table";
+} from "@/components/ui/card.tsx";
+import { columns } from "./columns.tsx";
+import { DataTable } from "./data-table.tsx";
 import { useEffect } from "react";
-import { getPositionsToSync, savePositionsToSync } from "./utils";
-import { useSettings } from "@/providers/useSettings";
-import { useUserSettings } from "@/providers/useUserSettings";
+import { getPositionsToSync, savePositionsToSync } from "./utils.tsx";
+import { useSettings } from "@/providers/useSettings.tsx";
+import { useUserSettings } from "@/providers/useUserSettings.tsx";
 
 export default function ShiftsToAddToCal() {
   const { rowSelection } = useSettings();

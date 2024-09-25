@@ -1,4 +1,4 @@
-import Schedule from "../../components/scheduleCalendar/ScheduleCalendar";
+import Schedule from "../../components/scheduleCalendar/ScheduleCalendar.tsx";
 
 const Home = () => {
   return (
