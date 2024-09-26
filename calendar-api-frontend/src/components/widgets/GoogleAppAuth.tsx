@@ -12,6 +12,12 @@ const GoogleAppAuth = () => {
       if (response.status === 200) {
         response.json().then((data) => {
           if (data.ssoUrl) {
+            console.log("Redirecting to SSO URL", data.ssoUrl);
+          }
+          if (
+            data.ssoUrl &&
+            data.ssoUrl.startsWith("https://accounts.google.com")
+          ) {
             window.location.href = data.ssoUrl;
           }
         });
