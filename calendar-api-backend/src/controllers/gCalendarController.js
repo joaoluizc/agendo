@@ -8,6 +8,7 @@ import gCalendarService from '../services/gCalendarService.js';
 import userService from '../services/userService.js';
 import slingController from './slingController.js';
 import utils from '../utils/utils.js';
+import verifyUserAuth from '../middlewares/verifyUserAuth.js';
 
 dotenv.config();
 
@@ -25,7 +26,7 @@ const getOAuth2Client = (tokens) => {
     return oauth2Client;
 };
 
-gCalendarRouter.get('/login', (req, res) => {
+gCalendarRouter.get(verifyUserAuth, '/login', (req, res) => {
     console.log(`GCalendar login 1.1: Authenticating user ${req.user.email} with Google OAuth2`);
     const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
     const state = uuidv4(); // Generate a unique session identifier
@@ -67,7 +68,7 @@ gCalendarRouter.get('/redirect', (req, res) => {
     });
 });
 
-gCalendarRouter.get('/userinfo', async (req, res) => {
+gCalendarRouter.get(verifyUserAuth, '/userinfo', async (req, res) => {
     console.log(`UserInfo 1: Fetching user info for ${req.user.email}`);
     const tokens = await userService.getGapiToken(req.user.email);
     if (!tokens) {
@@ -84,14 +85,14 @@ gCalendarRouter.get('/userinfo', async (req, res) => {
     res.status(200).json(data);
 });
 
-gCalendarRouter.post('/disconnect', async (req, res) => {
+gCalendarRouter.post(verifyUserAuth, '/disconnect', async (req, res) => {
     console.log(`Disconnecting user ${req.user.email} from Google OAuth2`);
     await userService.addGapiToken(req.user.email, null);
     console.log(`User ${req.user.email} disconnected from Google OAuth2`);
     res.status(200).send('Disconnected');
 });
 
-gCalendarRouter.get('/calendars', async (req, res) => {
+gCalendarRouter.get(verifyUserAuth, '/calendars', async (req, res) => {
     const tokens = await userService.getGapiToken(req.user.email);  // Retrieve tokens from the user service
     if (!tokens) {
         return res.status(401).send('User not authenticated');
@@ -108,7 +109,7 @@ gCalendarRouter.get('/calendars', async (req, res) => {
     });
 });
 
-gCalendarRouter.get('/events', async (req, res) => {
+gCalendarRouter.get(verifyUserAuth, '/events', async (req, res) => {
     console.log(`Fetching GCalendar events for ${req.user.email}`);
     const tokens = await userService.getGapiToken(req.user.email);  // Retrieve tokens from the user service
     if (!tokens) {
@@ -135,7 +136,7 @@ gCalendarRouter.get('/events', async (req, res) => {
     });
 });
 
-gCalendarRouter.get('/all-events', async (req, res) => {
+gCalendarRouter.get(verifyUserAuth, '/all-events', async (req, res) => {
     const date = new Date(req.query.date.split('/')[0]);
     console.log(`Fetching GCalendar events for ${req.user.email} on date ${date}`);
     try {
@@ -187,7 +188,7 @@ gCalendarRouter.post('/all-shifts-to-gcal', async (req, res) => {
     }
 });
 
-gCalendarRouter.get('/', (req, res) => res.status(200).json({ message: 'hey there :-))))' }));
+gCalendarRouter.get(verifyUserAuth, '/', (req, res) => res.status(200).json({ message: 'hey there :-))))' }));
 
 // Cron job to check and refresh gapi tokens every 30 minutes
 cron.schedule('*/30 * * * *', async () => {

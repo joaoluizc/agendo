@@ -34,7 +34,7 @@ connectDB();
 
 await seedPositions();
 
-app.use('/gcalendar', verifyUserAuth, gCalendarRouter);
+app.use('/gcalendar', gCalendarRouter);
 app.use('/sling', verifyUserAuth, slingRouter);
 app.use('/position', verifyUserAuth, positionRouter);
 app.use('/user', userRouter);
