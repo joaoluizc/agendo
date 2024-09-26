@@ -1,4 +1,5 @@
 import express from 'express';
+import session from 'express-session';
 import cors from 'cors'
 import cookieParser from 'cookie-parser';
 import process from 'process'
@@ -21,6 +22,12 @@ const corsOptions = {
   optionsSuccessStatus: 200,
   credentials: true,
 };
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: true } // Set to true if using HTTPS
+}));
 app.use(cors(corsOptions));
 
 connectDB();
