@@ -3,6 +3,7 @@ import express from 'express';
 import { google } from 'googleapis';
 import cron from 'node-cron';
 import process from 'process';
+import { v4 as uuidv4 } from 'uuid';
 import gCalendarService from '../services/gCalendarService.js';
 import userService from '../services/userService.js';
 import slingController from './slingController.js';
@@ -25,31 +26,52 @@ const getOAuth2Client = (tokens) => {
 };
 
 gCalendarRouter.get('/login', (req, res) => {
+    console.log(`GCalendar login 1.1: Authenticating user ${req.user.email} with Google OAuth2`);
     const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
+    const state = uuidv4(); // Generate a unique session identifier
+    req.session.oauthState = state; // Store the state in the user's session
+    console.log(`GCalendar login 1.2: Generated state session ${state} for user ${req.user.email}`);
+
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: SCOPES,
+        state: state, // Include the state parameter
     });
+    console.log(`GCalendar login 1.3: Redirecting user ${req.user.email} to Google OAuth2 login page: ${url}`);
     res.status(200).json({ ssoUrl: url });
 });
 
 gCalendarRouter.get('/redirect', (req, res) => {
+    console.log(`GCalendar login 2.1: User ${req.user.email} redirected back after Google OAuth2 login`);
     const code = req.query.code;
+    console.log(`GCalendar login 2.2: Received code ${code} from Google OAuth2 login page`);
+    const state = req.query.state;
+    console.log(`GCalendar login 2.3: Received state ${state} from Google OAuth2 login page`);
+
+    // Validate the state parameter
+    if (state !== req.session.oauthState) {
+        console.log(`GCalendar login error: Invalid state parameter. Mismatch between state ${state} and oauthState ${req.session.oauthState}`);
+        return res.status(401).send('Invalid state parameter');
+    }
+
     const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
     oauth2Client.getToken(code, async (err, tokens) => {
         if (err) {
-            console.log(`Couldn't get token`, err);
+            console.log(`GCalendar login error: Couldn't get token`, err);
             return res.send('Error');
         }
         oauth2Client.setCredentials(tokens);
         userService.addGapiToken(req.user.email, tokens);
+        console.log(`GCalendar login 2.2: User ${req.user.email} authenticated with Google OAuth2. Redirecting back to frontend on ${process.env.REDIRECT_FRONTEND}`);
         res.redirect(process.env.REDIRECT_FRONTEND);
     });
 });
 
 gCalendarRouter.get('/userinfo', async (req, res) => {
+    console.log(`UserInfo 1: Fetching user info for ${req.user.email}`);
     const tokens = await userService.getGapiToken(req.user.email);
     if (!tokens) {
+        console.log(`UserInfo 2: User ${req.user.email} not authenticated with Google`);
         return res.status(204).send('User not authenticated with Google');
     }
     const response = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
@@ -58,11 +80,14 @@ gCalendarRouter.get('/userinfo', async (req, res) => {
         },
     });
     const data = await response.json();
+    console.log(`UserInfo 3: User info fetched for ${req.user.email}`);
     res.status(200).json(data);
 });
 
 gCalendarRouter.post('/disconnect', async (req, res) => {
+    console.log(`Disconnecting user ${req.user.email} from Google OAuth2`);
     await userService.addGapiToken(req.user.email, null);
+    console.log(`User ${req.user.email} disconnected from Google OAuth2`);
     res.status(200).send('Disconnected');
 });
 
