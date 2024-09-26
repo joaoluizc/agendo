@@ -75,7 +75,7 @@ gCalendarRouter.get('/redirect', async (req, res) => {
             return res.send('Error');
         }
         oauth2Client.setCredentials(tokens);
-        userService.addGapiToken(email, tokens);
+        await userService.addGapiToken(email, tokens);
         console.log(`GCalendar login 2.2: User ${email} authenticated with Google OAuth2. Redirecting back to frontend on ${process.env.REDIRECT_FRONTEND}`);
         res.redirect(process.env.REDIRECT_FRONTEND);
     });
