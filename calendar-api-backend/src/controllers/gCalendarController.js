@@ -50,12 +50,6 @@ gCalendarRouter.get('/redirect', async (req, res) => {
     const state = req.query.state;
     console.log(`GCalendar login 2.3: Received state ${state} from Google OAuth2 login page`);
 
-    // Validate the state parameter between session and query
-    // if (state !== req.session.oauthState) {
-    //     console.log(`GCalendar login error: Invalid state parameter. Mismatch between state ${state} and oauthState ${req.session.oauthState}`);
-    //     return res.status(401).send('Invalid state parameter');
-    // }
-
     // Find the user's email from the state parameter
     const foundState = await redirectStateService.findState(state);
     if (!foundState) {
@@ -69,13 +63,14 @@ gCalendarRouter.get('/redirect', async (req, res) => {
     redirectStateService.removeState(state);
     console.log(`GCalendar login 2.5: Removed state ${state} from database for cleanup`);
 
+    // Exchange the code for tokens and save them to the user service
     const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
     oauth2Client.getToken(code, async (err, tokens) => {
         if (err) {
             console.log(`GCalendar login error: Couldn't get token`, err);
             return res.send('Error');
         }
-        console.log(`GCalendar login 2.6: Received tokens for user ${email}: ${JSON.stringify(tokens)}`);
+        console.log(`GCalendar login 2.6: Received tokens for user ${email}`);
         oauth2Client.setCredentials(tokens);
         try {
             await userService.addGapiToken(email, tokens);
@@ -179,6 +174,8 @@ gCalendarRouter.get('/all-events verifyUserAuth, ', async (req, res) => {
 gCalendarRouter.post('/all-shifts-to-gcal', verifyUserAuth, async (req, res) => {
     const date = req.body.date ? utils.todayISO(req.body.date) : utils.todayISO(new Date());
     console.log(`gCalendarController 1: Adding all shifts to GCal for date ${date}. Request from user ${req.user.email}`);
+    let usersWithChanges = [];
+    let numberOfAddedEvents = 0;
     try {
         const calendar = await slingController.getCalendar(date);
         console.log(`gCalendarController 2: Found ${calendar.length} shifts for date ${date}`);
@@ -188,21 +185,23 @@ gCalendarRouter.post('/all-shifts-to-gcal', verifyUserAuth, async (req, res) => 
             const slingUser = calendar.filter(slingUserCal => Number(slingUserCal.id) === Number(user.slingId))[0];
             if (!slingUser) {
                 console.log(`Found no shifts for user ${user.email}, no event was added to calendar`);
-                res.status(200).json({ message: 'No shifts found for user, no event was added to calendar' });
+                // res.status(200).json({ message: 'No shifts found for user, no event was added to calendar' });
                 return;
             }
             const userShifts = slingUser.shifts;
             console.log(`gCalendarController 4: Found ${userShifts.length} shifts for user ${user.email}`);
 
-            console.log(`gCalendarController 5: Filtering shifts for user ${user.email} to what user wants to sync`);
+            console.log(`gCalendarController 5: Filtering shifts for ${user.email} to what user wants to sync`);
             const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());
             const shiftsToAdd = userShifts.filter(event => positionsToSync.includes(event.position.id.toString()));
             const userEvents = shiftsToAdd.map(shift => utils.shiftToEvent(shift));
 
             console.log(`gCalendarController 6: Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`);
+            usersWithChanges.push({email: user.email, addedEvents: userEvents});
+            numberOfAddedEvents += userEvents.length;
             userEvents.forEach(async (event) => await gCalendarService.addEvent(user, event));
         });
-        res.status(200).json();
+        res.status(200).json({ message: `${numberOfAddedEvents} shifts added to GCal for ${usersWithChanges.length} users`, addedEvents: usersWithChanges });
     } catch(e) {
         console.log('Error adding shifts to GCal: ', e.message);
     }
