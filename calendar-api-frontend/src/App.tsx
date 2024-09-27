@@ -14,6 +14,7 @@ import Settings from "./pages/Settings/Settings.tsx";
 import Calendar from "./pages/Calendar/Calendar.tsx";
 import "./App.css";
 import { Providers } from "./providers/Providers.tsx";
+import { Toaster } from "./components/ui/sonner.tsx";
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -36,6 +37,7 @@ function App() {
       <div className="flex min-h-screen w-full flex-col font-sf">
         <RouterProvider router={router} />
       </div>
+      <Toaster />
     </Providers>
   );
 }
