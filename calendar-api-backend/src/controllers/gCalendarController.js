@@ -36,6 +36,7 @@ gCalendarRouter.get('/login', verifyUserAuth, async (req, res) => {
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: SCOPES,
+        prompt: 'consent', // Prompt the user to reauthorize the app every time (this will provide a new refresh token every time)
         state: state, // Include the state parameter
     });
     console.log(`GCalendar login 1.3: Redirecting user ${req.user.email} to Google OAuth2 login page: ${url}`);
@@ -76,7 +77,12 @@ gCalendarRouter.get('/redirect', async (req, res) => {
         }
         console.log(`GCalendar login 2.6: Received tokens for user ${email}: ${JSON.stringify(tokens)}`);
         oauth2Client.setCredentials(tokens);
-        await userService.addGapiToken(email, tokens);
+        try {
+            await userService.addGapiToken(email, tokens);
+        } catch (error) {
+            console.log(`GCalendar login error: Couldn't save token`, error);
+            return res.send('Error');
+        }
         console.log(`GCalendar login 2.2: User ${email} authenticated with Google OAuth2. Redirecting back to frontend on ${process.env.REDIRECT_FRONTEND}`);
         res.redirect(process.env.REDIRECT_FRONTEND);
     });
