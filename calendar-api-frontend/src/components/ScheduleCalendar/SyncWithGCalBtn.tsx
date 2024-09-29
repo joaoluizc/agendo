@@ -11,7 +11,7 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
   const { type: userType } = useUserSettings();
 
   const syncWithGCal = async () => {
-    const response = await fetch("api/gcalendar/all-shifts-to-gcal", {
+    const response = await fetch("api/gcalendar/days-shifts-to-gcal", {
       method: "POST",
       mode: "cors",
       credentials: "include",

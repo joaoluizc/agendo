@@ -1,5 +1,8 @@
 import dotenv from 'dotenv';
+import slingController from '../controllers/slingController.js';
+import gCalendarService from '../services/gCalendarService.js';
 import userService from './userService.js';
+import utils from '../utils/utils.js';
 import { google } from 'googleapis';
 import process from 'process';
 
@@ -83,7 +86,6 @@ const addEvent = async (user, event) => {
     });
 }
 
-
 /**
  * Add multiple events to user's calendar
  * @param {Object} user 
@@ -113,9 +115,44 @@ const addEvents = async (user, events) => {
     return Promise.all(eventsPromises);
 }
 
+const addDaysShiftsToGcal = async (date) => {
+    let usersWithChanges = [];
+    let numberOfAddedEvents = 0;
+    try {
+        const calendar = await slingController.getCalendar(date);
+        console.log(`gCalendarController 2: Found ${calendar.length} shifts for date ${date}`);
+        const usersWithGoogle = await userService.getAllUsersWithTokens();
+        console.log(`gCalendarController 3: Found ${usersWithGoogle.length} users authenticated with Google`);
+        usersWithGoogle.forEach(async (user) => {
+            const slingUser = calendar.filter(slingUserCal => Number(slingUserCal.id) === Number(user.slingId))[0];
+            if (!slingUser) {
+                console.log(`Found no shifts for user ${user.email}, no event was added to calendar`);
+                return;
+            }
+            const userShifts = slingUser.shifts;
+            console.log(`gCalendarController 4: Found ${userShifts.length} shifts for user ${user.email}`);
+
+            console.log(`gCalendarController 5: Filtering shifts for ${user.email} to what user wants to sync`);
+            const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());
+            const shiftsToAdd = userShifts.filter(event => positionsToSync.includes(event.position.id.toString()));
+            const userEvents = shiftsToAdd.map(shift => utils.shiftToEvent(shift));
+
+            console.log(`gCalendarController 6: Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`);
+            usersWithChanges.push({email: user.email, addedEvents: userEvents});
+            numberOfAddedEvents += userEvents.length;
+            userEvents.forEach(async (event) => await gCalendarService.addEvent(user, event));
+        });
+        return {status: 200, message: `${numberOfAddedEvents} shifts added to GCal for ${usersWithChanges.length} users`, addedEvents: usersWithChanges};
+    } catch(e) {
+        console.log('Error adding shifts to GCal: ', e.message);
+        return {status: 500, message: 'Error adding shifts to GCal'};
+    }
+};
+
 export default {
     getUserEvents,
     getAllUsersEvents,
     addEvent,
     addEvents,
+    addDaysShiftsToGcal,
 };
