@@ -15,6 +15,17 @@ const getOAuth2Client = (tokens) => {
     return oauth2Client;
 };
 
+const getUserInfo = async (tokens) => {
+    // message for future joao: use sdk instead of this endpoint to get user info
+    // https://developers.google.com/identity/sign-in/web/people#:~:text=To%20retrieve%20profile%20information%20for%20a%20user%2C%20use%20the%20getBasicProfile()%20method.%20For%20example%3A
+    const response = await fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
+        headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+        },
+    });
+    return await response.json();
+};
+
 const getUserEvents = async (email, date = new Date()) => {
     const tokens = await userService.getGapiToken(email);  // Retrieve tokens from the user service
     if (!tokens) {
@@ -150,6 +161,7 @@ const addDaysShiftsToGcal = async (date) => {
 };
 
 export default {
+    getUserInfo,
     getUserEvents,
     getAllUsersEvents,
     addEvent,
