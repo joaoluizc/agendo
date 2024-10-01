@@ -1,14 +1,14 @@
 import { Button } from "@/components/ui/button.tsx";
 
-const GoogleAppAuth = () => {
+type GoogleAppAuthProps = {
+  setShowErrorAlert: (state: boolean) => void;
+};
+
+const GoogleAppAuth = (props: GoogleAppAuthProps) => {
+  const { setShowErrorAlert } = props;
   const signIn = () => {
-    const token = localStorage.getItem("token");
-    fetch("api/gcalendar/login", {
-      method: "GET",
-      headers: {
-        authorization: `${token}`,
-      },
-    }).then((response) => {
+    setShowErrorAlert(false);
+    fetch("api/gcalendar/login").then((response) => {
       if (response.status === 200) {
         response.json().then((data) => {
           if (data.ssoUrl) {
@@ -23,11 +23,12 @@ const GoogleAppAuth = () => {
         });
       } else {
         console.log("Failed to sign in");
+        setShowErrorAlert(true);
       }
     });
   };
 
-  return <Button onClick={signIn}>Sign in with Google</Button>;
+  return <Button onClick={signIn}>Log in with Google</Button>;
 };
 
 export default GoogleAppAuth;

@@ -7,6 +7,7 @@ import gCalendarService from '../services/gCalendarService.js';
 import userService from '../services/userService.js';
 import utils from '../utils/utils.js';
 import verifyUserAuth from '../middlewares/verifyUserAuth.js';
+import { sendCookies } from '../middlewares/sendCookies.js';
 
 dotenv.config();
 
@@ -86,19 +87,15 @@ gCalendarRouter.get('/redirect', async (req, res) => {
             const user = { email: profile.email, firstName: profile.given_name, lastName: profile.family_name };
             try {
                 await userService.createUser(user);
+                await userService.addGapiToken(profile.email, userTokens);
+                console.log(`GCalendar login 2.3: User ${profile.email} authenticated with Google OAuth2. Redirecting back to frontend on ${process.env.REDIRECT_FRONTEND}`);
             } catch (e) {
-                console.error('Error creating user:', e);
+                console.error('Error creating user or saving token:', e);
                 return res.status(500).send('Error');
             }
         }
-        try {
-            await userService.addGapiToken(profile.email, userTokens);
-        } catch (error) {
-            console.log(`GCalendar login error: Couldn't save token`, error);
-            return res.send('Error');
-        }
-        console.log(`GCalendar login 2.3: User ${profile.email} authenticated with Google OAuth2. Redirecting back to frontend on ${process.env.REDIRECT_FRONTEND}`);
-        res.redirect(process.env.REDIRECT_FRONTEND);
+        req.body = { email: profile.email };
+        return sendCookies(req, res);
     });
 });
 
@@ -218,7 +215,12 @@ cron.schedule('*/30 * * * *', async () => {
                 if (err) {
                     console.error(`Error refreshing token for user: ${email}`, err);
                 } else {
-                    await userService.addGapiToken(email, newTokens);
+                    try {
+                        await userService.addGapiToken(email, newTokens);
+                    } catch (e) {
+                        console.error(`Error saving new token for user: ${email}`, e);
+                        return;
+                    }
                     console.log(`Token refreshed for user: ${email}`);
                 }
             });

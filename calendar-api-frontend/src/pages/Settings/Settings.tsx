@@ -1,10 +1,10 @@
 import { Blocker, useBlocker } from "react-router-dom";
-import GoogleIntegration from "./GoogleIntegration/GoogleIntegration.tsx";
+// import GoogleIntegration from "./GoogleIntegration/GoogleIntegration.tsx";
 import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useEffect } from "react";
 import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges.tsx";
-import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
+// import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
   const {
@@ -12,13 +12,6 @@ export default function Settings() {
     originalPositionsToSync,
     setUnsavedChangesAlertOpen,
   } = useUserSettings();
-  const activeId = useIntersectionObserver(
-    ["google-integration", "shifts-to-add-to-cal"],
-    {
-      threshold: 0.5,
-      root: null,
-    }
-  );
 
   const hasUnsavedChanges = () => {
     return (
@@ -70,29 +63,21 @@ export default function Settings() {
         </div>
         <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
           <nav className="grid gap-4 text-sm text-muted-foreground sticky top-20">
-            <a
+            {/* <a
               href="#google-integration"
-              className={
-                activeId === "google-integration"
-                  ? "font-semibold text-primary"
-                  : ""
-              }
+              className={"font-semibold text-primary"}
             >
               Google Integration
-            </a>
+            </a> */}
             <a
               href="#shifts-to-add-to-cal"
-              className={
-                activeId === "shifts-to-add-to-cal"
-                  ? "font-semibold text-primary"
-                  : ""
-              }
+              className={"font-semibold text-primary"}
             >
               Shifts on GCalendar
             </a>
           </nav>
           <div className="grid gap-6" id="settings-wrapper">
-            <GoogleIntegration></GoogleIntegration>
+            {/* <GoogleIntegration></GoogleIntegration> */}
             <ShiftsToAddToCal></ShiftsToAddToCal>
           </div>
         </div>

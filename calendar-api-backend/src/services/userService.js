@@ -1,8 +1,9 @@
 import { User } from '../models/UserModel.js'
-import bcrypt from 'bcrypt'
+// import bcrypt from 'bcrypt'
 
 const createUser = async (userData) => {
-  const { firstName, lastName, email, password } = userData;
+  // const { firstName, lastName, email, password } = userData;
+  const { firstName, lastName, email } = userData;
   
   let user = await User.findOne({ email });
 
@@ -10,15 +11,20 @@ const createUser = async (userData) => {
     throw new Error('User already exists');
   }
 
+  // user = new User({
+  //   firstName,
+  //   lastName,
+  //   email,
+  //   password
+  // });
   user = new User({
     firstName,
     lastName,
     email,
-    password
   });
 
-  const salt = await bcrypt.genSalt(10);
-  user.password = await bcrypt.hash(password, salt);
+  // const salt = await bcrypt.genSalt(10);
+  // user.password = await bcrypt.hash(password, salt);
 
   await user.save();
   return user;
