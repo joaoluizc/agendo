@@ -1,4 +1,13 @@
 export const initialPositions = [
+  { positionId: "12243680", sync: true },
+  { positionId: "9242948", sync: true },
+  { positionId: "11551633", sync: true },
+  { positionId: "12235794", sync: true },
+  { positionId: "15785787", sync: true },
+  { positionId: "18409512", sync: true }
+];
+
+export const allPositions = [
   { positionId: "12243680", name: "Customer Chat", type: "live channel", color: "#00c49e" },
   { positionId: "15689488", name: "LATAM queue", type: "live channel", color: "#FF8C00" },
   { positionId: "9242635", name: "agent", type: "live channel", color: "#00FF7F" },
