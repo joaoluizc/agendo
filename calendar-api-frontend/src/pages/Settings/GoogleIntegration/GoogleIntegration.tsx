@@ -11,10 +11,13 @@ import { Input } from "@/components/ui/input.tsx";
 import GoogleAppAuth from "@/components/widgets/GoogleAppAuth.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { useEffect, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CrossCircledIcon } from "@radix-ui/react-icons";
 
 const GoogleIntegration = () => {
   const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
   const [userGoogleInfo, setUserGoogleInfo] = useState("");
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
 
   const getGoogleUserInfo = async () => {
     try {
@@ -69,6 +72,15 @@ const GoogleIntegration = () => {
       </CardHeader>
       {isGoogleAuthenticated ? (
         <CardContent>
+          {showErrorAlert ? (
+            <Alert>
+              <CrossCircledIcon className="w-5 h-5 text-red-500" />
+              <AlertTitle>Uh oh</AlertTitle>
+              <AlertDescription>
+                Something went wrong. Please try again.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <Label>
             Google Email
             <Input disabled value={userGoogleInfo} />
@@ -81,7 +93,7 @@ const GoogleIntegration = () => {
             Disconnect
           </Button>
         ) : (
-          <GoogleAppAuth></GoogleAppAuth>
+          <GoogleAppAuth setShowErrorAlert={setShowErrorAlert}></GoogleAppAuth>
         )}
       </CardFooter>
     </Card>
