@@ -21,7 +21,7 @@ export const sendCookies = (req, res) => {
         maxAge: 8 * 60 * 60 * 1000,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        domain: 'vercel.app',
+        domain: 'agendo-navy.vercel.app',
         path: '/',
         sameSite: 'None',
       });
