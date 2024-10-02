@@ -95,7 +95,7 @@ gCalendarRouter.get('/redirect', async (req, res) => {
             }
         }
         req.body = { email: profile.email };
-        return sendCookies(req, res);
+        sendCookies(req, res);
     });
 });
 

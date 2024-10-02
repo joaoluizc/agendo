@@ -14,11 +14,13 @@ import seedPositions from './src/database/seeds/seedPositions.js';
 
 const port = process.env.PORT || 3001;
 
+const corsOrigin = process.env.NODE_ENV === 'production' ? 'https://agendo-navy.vercel.app' : 'http://localhost:3001';
+
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
 const corsOptions = {
-  origin: 'http://localhost:3001',
+  origin: corsOrigin,
   optionsSuccessStatus: 200,
   credentials: true,
 };
