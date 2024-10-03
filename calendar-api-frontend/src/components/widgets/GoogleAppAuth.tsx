@@ -8,7 +8,13 @@ const GoogleAppAuth = (props: GoogleAppAuthProps) => {
   const { setShowErrorAlert } = props;
   const signIn = () => {
     setShowErrorAlert(false);
-    fetch("api/gcalendar/login").then((response) => {
+    fetch("api/gcalendar/login", {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }).then((response) => {
       if (response.status === 200) {
         response.json().then((data) => {
           if (data.ssoUrl) {
