@@ -24,7 +24,6 @@ export const sendCookies = (req, res) => {
         domain: 'agendo-navy.vercel.app',
         path: '/',
         sameSite: 'None',
-        crossSite: true,
       });
       console.log('JWT token set as cookie. Redirecting to frontend:', process.env.REDIRECT_FRONTEND);
       return res.redirect(process.env.REDIRECT_FRONTEND);

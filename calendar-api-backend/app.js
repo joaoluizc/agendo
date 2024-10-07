@@ -28,7 +28,8 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: true } // Set to true if using HTTPS
+  cookie: { secure: true }, // Set to true if using HTTPS
+  proxy: true,
 }));
 app.use(cors(corsOptions));
 
