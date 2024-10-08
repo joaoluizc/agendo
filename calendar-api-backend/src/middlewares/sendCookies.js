@@ -20,6 +20,7 @@ export const sendCookies = (req, res) => {
       res.cookie('jwt', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
+        domain: 'dmsupport.org',
       });
       console.log('JWT token set as cookie. Redirecting to frontend:', process.env.REDIRECT_FRONTEND);
       return res.redirect(process.env.REDIRECT_FRONTEND);
