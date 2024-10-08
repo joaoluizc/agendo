@@ -21,6 +21,7 @@ export const sendCookies = (req, res) => {
         maxAge: 8 * 60 * 60 * 1000,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
+        sameSite: 'None',
       });
       console.log('JWT token set as cookie. Redirecting to frontend:', process.env.REDIRECT_FRONTEND);
       return res.redirect(process.env.REDIRECT_FRONTEND);
