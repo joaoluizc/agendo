@@ -21,8 +21,6 @@ export const sendCookies = (req, res) => {
         maxAge: 8 * 60 * 60 * 1000,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        domain: 'agendo-navy.vercel.app',
-        path: '/',
         sameSite: 'None',
       });
       console.log('JWT token set as cookie. Redirecting to frontend:', process.env.REDIRECT_FRONTEND);
