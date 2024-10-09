@@ -10,6 +10,7 @@ const ProtectedRoute: React.FC = () => {
       if (process.env.NODE_ENV === "development") {
         setIsAuthenticated(true);
         setAuthChecked(true);
+        document.cookie = "jwt=dud3v3l0pm3nt";
         return;
       }
 
