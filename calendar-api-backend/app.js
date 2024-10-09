@@ -14,7 +14,7 @@ import seedPositions from './src/database/seeds/seedPositions.js';
 
 const port = process.env.PORT || 3001;
 
-const corsOrigin = process.env.NODE_ENV === 'production' ? 'https://agendo-navy.vercel.app' : 'http://localhost:3001';
+const corsOrigin = process.env.NODE_ENV === 'production' ? 'https://agendo-navy.vercel.app' : 'agendo-git-event-switchup-gcal-joao-luizs-projects-3655b273.vercel.app';
 
 const app = express();
 app.use(express.json());
