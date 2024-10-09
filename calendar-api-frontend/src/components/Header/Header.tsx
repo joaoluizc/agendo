@@ -71,6 +71,15 @@ const Header = () => {
 
   useEffect(() => {
     const getUserSettings = async () => {
+      if (process.env.NODE_ENV === "development") {
+        setFirstName("João");
+        setLastName("Coelho - Duda Support");
+        setEmail("joao.coelho@duda.co");
+        setSlingId("15645762");
+        setType("admin");
+        return;
+      }
+
       const response = await fetch("api/user/info", {
         method: "GET",
         mode: "cors",

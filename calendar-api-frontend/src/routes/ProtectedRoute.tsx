@@ -7,6 +7,12 @@ const ProtectedRoute: React.FC = () => {
 
   useEffect(() => {
     const checkAuth = async () => {
+      if (process.env.NODE_ENV === "development") {
+        setIsAuthenticated(true);
+        setAuthChecked(true);
+        return;
+      }
+
       try {
         const response = await fetch("api/auth-check", {
           method: "GET",
