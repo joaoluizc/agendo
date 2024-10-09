@@ -184,9 +184,10 @@ gCalendarRouter.get('/all-events', verifyUserAuth, async (req, res) => {
 
 gCalendarRouter.post('/days-shifts-to-gcal', verifyUserAuth, async (req, res) => {
     const date = req.body.date ? utils.todayISO(req.body.date) : utils.todayISO(new Date());
-    console.log(`gCalendarController 1: Adding all shifts to GCal for date ${date}. Request from user ${req.user.email}`);
+    console.log(`gCalendar day's-shifts-to-gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.user.email}`);
     try {
-        const result = gCalendarService.addDaysShiftsToGcal(date);
+        const result = await gCalendarService.addDaysShiftsToGcal(date);
+        console.log('event added to GCal: ', result);
         return res.status(result.status).json(result.message);
     } catch (error) {
         console.error('Error adding shifts to GCal:', error);
