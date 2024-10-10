@@ -21,12 +21,13 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
       body: JSON.stringify({ date: selectedDate }),
     });
     const data = await response.json();
+    console.log("syncWithGCal response: ", data);
     if (response.status !== 200) {
       console.log("error syncing shifts to calendar: ", data);
       toast.error("Error syncing shifts to calendar");
       return;
     }
-    toast.success(data.message);
+    toast.success(data);
   };
 
   return (

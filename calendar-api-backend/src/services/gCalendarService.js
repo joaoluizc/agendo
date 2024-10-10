@@ -157,6 +157,9 @@ const addDaysShiftsToGcal = async (date) => {
             await addedGCalEventsService.addEvent(user, addedEvents);
             console.log(`gCalendarController 7: addedEvents: ${JSON.stringify(addedEvents)}`);
         });
+        if (numberOfAddedEvents === 0) {
+            return {status: 200, message: 'No shifts eligible to be added to GCal'};
+        }
         return {status: 200, message: `${numberOfAddedEvents} shifts added to GCal for ${usersWithChanges.length} users`, addedEvents: usersWithChanges};
     } catch(e) {
         console.log('Error adding shifts to GCal: ', e.message);
