@@ -5,6 +5,7 @@ import userService from './userService.js';
 import utils from '../utils/utils.js';
 import { google } from 'googleapis';
 import process from 'process';
+import addedGCalEventsService from './addedGCalEventsService.js';
 
 dotenv.config();
 
@@ -82,7 +83,7 @@ const addEvent = async (user, event) => {
     const { tokens } = user;
     const oauth2Client = getOAuth2Client(tokens);
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    return new Promise((resolve, reject) => {
+    const addedEvent = await new Promise((resolve, reject) => {
         calendar.events.insert({
             calendarId: 'primary',
             resource: event,
@@ -95,6 +96,7 @@ const addEvent = async (user, event) => {
             }
         });
     });
+    return addedEvent.data;
 }
 
 /**
@@ -151,7 +153,9 @@ const addDaysShiftsToGcal = async (date) => {
             console.log(`gCalendarController 6: Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`);
             usersWithChanges.push({email: user.email, addedEvents: userEvents});
             numberOfAddedEvents += userEvents.length;
-            userEvents.forEach(async (event) => await gCalendarService.addEvent(user, event));
+            const addedEvents = await Promise.all(userEvents.map(async (event) => await gCalendarService.addEvent(user, event)));
+            await addedGCalEventsService.addEvent(user, addedEvents);
+            console.log(`gCalendarController 7: addedEvents: ${JSON.stringify(addedEvents)}`);
         });
         return {status: 200, message: `${numberOfAddedEvents} shifts added to GCal for ${usersWithChanges.length} users`, addedEvents: usersWithChanges};
     } catch(e) {

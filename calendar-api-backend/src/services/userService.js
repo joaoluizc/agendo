@@ -41,6 +41,7 @@ const getAllUsersWithTokens = async () => {
     .filter(user => user.gapitoken)
     .map(user => ({
         email: user.email,
+        id: user.id,
         tokens: user.gapitoken,
         slingId: user.slingId,
         positionsToSync: user.positionsToSync,
