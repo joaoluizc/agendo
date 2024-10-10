@@ -1,3 +1,5 @@
+import { slingUsers } from "./slingUsers.js";
+
 const todayISO = (date) => {
     // Get today's date
     const today = new Date(date);
@@ -32,7 +34,14 @@ const shiftToEvent = (shift) => {
     return event;
 };
 
+const getSlingIdByEmail = (email) => {
+    const user = slingUsers.find(user => user.email === email);
+    return user ? user.slingId : undefined;
+}
+
+
 export default {
     todayISO,
     shiftToEvent,
+    getSlingIdByEmail,
 };

@@ -3,7 +3,7 @@ import { User } from '../models/UserModel.js'
 
 const createUser = async (userData) => {
   // const { firstName, lastName, email, password } = userData;
-  const { firstName, lastName, email } = userData;
+  const { firstName, lastName, email, slingId } = userData;
   
   let user = await User.findOne({ email });
 
@@ -21,6 +21,7 @@ const createUser = async (userData) => {
     firstName,
     lastName,
     email,
+    slingId
   });
 
   // const salt = await bcrypt.genSalt(10);

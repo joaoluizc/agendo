@@ -133,9 +133,9 @@ const addDaysShiftsToGcal = async (date) => {
     let numberOfAddedEvents = 0;
     try {
         const calendar = await slingController.getCalendar(date);
-        console.log(`gCalendarController 2: Found ${calendar.length} shifts for date ${date}`);
+        console.log(`gCalendarController 1: Found ${calendar.length} shifts for date ${date}`);
         const usersWithGoogle = await userService.getAllUsersWithTokens();
-        console.log(`gCalendarController 3: Found ${usersWithGoogle.length} users authenticated with Google`);
+        console.log(`gCalendarController 2: Found ${usersWithGoogle.length} users authenticated with Google`);
         usersWithGoogle.forEach(async (user) => {
             const slingUser = calendar.filter(slingUserCal => Number(slingUserCal.id) === Number(user.slingId))[0];
             if (!slingUser) {
@@ -143,7 +143,10 @@ const addDaysShiftsToGcal = async (date) => {
                 return;
             }
             const userShifts = slingUser.shifts;
-            console.log(`gCalendarController 4: Found ${userShifts.length} shifts for user ${user.email}`);
+            console.log(`gCalendarController 3: Found ${userShifts.length} shifts for user ${user.email}`);
+
+            const prevAddedEvents = await addedGCalEventsService.findEventsByDate(date);
+            console.log(`gCalendarController 4: Found ${prevAddedEvents.length} events previously added for date ${date}`);
 
             console.log(`gCalendarController 5: Filtering shifts for ${user.email} to what user wants to sync`);
             const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());

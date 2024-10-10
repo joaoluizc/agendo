@@ -84,7 +84,8 @@ gCalendarRouter.get('/redirect', async (req, res) => {
         }
         if (!agendoUser) {
             console.log(`Google auth user not found: Creating account for ${profile.email}`);
-            const user = { email: profile.email, firstName: profile.given_name, lastName: profile.family_name };
+            const slingId = utils.getSlingIdByEmail(profile.email);
+            const user = { email: profile.email, firstName: profile.given_name, lastName: profile.family_name, slingId };
             try {
                 await userService.createUser(user);
                 await userService.addGapiToken(profile.email, userTokens);
