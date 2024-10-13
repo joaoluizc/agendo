@@ -146,7 +146,6 @@ const addDaysShiftsToGcal = async (date) => {
             console.log(`gCalendarController 3: Found ${userShifts.length} shifts for user ${user.email}`);
 
             const prevAddedEvents = await addedGCalEventsService.findEventsByDate(date);
-            console.log(`gCalendarController 4: Found ${prevAddedEvents.length} events previously added for date ${date}`);
 
             console.log(`gCalendarController 5: Filtering shifts for ${user.email} to what user wants to sync`);
             const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());
@@ -158,9 +157,9 @@ const addDaysShiftsToGcal = async (date) => {
             numberOfAddedEvents += userEvents.length;
             const addedEvents = await Promise.all(userEvents.map(async (event) => await gCalendarService.addEvent(user, event)));
             await addedGCalEventsService.addEvent(user, addedEvents);
-            console.log(`gCalendarController 7: addedEvents: ${JSON.stringify(addedEvents)}`);
+            console.log(`gCalendarController 7: ${addedEvents?.length} event(s) added`);
         });
-        if (numberOfAddedEvents === 0) {
+        if (numberOfAddedEvents?.length === 0 || usersWithChanges?.length === 0) {
             return {status: 200, message: 'No shifts eligible to be added to GCal'};
         }
         return {status: 200, message: `${numberOfAddedEvents} shifts added to GCal for ${usersWithChanges.length} users`, addedEvents: usersWithChanges};
