@@ -1,8 +1,7 @@
 import UsersGCalEvents from "../models/GCalEventModel.js"
 
 const addEvent = async (user, events) => {
-    const userEvents = await UsersGCalEvents.findOne({ userId: user.id });
-    console.log(`userEvents: ${userEvents}`);
+    const userEvents = await UsersGCalEvents.findOne({ userId: user.id });;
     if(userEvents) {
         userEvents.events.push(...events);
         await userEvents.save();
@@ -33,22 +32,37 @@ const findEventsByDate = async (date) => {
             console.log(`findEventsByDate: Total events for user ${userEvents.userId}: ${events.length}`);
             
             const eventsOnDate = events.filter((event) => {
-                console.log(`findEventsByDate: Checking event: ${JSON.stringify(event.id)} with start date: ${new Date(event.start.dateTime).toISOString()}`);
                 const matchesDate = String(new Date(event.start.dateTime).toISOString()).includes(adjustedDate);
-                console.log(`findEventsByDate: Event ${JSON.stringify(event.id)} matches date: ${matchesDate}`);
+                return matchesDate;
             });
             console.log(`findEventsByDate: Events for date ${date} for user ${userEvents.userId}: ${eventsOnDate.length} events found`);
-            console.log(`findEventsByDate: Events details: ${JSON.stringify(eventsOnDate)}`);
-            return eventsOnDate;
+            userEvents.events = [...eventsOnDate];
+            if (eventsOnDate.length > 0) {
+                return userEvents;
+            }
+            return null;
         });
-        console.log(`findEventsByDate: Total events for date ${date}: ${prevAddedEvents.length} events found`);
+        console.log(`findEventsByDate: Total users with events for date ${date}: ${prevAddedEvents.length} users found`);
         return prevAddedEvents;
     } catch (error) {
         console.error(`findEventsByDate: Error fetching events: ${error.message}`);
     }
 }
 
+const deleteEvents = async (userId, events) => {
+    const userEvents = await UsersGCalEvents.findOne({ userId });
+    if(userEvents) {
+        const eventsToDelete = events.map((event) => event.id);
+        userEvents.events = userEvents.events.filter((event) => !eventsToDelete.includes(event.id));
+        await userEvents.save();
+        console.log(`addedGCalEventsService: Deleted ${events.length} events on UserGCalEvents for user with id ${userId}`);
+    } else {
+        console.log(`addedGCalEventsService: No events found for user with id ${userId}`);
+    }
+}
+
 export default {
     addEvent,
     findEventsByDate,
+    deleteEvents,
 };

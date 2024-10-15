@@ -128,6 +128,29 @@ const addEvents = async (user, events) => {
     return Promise.all(eventsPromises);
 }
 
+const deleteEvents = async (user, events) => {
+    const { tokens } = user;
+    const oauth2Client = getOAuth2Client(tokens);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const eventsPromises = events.map(async (event) => {
+        return new Promise((resolve, reject) => {
+            calendar.events.delete({
+                calendarId: 'primary',
+                eventId: event.id,
+            }, (err, response) => {
+                if (err) {
+                    console.log(`Error deleting event`, err);
+                    reject(err);
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+    });
+
+    return Promise.all(eventsPromises);
+};
+
 const addDaysShiftsToGcal = async (date) => {
     let usersWithChanges = [];
     let numberOfAddedEvents = 0;
@@ -136,6 +159,10 @@ const addDaysShiftsToGcal = async (date) => {
         console.log(`gCalendarController 1: Found ${calendar.length} shifts for date ${date}`);
         const usersWithGoogle = await userService.getAllUsersWithTokens();
         console.log(`gCalendarController 2: Found ${usersWithGoogle.length} users authenticated with Google`);
+
+        const prevAddedEventsByUsers = await addedGCalEventsService.findEventsByDate(date);
+        console.log(`gCalendarController 4: Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`);
+
         await Promise.all(usersWithGoogle.map(async (user) => {
             const slingUser = calendar.filter(slingUserCal => Number(slingUserCal.id) === Number(user.slingId))[0];
             if (!slingUser) {
@@ -145,8 +172,13 @@ const addDaysShiftsToGcal = async (date) => {
             const userShifts = slingUser.shifts;
             console.log(`gCalendarController 3: Found ${userShifts.length} shifts for user ${user.email}`);
 
-            const prevAddedEvents = await addedGCalEventsService.findEventsByDate(date);
-            console.log(`gCalendarController 4: Found ${prevAddedEvents.length} users with events previously added for date ${date}`);
+            const prevAddedEventsForUser = prevAddedEventsByUsers.find(prevAddedEvent => prevAddedEvent?.userId === user?.id);
+            if (prevAddedEventsForUser) {
+                // delete events from GCal
+                console.log(`gCalendarController 4: Deleting ${prevAddedEventsForUser.events.length} events for user ${user.email} on date ${date}`);
+                await deleteEvents(user, prevAddedEventsForUser.events);
+                await addedGCalEventsService.deleteEvents(user.id, prevAddedEventsForUser.events);
+            }
 
             console.log(`gCalendarController 5: Filtering shifts for ${user.email} to what user wants to sync`);
             const positionsToSync = user.positionsToSync.map(position => position.positionId.toString());
@@ -177,4 +209,5 @@ export default {
     addEvent,
     addEvents,
     addDaysShiftsToGcal,
+    deleteEvents,
 };
