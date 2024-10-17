@@ -28,9 +28,6 @@ const getOAuth2Client = (tokens) => {
 gCalendarRouter.get('/login', async (req, res) => {
     console.log(`GCalendar login 1.1: Authenticating user with Google OAuth2`);
     const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
-    // const state = await redirectStateService.createState(req.user.email); // Generate a unique session identifier
-    // req.session.oauthState = state; // Store the state in the user's session
-    // console.log(`GCalendar login 1.2: Generated state session ${state} for user ${req.user.email}`);
 
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -46,21 +43,6 @@ gCalendarRouter.get('/redirect', async (req, res) => {
     console.log(`GCalendar login 2.1: Starting callback processes for Google OAuth2 login`);
     const code = req.query.code;
     console.log(`GCalendar login 2.2: Received code ${code} from Google OAuth2 login page`);
-    // const state = req.query.state;
-    // console.log(`GCalendar login 2.3: Received state ${state} from Google OAuth2 login page`);
-
-    // Find the user's email from the state parameter
-    // const foundState = await redirectStateService.findState(state);
-    // if (!foundState) {
-        // console.log(`GCalendar login error: Couldn't find state ${state}`);
-        // return res.status(401).send('Invalid state parameter');
-    // }
-    // const email = foundState.userEmail;
-    // console.log(`GCalendar login 2.4: Found email ${email} for state ${state}`);
-
-    // Cleanup found state
-    // redirectStateService.removeState(state);
-    // console.log(`GCalendar login 2.5: Removed state ${state} from database for cleanup`);
 
     // Exchange the code for tokens and save them to the user service
     const oauth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.SECRET_ID, process.env.REDIRECT);
@@ -94,6 +76,10 @@ gCalendarRouter.get('/redirect', async (req, res) => {
                 console.error('Error creating user or saving token:', e);
                 return res.status(500).send('Error');
             }
+        }
+        if(agendoUser && (userTokens?.access_token || userTokens?.refresh_token)) {
+            await userService.addGapiToken(profile.email, userTokens);
+            console.log(`GCalendar login 2.4: User ${profile.email} authenticated with Google OAuth2. Redirecting back to frontend on ${process.env.REDIRECT_FRONTEND}`);
         }
         req.body = { email: profile.email };
         sendCookies(req, res);
