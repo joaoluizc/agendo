@@ -1,14 +1,14 @@
-import { User } from '../models/UserModel.js'
+import { User } from "../models/UserModel.js";
 // import bcrypt from 'bcrypt'
 
 const createUser = async (userData) => {
   // const { firstName, lastName, email, password } = userData;
   const { firstName, lastName, email, slingId } = userData;
-  
+
   let user = await User.findOne({ email });
 
   if (user) {
-    throw new Error('User already exists');
+    throw new Error("User already exists");
   }
 
   // user = new User({
@@ -21,7 +21,7 @@ const createUser = async (userData) => {
     firstName,
     lastName,
     email,
-    slingId
+    slingId,
   });
 
   // const salt = await bcrypt.genSalt(10);
@@ -39,31 +39,40 @@ const findUser = async (email) => {
 const getAllUsersWithTokens = async () => {
   const users = await User.find();
   return users
-    .filter(user => user.gapitoken)
-    .map(user => ({
-        email: user.email,
-        id: user.id,
-        tokens: user.gapitoken,
-        slingId: user.slingId,
-        positionsToSync: user.positionsToSync,
+    .filter((user) => user.gapitoken)
+    .map((user) => ({
+      email: user.email,
+      id: user.id,
+      tokens: user.gapitoken,
+      slingId: user.slingId,
+      positionsToSync: user.positionsToSync,
     }));
 };
 
 const addGapiToken = async (email, token) => {
   let user = await findUser(email);
   if (!user) {
-    throw new Error('User not found');
+    throw new Error("User not found");
   }
 
-  const gapitokenKeys = ['access_token', 'refresh_token', 'scope', 'token_type', 'expiry_date'];
+  const gapitokenKeys = [
+    "access_token",
+    "refresh_token",
+    "scope",
+    "token_type",
+    "expiry_date",
+  ];
   const userTokens = gapitokenKeys.reduce((acc, key) => {
     acc[key] = key in token ? token[key] : user.gapitoken[key];
+    if (!token[key] && !user.gapitoken[key]) {
+      throw new Error("Token not found");
+    }
     return acc;
   }, {});
 
   user.gapitoken = userTokens;
   await user.save();
-}
+};
 
 const getGapiToken = async (email) => {
   let user = await findUser(email);
@@ -71,7 +80,7 @@ const getGapiToken = async (email) => {
     return null;
   }
   return user.gapitoken;
-}
+};
 
 export default {
   createUser,
