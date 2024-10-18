@@ -1,6 +1,7 @@
 import userService from '../services/userService.js'
 import bcrypt from 'bcrypt'
 import { sendCookies } from '../middlewares/sendCookies.js';
+import process from 'process';
 
 const registerUser = async (req, res) => {
   const {firstName, lastName, email, password, } = req.body;
@@ -39,7 +40,7 @@ const loginUser = async (req, res) => {
 };
 
 const logoutUser = async (req, res) => {
-  res.cookie('jwt', '', { maxAge: 1, httpOnly: true });
+  res.cookie('jwt', '', { maxAge: 1, httpOnly: true, secure: process.env.NODE_ENV === 'production', });
   res.status(200).send('Logged out');
 };
 
