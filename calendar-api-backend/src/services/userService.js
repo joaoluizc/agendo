@@ -51,7 +51,17 @@ const getAllUsersWithTokens = async () => {
 
 const addGapiToken = async (email, token) => {
   let user = await findUser(email);
-  user.gapitoken = token;
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const gapitokenKeys = ['access_token', 'refresh_token', 'scope', 'token_type', 'expiry_date'];
+  const userTokens = gapitokenKeys.reduce((acc, key) => {
+    acc[key] = key in token ? token[key] : user.gapitoken[key];
+    return acc;
+  }, {});
+
+  user.gapitoken = userTokens;
   await user.save();
 }
 
