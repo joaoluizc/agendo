@@ -22,6 +22,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "../ui/button.tsx";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import SyncWithGCalBtn from "./SyncWithGCalBtn.tsx";
@@ -254,7 +255,25 @@ const Schedule = () => {
           ))}
         </div>
       ) : (
-        <div>Loading...</div>
+        <div className="flex-1 flex justify-center">
+          {/* <p>Loading...</p> */}
+          <div className="flex flex-col w-full">
+            <div className="flex flex-col">
+              <Skeleton className="h-10 w-full mb-2" />
+              {Array.from({
+                length: Math.ceil(window.innerHeight / 80) - 2,
+              }).map((_, idx) => (
+                <div key={idx} className="flex mb-2">
+                  <div className="w-1/6 h-14 mr-2 flex items-center">
+                    <Skeleton className="w-9 h-9 rounded-full" />
+                    <Skeleton className="flex-1 h-7 ml-2" />
+                  </div>
+                  <Skeleton className="flex-1 h-14" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
