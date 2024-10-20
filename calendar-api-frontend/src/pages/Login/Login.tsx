@@ -138,7 +138,7 @@ const Login = () => {
           alt="Image"
           width="1920"
           height="1080"
-          className="h-full w-full object-cover object-right"
+          className="h-full w-full object-cover object-center"
         />
       </div>
     </div>
