@@ -1,21 +1,19 @@
-import { useUserSettings } from "@/providers/useUserSettings.tsx";
-import { Users, LoaderCircle } from "lucide-react";
+import { User, LoaderCircle } from "lucide-react";
 import { Button } from "../ui/button.tsx";
 import { toast } from "sonner";
 import { useState } from "react";
 
-type SyncWithGCalBtnProps = {
+type SyncMyGCalBtnProps = {
   selectedDate: Date;
 };
 
-const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
+const SyncMyGCalBtn = (props: SyncMyGCalBtnProps) => {
   const { selectedDate } = props;
-  const { type: userType } = useUserSettings();
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const syncWithGCal = async () => {
     setIsLoading(true);
-    const response = await fetch("api/gcalendar/days-shifts-to-gcal", {
+    const response = await fetch("api/gcalendar/user-day-shifts-to-gcal", {
       method: "POST",
       mode: "cors",
       credentials: "include",
@@ -36,17 +34,17 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
     setIsLoading(false);
   };
 
-  return userType === "admin" && !isLoading ? (
+  return !isLoading ? (
     <Button variant={"outline"} onClick={syncWithGCal}>
-      <Users className="mr-2 h-4 w-4" />
-      Sync with GCal
+      <User className="mr-2 h-4 w-4" />
+      Sync to my calendar
     </Button>
   ) : (
     <Button disabled>
       <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-      Sync with GCal
+      Sync to my calendar
     </Button>
   );
 };
 
-export default SyncWithGCalBtn;
+export default SyncMyGCalBtn;
