@@ -69,7 +69,7 @@ const Schedule = () => {
             value={selectedDate.toDateString()}
             onChange={() => 1 + 1}
           />
-          <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2" />
+          <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2 h-5 w-5" />
         </Label>
         <SyncWithGCalBtn selectedDate={selectedDate} />
         <SyncMyGCalBtn selectedDate={selectedDate} />

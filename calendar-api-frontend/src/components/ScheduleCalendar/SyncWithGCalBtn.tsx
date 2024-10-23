@@ -36,16 +36,19 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
     setIsLoading(false);
   };
 
-  return userType === "admin" && !isLoading ? (
-    <Button variant={"outline"} onClick={syncWithGCal}>
-      <Users className="mr-2 h-4 w-4" />
-      Sync with GCal
-    </Button>
-  ) : (
-    <Button disabled>
-      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-      Sync with GCal
-    </Button>
+  return (
+    userType === "admin" &&
+    (!isLoading ? (
+      <Button variant={"outline"} onClick={syncWithGCal}>
+        <Users className="mr-2 h-4 w-4" />
+        Sync to team calendars
+      </Button>
+    ) : (
+      <Button disabled>
+        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+        Sync to team calendars
+      </Button>
+    ))
   );
 };
 
