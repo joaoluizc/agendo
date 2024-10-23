@@ -1,7 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { CircleUser, Menu, CalendarHeart, Sun, Moon } from "lucide-react";
+import { CircleUser, Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
 import { useNavigate } from "react-router-dom";
+import agendoLogo from "../../resources/agendo-logo.svg";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -100,10 +101,10 @@ const Header = () => {
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
           <NavLink
             to="/home"
-            className="flex items-center gap-2 text-lg font-semibold md:text-base"
+            className="flex items-center gap-2 text-lg font-semibold md:text-base h-6 w-6"
           >
-            <CalendarHeart className="h-6 w-6" />
-            <span className="sr-only">Acme Inc</span>
+            <img src={agendoLogo} />
+            <span className="sr-only">Agendo</span>
           </NavLink>
           <NavLink
             to="/home"
@@ -141,10 +142,10 @@ const Header = () => {
             <nav className="grid gap-6 text-lg font-medium">
               <NavLink
                 to="#"
-                className="flex items-center gap-2 text-lg font-semibold"
+                className="flex items-center gap-2 text-lg font-semibold h-6 w-6"
               >
-                <CalendarHeart className="h-6 w-6" />
-                <span className="sr-only">Acme Inc</span>
+                <img src={agendoLogo} />
+                <span className="sr-only">Agendo</span>
               </NavLink>
               <NavLink
                 to="/home"
