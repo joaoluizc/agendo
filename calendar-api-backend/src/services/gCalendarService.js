@@ -46,10 +46,10 @@ const getUserEvents = async (
   date = new Date(),
   requestId = "req-id-nd"
 ) => {
-  console.log(`[${requestId}] - Fetching user events`);
+  console.log(`[${requestId}] - Fetching user events for ${email}`);
   const tokens = await userService.getGapiToken(email); // Retrieve tokens from the user service
   if (!tokens) {
-    throw new Error("User not Google authenticated");
+    throw new Error(`User ${email} not Google authenticated`);
   }
 
   const calendarId = "primary";
@@ -70,7 +70,7 @@ const getUserEvents = async (
       },
       (err, response) => {
         if (err) {
-          console.log(`[${requestId}] - Can't fetch events`, err);
+          console.log(`[${requestId}] - Can't fetch events for ${email}`, err);
           reject(err);
         } else {
           const events = response.data.items;
