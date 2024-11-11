@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 import Login from "./pages/Login/Login.tsx";
 import Signup from "./pages/Signup/Signup.tsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
 import Home from "./pages/Home/Home.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
@@ -26,6 +27,7 @@ const router = createBrowserRouter(
       </Route>
       <Route path="login" element={<Login />} />
       <Route path="signup" element={<Signup />} />
+      <Route path="privacy" element={<PrivacyPolicy />} />
       <Route path="*" element={<NotFound />} />
     </Route>
   )
