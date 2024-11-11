@@ -1,13 +1,13 @@
 export default function PrivacyPolicy() {
   return (
-    <body>
-      <h1>
+    <div className="font-sans leading-relaxed tracking-wide p-8 max-w-5xl	text-justify m-auto">
+      <h1 className="text-3xl font-bold text-center mb-4 ">
         <span>Privacy Policy</span>
       </h1>
-      <p>
+      <p className="text-center text-sm  mb-6">
         <span>Last updated: October 17, 2024</span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           This Privacy Policy describes Our policies and procedures on the
           collection, use, and disclosure of Your information when You use the
@@ -15,7 +15,7 @@ export default function PrivacyPolicy() {
           protects You.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           We use Your Personal data to provide and improve the Service. By using
           the Service, You agree to the collection and use of information in
@@ -23,19 +23,19 @@ export default function PrivacyPolicy() {
           created with the help of the{" "}
         </span>
         <span>
-          <a href="https://www.google.com/url?q=https://www.termsfeed.com/privacy-policy-generator/&amp;sa=D&amp;source=editors&amp;ust=1731333373478166&amp;usg=AOvVaw20trarJYiDEMZ9EYcvgpJA">
+          <a href="https://www.termsfeed.com/privacy-policy-generator">
             Privacy Policy Generator
           </a>
         </span>
         <span>.</span>
       </p>
-      <h2>
+      <h2 className="text-2xl font-semibold mb-3 mt-8 ">
         <span>Interpretation and Definitions</span>
       </h2>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Interpretation</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>
           The words of which the initial letter is capitalized have meanings
           defined under the following conditions. The following definitions
@@ -43,22 +43,22 @@ export default function PrivacyPolicy() {
           singular or in plural.
         </span>
       </p>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Definitions</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>For the purposes of this Privacy Policy:</span>
       </p>
-      <ul>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
-          <span>Account</span>
+          <span className="font-semibold">Account</span>
           <span>
             &nbsp;means a unique account created for You to access our Service
             or parts of our Service.
           </span>
         </li>
         <li>
-          <span>Affiliate</span>
+          <span className="font-semibold">Affiliate</span>
           <span>
             &nbsp;means an entity that controls, is controlled by or is under
             common control with a party, where &quot;control&quot; means
@@ -68,14 +68,14 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>Application</span>
+          <span className="font-semibold">Application</span>
           <span>
             &nbsp;refers to Agendo, the software program provided by the
             Company.
           </span>
         </li>
         <li>
-          <span>Company</span>
+          <span className="font-semibold">Company</span>
           <span>
             &nbsp;(referred to as either &quot;the Company&quot;,
             &quot;We&quot;, &quot;Us&quot; or &quot;Our&quot; in this Agreement)
@@ -88,29 +88,29 @@ export default function PrivacyPolicy() {
           </sup>
         </li>
         <li>
-          <span>Country</span>
+          <span className="font-semibold">Country</span>
           <span>&nbsp;refers to: Brazil</span>
         </li>
         <li>
-          <span>Device</span>
+          <span className="font-semibold">Device</span>
           <span>
             &nbsp;means any device that can access the Service such as a
             computer, a cellphone or a digital tablet.
           </span>
         </li>
         <li>
-          <span>Personal Data</span>
+          <span className="font-semibold">Personal Data</span>
           <span>
             &nbsp;is any information that relates to an identified or
             identifiable individual.
           </span>
         </li>
         <li>
-          <span>Service</span>
+          <span className="font-semibold">Service</span>
           <span>&nbsp;refers to the Application.</span>
         </li>
         <li>
-          <span>Service Provider</span>
+          <span className="font-semibold">Service Provider</span>
           <span>
             &nbsp;means any natural or legal person who processes the data on
             behalf of the Company. It refers to third-party companies or
@@ -121,14 +121,16 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>Third-party Social Media Service</span>
+          <span className="font-semibold">
+            Third-party Social Media Service
+          </span>
           <span>
             &nbsp;refers to any website or any social network website through
             which a User can log in or create an account to use the Service.
           </span>
         </li>
         <li>
-          <span>Usage Data</span>
+          <span className="font-semibold">Usage Data</span>
           <span>
             &nbsp;refers to data collected automatically, either generated by
             the use of the Service or from the Service infrastructure itself
@@ -136,7 +138,7 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>You</span>
+          <span className="font-semibold">You</span>
           <span>
             &nbsp;means the individual accessing or using the Service, or the
             company, or other legal entity on behalf of which such individual is
@@ -144,16 +146,18 @@ export default function PrivacyPolicy() {
           </span>
         </li>
       </ul>
-      <h2>
-        <span>Collecting and Using Your Personal Data</span>
+      <h2 className="text-2xl font-semibold mb-3 mt-8 ">
+        <span className="font-semibold">
+          Collecting and Using Your Personal Data
+        </span>
       </h2>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Types of Data Collected</span>
       </h3>
       <h4>
-        <span>Personal Data</span>
+        <span className="font-semibold">Personal Data</span>
       </h4>
-      <p>
+      <p className="mb-4">
         <span>
           While using Our Service, We may ask You to provide Us with certain
           personally identifiable information that can be used to contact or
@@ -161,26 +165,26 @@ export default function PrivacyPolicy() {
           not limited to:
         </span>
       </p>
-      <ul>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
-          <span>Email address</span>
+          <span className="font-semibold">Email address</span>
         </li>
         <li>
-          <span>First name and last name</span>
+          <span className="font-semibold">First name and last name</span>
         </li>
         <li>
-          <span>Usage Data</span>
+          <span className="font-semibold">Usage Data</span>
         </li>
       </ul>
       <h4>
-        <span>Usage Data</span>
+        <span className="font-semibold">Usage Data</span>
       </h4>
-      <p>
+      <p className="mb-4">
         <span>
           Usage Data is collected automatically when using the Service.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           Usage Data may include information such as Your Device&#39;s Internet
           Protocol address (e.g. IP address), browser type, browser version, the
@@ -189,7 +193,7 @@ export default function PrivacyPolicy() {
           diagnostic data.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           When You access the Service by or through a mobile device, We may
           collect certain information automatically, including, but not limited
@@ -199,7 +203,7 @@ export default function PrivacyPolicy() {
           and other diagnostic data.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           We may also collect information that Your browser sends whenever You
           visit our Service or when You access the Service by or through a
@@ -209,18 +213,18 @@ export default function PrivacyPolicy() {
       <h4>
         <span>Information from Third-Party Social Media Services</span>
       </h4>
-      <p>
+      <p className="mb-4">
         <span>
           The Company allows You to create an account and log in to use the
           Service through the following Third-party Social Media Service:
         </span>
       </p>
-      <ul>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
           <span>Google</span>
         </li>
       </ul>
-      <p>
+      <p className="mb-4">
         <span>
           If You decide to register through or otherwise grant us access to a
           Third-Party Social Media Service, We may collect Personal data that is
@@ -229,7 +233,7 @@ export default function PrivacyPolicy() {
           calendar events, or Your contact list associated with that account.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           You may also have the option of sharing additional information with
           the Company through Your Third-Party Social Media Service&#39;s
@@ -239,21 +243,23 @@ export default function PrivacyPolicy() {
           this Privacy Policy.
         </span>
       </p>
-      <h3>
-        <span>Use of Your Personal Data</span>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
+        <span className="font-semibold">Use of Your Personal Data</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>
           The Company may use Personal Data for the following purposes:
         </span>
       </p>
-      <ul>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
-          <span>To provide and maintain our Service</span>
+          <span className="font-semibold">
+            To provide and maintain our Service
+          </span>
           <span>, including monitoring the usage of our Service.</span>
         </li>
         <li>
-          <span>To manage Your Account:</span>
+          <span className="font-semibold">To manage Your Account:</span>
           <span>
             &nbsp;to manage Your registration as a user of the Service. The
             Personal Data You provide can give You access to different
@@ -262,7 +268,9 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>For the performance of a contract:</span>
+          <span className="font-semibold">
+            For the performance of a contract:
+          </span>
           <span>
             &nbsp;the development, compliance, and undertaking of the purchase
             contract for the products, items, or services You have purchased or
@@ -270,7 +278,7 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>To contact You:</span>
+          <span className="font-semibold">To contact You:</span>
           <span>
             &nbsp;To contact You by email, telephone calls, SMS, or other
             equivalent forms of electronic communication, such as a mobile
@@ -281,11 +289,11 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>To manage Your requests:</span>
+          <span className="font-semibold">To manage Your requests:</span>
           <span>&nbsp;To attend and manage Your requests to Us.</span>
         </li>
         <li>
-          <span>For business transfers:</span>
+          <span className="font-semibold">For business transfers:</span>
           <span>
             &nbsp;We may use Your information to evaluate or conduct a merger,
             divestiture, restructuring, reorganization, dissolution, or other
@@ -296,7 +304,7 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>For other purposes</span>
+          <span className="font-semibold">For other purposes</span>
           <span>
             : We may use Your information for other purposes, such as data
             analysis, identifying usage trends, determining the effectiveness of
@@ -305,21 +313,21 @@ export default function PrivacyPolicy() {
           </span>
         </li>
       </ul>
-      <p>
+      <p className="mb-4">
         <span>
           We may share Your personal information in the following situations:
         </span>
       </p>
-      <ul>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
-          <span>With Service Providers:</span>
+          <span className="font-semibold">With Service Providers:</span>
           <span>
             &nbsp;We may share Your personal information with Service Providers
             to monitor and analyze the use of our Service, to contact You.
           </span>
         </li>
         <li>
-          <span>For business transfers:</span>
+          <span className="font-semibold">For business transfers:</span>
           <span>
             &nbsp;We may share or transfer Your personal information in
             connection with, or during negotiations of, any merger, sale of
@@ -328,7 +336,7 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>With Affiliates:</span>
+          <span className="font-semibold">With Affiliates:</span>
           <span>
             &nbsp;We may share Your information with Our affiliates, in which
             case we will require those affiliates to honor this Privacy Policy.
@@ -338,14 +346,14 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>With business partners:</span>
+          <span className="font-semibold">With business partners:</span>
           <span>
             &nbsp;We may share Your information with Our business partners to
             offer You certain products, services or promotions.
           </span>
         </li>
         <li>
-          <span>With other users:</span>
+          <span className="font-semibold">With other users:</span>
           <span>
             &nbsp;when You share personal information or otherwise interact in
             the public areas with other users, such information may be viewed by
@@ -358,17 +366,17 @@ export default function PrivacyPolicy() {
           </span>
         </li>
         <li>
-          <span>With Your consent</span>
+          <span className="font-semibold">With Your consent</span>
           <span>
             : We may disclose Your personal information for any other purpose
             with Your consent.
           </span>
         </li>
       </ul>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Retention of Your Personal Data</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>
           The Company will retain Your Personal Data only for as long as is
           necessary for the purposes set out in this Privacy Policy. We will
@@ -378,7 +386,7 @@ export default function PrivacyPolicy() {
           enforce our legal agreements and policies.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           The Company will also retain Usage Data for internal analysis
           purposes. Usage Data is generally retained for a shorter period of
@@ -387,10 +395,10 @@ export default function PrivacyPolicy() {
           to retain this data for longer time periods.
         </span>
       </p>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Transfer of Your Personal Data</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>
           Your information, including Personal Data, is processed at the
           Company&#39;s operating offices and in any other places where the
@@ -401,13 +409,13 @@ export default function PrivacyPolicy() {
           from those from Your jurisdiction.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           Your consent to this Privacy Policy followed by Your submission of
           such information represents Your agreement to that transfer.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           The Company will take all steps reasonably necessary to ensure that
           Your data is treated securely and in accordance with this Privacy
@@ -416,41 +424,41 @@ export default function PrivacyPolicy() {
           including the security of Your data and other personal information.
         </span>
       </p>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Delete Your Personal Data</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>
           You have the right to delete or request that We assist in deleting the
           Personal Data that We have collected about You.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           Our Service may give You the ability to delete certain information
           about You from within the Service.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           You may update, amend, or delete Your information at any time by
           contacting Us to request access to, correct, or delete any personal
           information that You have provided to Us.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           Please note, however, that We may need to retain certain information
           when we have a legal obligation or lawful basis to do so.
         </span>
       </p>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Disclosure of Your Personal Data</span>
       </h3>
       <h4>
         <span>Business Transactions</span>
       </h4>
-      <p>
+      <p className="mb-4">
         <span>
           If the Company is involved in a merger, acquisition or asset sale,
           Your Personal Data may be transferred. We will provide notice before
@@ -461,7 +469,7 @@ export default function PrivacyPolicy() {
       <h4>
         <span>Law enforcement</span>
       </h4>
-      <p>
+      <p className="mb-4">
         <span>
           Under certain circumstances, the Company may be required to disclose
           Your Personal Data if required to do so by law or in response to valid
@@ -471,13 +479,13 @@ export default function PrivacyPolicy() {
       <h4>
         <span>Other legal requirements</span>
       </h4>
-      <p>
+      <p className="mb-4">
         <span>
           The Company may disclose Your Personal Data in the good faith belief
           that such action is necessary to:
         </span>
       </p>
-      <ul>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
           <span>Comply with a legal obligation</span>
         </li>
@@ -499,10 +507,10 @@ export default function PrivacyPolicy() {
           <span>Protect against legal liability</span>
         </li>
       </ul>
-      <h3>
+      <h3 className="text-xl font-semibold mb-2 mt-6 ">
         <span>Security of Your Personal Data</span>
       </h3>
-      <p>
+      <p className="mb-4">
         <span>
           The security of Your Personal Data is important to Us, but remember
           that no method of transmission over the Internet, or method of
@@ -511,10 +519,10 @@ export default function PrivacyPolicy() {
           its absolute security.
         </span>
       </p>
-      <h2>
+      <h2 className="text-2xl font-semibold mb-3 mt-8 ">
         <span>Children&#39;s Privacy</span>
       </h2>
-      <p>
+      <p className="mb-4">
         <span>
           Our Service does not address anyone under the age of 13. We do not
           knowingly collect personally identifiable information from anyone
@@ -525,7 +533,7 @@ export default function PrivacyPolicy() {
           steps to remove that information from Our servers.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           If We need to rely on consent as a legal basis for processing Your
           information and Your country requires consent from a parent, We may
@@ -533,10 +541,10 @@ export default function PrivacyPolicy() {
           information.
         </span>
       </p>
-      <h2>
+      <h2 className="text-2xl font-semibold mb-3 mt-8 ">
         <span>Links to Other Websites</span>
       </h2>
-      <p>
+      <p className="mb-4">
         <span>
           Our Service may contain links to other websites that are not operated
           by Us. If You click on a third party link, You will be directed to
@@ -544,68 +552,49 @@ export default function PrivacyPolicy() {
           Privacy Policy of every site You visit.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           We have no control over and assume no responsibility for the content,
           privacy policies or practices of any third party sites or services.
         </span>
       </p>
-      <h2>
+      <h2 className="text-2xl font-semibold mb-3 mt-8 ">
         <span>Changes to this Privacy Policy</span>
       </h2>
-      <p>
+      <p className="mb-4">
         <span>
           We may update Our Privacy Policy from time to time. We will notify You
           of any changes by posting the new Privacy Policy on this page.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           We will let You know via email and/or a prominent notice on Our
           Service, prior to the change becoming effective and update the
           &quot;Last updated&quot; date at the top of this Privacy Policy.
         </span>
       </p>
-      <p>
+      <p className="mb-4">
         <span>
           You are advised to review this Privacy Policy periodically for any
           changes. Changes to this Privacy Policy are effective when they are
           posted on this page.
         </span>
       </p>
-      <h2>
+      <h2 className="text-2xl font-semibold mb-3 mt-8 ">
         <span>Contact Us</span>
       </h2>
-      <p>
+      <p className="mb-4">
         <span>
           If you have any questions about this Privacy Policy, You can contact
           us:
         </span>
       </p>
-      <ul>
-        <li>
-          <span>By visiting this page on our website: </span>
-          <span>
-            <a href="https://www.google.com/url?q=https://agendo.dmsupport.org/privacy&amp;sa=D&amp;source=editors&amp;ust=1731333373484605&amp;usg=AOvVaw1CIo8sqtAFgFbXX0_YJviA">
-              https://agendo.dmsupport.org/privacy
-            </a>
-          </span>
-        </li>
+      <ul className="list-disc list-inside mb-4 pl-4 space-y-2">
         <li>
           <span>By contacting Us directly at joao.coelho@duda.co</span>
         </li>
       </ul>
-      <p>
-        <span></span>
-      </p>
-      <div>
-        <p>
-          <a href="#cmnt_ref1" id="cmnt1">
-            [a]
-          </a>
-          <span>duda?</span>
-        </p>
-      </div>
-    </body>
+    </div>
   );
 }
