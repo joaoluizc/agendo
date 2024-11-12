@@ -12,7 +12,8 @@ import { sendCookies } from "../middlewares/sendCookies.js";
 dotenv.config();
 
 const SCOPES = [
-  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events.owned",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
 ];
