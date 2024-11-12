@@ -18,6 +18,7 @@ import faviconLight from "../../resources/favicon-light.svg";
 import faviconDark from "../../resources/favicon-dark.svg";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useEffect } from "react";
+import Footer from "../Footer/Footer";
 
 function setFavicon(url: string) {
   const link =
@@ -36,6 +37,7 @@ const Header = () => {
     setFirstName,
     setLastName,
     setEmail,
+    email,
     setType,
     setTimeZone,
     setSlingId,
@@ -100,14 +102,24 @@ const Header = () => {
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50">
         <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
           <NavLink
-            to="/home"
+            to="/"
             className="flex items-center gap-2 text-lg font-semibold md:text-base h-6 w-6"
           >
             <img src={agendoLogo} />
             <span className="sr-only">Agendo</span>
           </NavLink>
           <NavLink
-            to="/home"
+            to="/"
+            className={({ isActive }) =>
+              `${
+                isActive ? "text-foreground" : "text-muted-foreground"
+              } transition-colors hover:text-foreground`
+            }
+          >
+            Home
+          </NavLink>
+          <NavLink
+            to="/app/dashboard"
             className={({ isActive }) =>
               `${
                 isActive ? "text-foreground" : "text-muted-foreground"
@@ -117,7 +129,7 @@ const Header = () => {
             Dashboard
           </NavLink>
           <NavLink
-            to="/settings"
+            to="/app/settings"
             className={({ isActive }) =>
               `${
                 isActive ? "text-foreground" : "text-muted-foreground"
@@ -148,18 +160,34 @@ const Header = () => {
                 <span className="sr-only">Agendo</span>
               </NavLink>
               <NavLink
-                to="/home"
+                to="/"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Home
+              </NavLink>
+              <NavLink
+                to="/app/dashboard"
                 className="text-muted-foreground hover:text-foreground"
               >
                 Dashboard
               </NavLink>
-              <NavLink to="/settings" className="hover:text-foreground">
+              <NavLink to="/app/settings" className="hover:text-foreground">
                 Settings
               </NavLink>
             </nav>
           </SheetContent>
         </Sheet>
-        <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+        <div className="flex w-fit items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+          {!email ? (
+            <NavLink to="/login">
+              <Button
+                variant="default"
+                className="self-start justify-self-start"
+              >
+                Login or Signup
+              </Button>
+            </NavLink>
+          ) : null}
           <div id="theme-toggle" className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -193,7 +221,7 @@ const Header = () => {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
-                <NavLink to="/settings" className="hover:text-foreground">
+                <NavLink to="/app/settings" className="hover:text-foreground">
                   Settings
                 </NavLink>
               </DropdownMenuItem>
@@ -209,6 +237,7 @@ const Header = () => {
         </div>
       </header>
       <Outlet />
+      <Footer />
     </>
   );
 };

@@ -6,8 +6,9 @@ import {
 } from "react-router-dom";
 import Login from "./pages/Login/Login.tsx";
 import Signup from "./pages/Signup/Signup.tsx";
-import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
 import Home from "./pages/Home/Home.tsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
+import Dashboard from "./pages/Dashboard/Dashboard.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
 import Header from "./components/Header/Header.tsx";
@@ -20,11 +21,12 @@ import { Toaster } from "./components/ui/sonner.tsx";
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route path="/" element={<Header />}>
-      <Route path="" element={<ProtectedRoute />}>
-        <Route path="home" element={<Home />} />
+      <Route path="app" element={<ProtectedRoute />}>
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="settings" element={<Settings />} />
         <Route path="calendars" element={<Calendar />} />
       </Route>
+      <Route path="" element={<Home />} />
       <Route path="login" element={<Login />} />
       <Route path="signup" element={<Signup />} />
       <Route path="privacy" element={<PrivacyPolicy />} />
