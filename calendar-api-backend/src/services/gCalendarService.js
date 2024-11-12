@@ -108,7 +108,10 @@ const addEvent = async (user, event, requestId = "req-id-nd") => {
       },
       (err, response) => {
         if (err) {
-          console.log(`[${requestId}] - Error adding event`, err);
+          console.log(
+            `[${requestId}] - Error adding event to user ${user.email}`,
+            err
+          );
           reject(err);
         } else {
           resolve(response);
