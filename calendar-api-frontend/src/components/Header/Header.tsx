@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { CircleUser, Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
 import { useNavigate } from "react-router-dom";
@@ -18,7 +18,12 @@ import faviconLight from "../../resources/favicon-light.svg";
 import faviconDark from "../../resources/favicon-dark.svg";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useEffect } from "react";
-import Footer from "../Footer/Footer";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  UserButton,
+} from "@clerk/clerk-react";
 
 function setFavicon(url: string) {
   const link =
@@ -37,7 +42,6 @@ const Header = () => {
     setFirstName,
     setLastName,
     setEmail,
-    email,
     setType,
     setTimeZone,
     setSlingId,
@@ -57,7 +61,7 @@ const Header = () => {
   };
 
   const logout = async () => {
-    const response = await fetch("api/user/logout", {
+    const response = await fetch("/api/user/logout", {
       method: "POST",
       mode: "cors",
       credentials: "include",
@@ -65,6 +69,7 @@ const Header = () => {
         "Content-Type": "application/json",
       },
     });
+    console.log(JSON.stringify(response));
     if (response.ok) {
       navigate("/login");
     } else {
@@ -119,7 +124,7 @@ const Header = () => {
             Home
           </NavLink>
           <NavLink
-            to="/app/dashboard"
+            to="/dashboard"
             className={({ isActive }) =>
               `${
                 isActive ? "text-foreground" : "text-muted-foreground"
@@ -129,7 +134,7 @@ const Header = () => {
             Dashboard
           </NavLink>
           <NavLink
-            to="/app/settings"
+            to="/dashboard/settings"
             className={({ isActive }) =>
               `${
                 isActive ? "text-foreground" : "text-muted-foreground"
@@ -166,28 +171,34 @@ const Header = () => {
                 Home
               </NavLink>
               <NavLink
-                to="/app/dashboard"
+                to="/dashboard"
                 className="text-muted-foreground hover:text-foreground"
               >
                 Dashboard
               </NavLink>
-              <NavLink to="/app/settings" className="hover:text-foreground">
+              <NavLink
+                to="/dashboard/settings"
+                className="hover:text-foreground"
+              >
                 Settings
               </NavLink>
             </nav>
           </SheetContent>
         </Sheet>
         <div className="flex w-fit items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-          {!email ? (
-            <NavLink to="/login">
+          <SignedIn>
+            <UserButton />
+          </SignedIn>
+          <SignedOut>
+            <Link to="/login">
               <Button
                 variant="default"
                 className="self-start justify-self-start"
               >
-                Login or Signup
+                <SignInButton />
               </Button>
-            </NavLink>
-          ) : null}
+            </Link>
+          </SignedOut>
           <div id="theme-toggle" className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -221,7 +232,10 @@ const Header = () => {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
-                <NavLink to="/app/settings" className="hover:text-foreground">
+                <NavLink
+                  to="/dashboard/settings"
+                  className="hover:text-foreground"
+                >
                   Settings
                 </NavLink>
               </DropdownMenuItem>
@@ -236,8 +250,6 @@ const Header = () => {
           </DropdownMenu>
         </div>
       </header>
-      <Outlet />
-      <Footer />
     </>
   );
 };

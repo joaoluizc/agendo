@@ -1,4 +1,3 @@
-import Footer from "@/components/Footer/Footer";
 import background from "../../resources/background-login.svg";
 
 function Home() {
