@@ -3,6 +3,7 @@ import session from "express-session";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import process from "process";
+import { clerkMiddleware } from "@clerk/express";
 
 import connectDB from "./src/database/db.js";
 import userRouter from "./src/routers/userRouter.js";
@@ -28,6 +29,7 @@ app.use(
     },
   })
 );
+app.use(clerkMiddleware());
 app.use(cookieParser());
 const corsOptions = {
   origin: corsOrigin,
