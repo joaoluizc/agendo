@@ -108,6 +108,7 @@ const newClerkUser = async (req, res) => {
   let msg;
   try {
     msg = wh.verify(payload, svixHeaders);
+    msg = msg.data;
   } catch (e) {
     console.error("Verification error:", e);
     return res.status(401).json({ message: "Unauthorized" });
@@ -115,7 +116,7 @@ const newClerkUser = async (req, res) => {
 
   console.log(
     "Message received from clerk via webhook. New user created: ",
-    msg.data.email_addresses[0].email_address
+    msg.email_addresses[0].email_address
   );
 
   await addPositionsToSyncNewUser(msg.id);
