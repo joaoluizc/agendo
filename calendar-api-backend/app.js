@@ -21,7 +21,13 @@ const corsOrigin =
     : "http://localhost:3001";
 
 const app = express();
-app.use(express.json());
+app.use(
+  express.json({
+    verify: function (req, res, buf) {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(cookieParser());
 const corsOptions = {
   origin: corsOrigin,
