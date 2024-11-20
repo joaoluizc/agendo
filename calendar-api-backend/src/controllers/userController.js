@@ -1,8 +1,10 @@
-import userService from "../services/userService.js";
 import bcrypt from "bcrypt";
-import { sendCookies } from "../middlewares/sendCookies.js";
 import process from "process";
 import { Webhook } from "svix";
+import { initialPositions } from "../database/seeds/initialPositions.js";
+import userService from "../services/userService.js";
+import { sendCookies } from "../middlewares/sendCookies.js";
+import { clerkClient } from "@clerk/express";
 
 const registerUser = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
@@ -77,6 +79,21 @@ const userInfo = async (req, res) => {
   res.status(200).json(response);
 };
 
+async function addPositionsToSyncNewUser(userId) {
+  try {
+    await clerkClient.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        positionsToSync: initialPositions,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Error syncinc initial positions to sync to new user: ",
+      err.message
+    );
+  }
+}
+
 const newClerkUser = async (req, res) => {
   const secret = process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET;
   const svixHeaders = {
@@ -86,24 +103,22 @@ const newClerkUser = async (req, res) => {
   };
   const payload = req.rawBody;
 
-  console.log("Secret:", secret);
-  console.log("Svix Headers:", svixHeaders);
-  console.log("Payload:", payload);
-
   const wh = new Webhook(secret);
+
   let msg;
   try {
     msg = wh.verify(payload, svixHeaders);
-    console.log("Verified message:", msg);
   } catch (e) {
     console.error("Verification error:", e);
     return res.status(401).json({ message: "Unauthorized" });
   }
 
   console.log(
-    "Message received from clerk via webhook. New user created:",
-    msg.payload
+    "Message received from clerk via webhook. New user created: ",
+    msg.email_addresses[0].email_address
   );
+
+  await addPositionsToSyncNewUser(msg.id);
 
   res.json();
 };
