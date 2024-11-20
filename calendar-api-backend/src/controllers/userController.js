@@ -79,7 +79,11 @@ const userInfo = async (req, res) => {
 
 const newClerkUser = async (req, res) => {
   const secret = process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET;
-  const svixHeaders = req.headers;
+  const svixHeaders = {
+    "svix-id": req.headers["svix-id"],
+    "svix-timestamp": req.headers["svix-timestamp"],
+    "svix-signature": req.headers["svix-signature"],
+  };
   const payload = req.body;
 
   console.log("Secret:", secret);
