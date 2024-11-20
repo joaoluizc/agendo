@@ -93,7 +93,7 @@ const newClerkUser = async (req, res) => {
   const wh = new Webhook(secret);
   let msg;
   try {
-    msg = wh.verify(svixHeaders, payload);
+    msg = wh.verify(payload, svixHeaders);
     console.log("Verified message:", msg);
   } catch (e) {
     console.error("Verification error:", e);
