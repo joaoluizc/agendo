@@ -82,12 +82,17 @@ const newClerkUser = async (req, res) => {
   const svixHeaders = req.headers;
   const payload = req.body;
 
+  console.log("Secret:", secret);
+  console.log("Svix Headers:", svixHeaders);
+  console.log("Payload:", payload);
+
   const wh = new Webhook(secret);
   let msg;
   try {
     msg = wh.verify(svixHeaders, payload);
+    console.log("Verified message:", msg);
   } catch (e) {
-    console.error(e);
+    console.error("Verification error:", e);
     return res.status(401).json({ message: "Unauthorized" });
   }
 
