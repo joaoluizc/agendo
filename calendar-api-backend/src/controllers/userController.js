@@ -115,7 +115,7 @@ const newClerkUser = async (req, res) => {
 
   console.log(
     "Message received from clerk via webhook. New user created: ",
-    msg.email_addresses[0].email_address
+    msg.data.email_addresses[0].email_address
   );
 
   await addPositionsToSyncNewUser(msg.id);
