@@ -2,6 +2,7 @@ import userService from "../services/userService.js";
 import bcrypt from "bcrypt";
 import { sendCookies } from "../middlewares/sendCookies.js";
 import process from "process";
+import { Webhook } from "svix";
 
 const registerUser = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
@@ -76,9 +77,32 @@ const userInfo = async (req, res) => {
   res.status(200).json(response);
 };
 
+const newClerkUser = async (req, res) => {
+  const secret = process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET;
+  const svixHeaders = req.headers;
+  const payload = req.body;
+
+  const wh = new Webhook(secret);
+  let msg;
+  try {
+    msg = wh.verify(svixHeaders, payload);
+  } catch (e) {
+    console.error(e);
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  console.log(
+    "Message received from clerk via webhook. New user created:",
+    msg.payload
+  );
+
+  res.json();
+};
+
 export default {
   registerUser,
   loginUser,
   logoutUser,
   userInfo,
+  newClerkUser,
 };
