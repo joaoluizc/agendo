@@ -85,6 +85,7 @@ const getGapiToken = async (email) => {
 };
 
 async function addPositionsToSyncNewUser(userId) {
+  console.log("Adding default positions to sync to new user. userId: ", userId);
   try {
     await clerkClient.users.updateUserMetadata(userId, {
       publicMetadata: {
@@ -100,6 +101,7 @@ async function addPositionsToSyncNewUser(userId) {
 }
 
 async function addSlingIdToNewUser(userId, userEmail) {
+  console.log("Adding slingId to new user. userId: ", userId);
   const slingId = utils.getSlingIdByEmail(userEmail);
   try {
     await clerkClient.users.updateUserMetadata(userId, {
@@ -108,7 +110,7 @@ async function addSlingIdToNewUser(userId, userEmail) {
       },
     });
   } catch (err) {
-    console.error("Error adding slingId to user: ", err.message);
+    console.error("Error adding slingId to new user: ", err.message);
   }
 }
 
