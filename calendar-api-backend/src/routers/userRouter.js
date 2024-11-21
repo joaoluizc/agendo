@@ -1,7 +1,7 @@
 import express from "express";
 import userController from "../controllers/userController.js";
 // import { requireAuth } from "@clerk/express";
-import { verifyUserAuth } from "../middlewares/authMiddleware.js";
+import verifyUserAuth from "../middlewares/verifyUserAuth.js";
 
 const userRouter = express.Router();
 
