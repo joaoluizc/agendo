@@ -28,12 +28,12 @@ const createUser = async (userData) => {
   return user;
 };
 
-// const findUser = async (email) => {
-//   let user = await User.findOne({ email });
-//   return user;
-// };
+const findUser = async (email) => {
+  let user = await User.findOne({ email });
+  return user;
+};
 
-const findUser = async (userId) => {
+const findUser_cl = async (userId) => {
   const user = await clerkClient.users.getUser(userId);
   return user;
 };
@@ -50,6 +50,31 @@ const getAllUsersWithTokens = async () => {
       positionsToSync: user.positionsToSync,
     }));
 };
+
+async function getAllUsers_cl() {
+  const response = await clerkClient.users.getUserList();
+  return response;
+}
+
+async function getUserGoogleOAuthToken(userId) {
+  const provider = "oauth_google";
+  const response = await clerkClient.users.getUserOauthAccessToken(
+    userId,
+    provider
+  );
+  return response;
+}
+
+async function getAllUsersWithTokens_cl() {
+  const users = await getAllUsers_cl();
+  const usersWithTokens = await Promise.all(
+    users.map(async (user) => {
+      const userTokens = await getUserGoogleOAuthToken(user.id);
+      return { ...user, GoogleAccessToken: userTokens };
+    })
+  );
+  return usersWithTokens;
+}
 
 const addGapiToken = async (email, token) => {
   let user = await findUser(email);
@@ -112,14 +137,31 @@ async function addSlingIdToNewUser(userId, userEmail) {
   } catch (err) {
     console.error("Error adding slingId to new user: ", err.message);
   }
+
+  console.log("Testing getting all users with google auth tokens");
+  let usersWithTokens;
+  try {
+    usersWithTokens = await getAllUsersWithTokens_cl();
+  } catch (err) {
+    return console.error(
+      "Error getting all users with google auth tokens: ",
+      err.message
+    );
+  }
+  console.log(
+    "Successfully got all users with google auth tokens: ",
+    usersWithTokens
+  );
 }
 
 export default {
   createUser,
   findUser,
+  findUser_cl,
   addGapiToken,
   getGapiToken,
   getAllUsersWithTokens,
+  getAllUsersWithTokens_cl,
   addPositionsToSyncNewUser,
   addSlingIdToNewUser,
 };
