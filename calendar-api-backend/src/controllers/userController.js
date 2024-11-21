@@ -60,8 +60,7 @@ const logoutUser = async (req, res) => {
 };
 
 const userInfo = async (req, res) => {
-  const { userEmail } = req.auth;
-  // const userEmail = req.user.email;
+  const userEmail = req.user.email;
   console.log(userEmail);
   if (!userEmail) {
     return res.status(400).json({ message: "email is required" });
