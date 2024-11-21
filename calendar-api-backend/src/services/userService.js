@@ -56,7 +56,7 @@ async function getAllUsers_cl() {
   return response.data;
 }
 
-async function getUserGoogleOAuthToken(userId) {
+async function getUserGoogleOAuthToken_cl(userId) {
   const provider = "oauth_google";
   const response = await clerkClient.users.getUserOauthAccessToken(
     userId,
@@ -69,8 +69,8 @@ async function getAllUsersWithTokens_cl() {
   const users = await getAllUsers_cl();
   const usersWithTokens = await Promise.all(
     users.map(async (user) => {
-      const userTokens = await getUserGoogleOAuthToken(user.id);
-      return { ...user, GoogleAccessToken: userTokens };
+      const userTokensResponse = await getUserGoogleOAuthToken_cl(user.id);
+      return { ...user, GoogleAccessToken: userTokensResponse.data };
     })
   );
   return usersWithTokens;
@@ -160,6 +160,7 @@ export default {
   findUser_cl,
   addGapiToken,
   getGapiToken,
+  getUserGoogleOAuthToken_cl,
   getAllUsersWithTokens,
   getAllUsersWithTokens_cl,
   addPositionsToSyncNewUser,
