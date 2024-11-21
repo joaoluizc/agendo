@@ -1,6 +1,9 @@
+import { clerkClient } from "@clerk/express";
 import { User } from "../models/UserModel.js";
-// import bcrypt from 'bcrypt'
+import { initialPositions } from "../database/seeds/initialPositions.js";
+import utils from "../utils/utils.js";
 
+// no longer used
 const createUser = async (userData) => {
   // const { firstName, lastName, email, password } = userData;
   const { firstName, lastName, email, slingId } = userData;
@@ -11,12 +14,6 @@ const createUser = async (userData) => {
     throw new Error("User already exists");
   }
 
-  // user = new User({
-  //   firstName,
-  //   lastName,
-  //   email,
-  //   password
-  // });
   user = new User({
     firstName,
     lastName,
@@ -31,8 +28,13 @@ const createUser = async (userData) => {
   return user;
 };
 
-const findUser = async (email) => {
-  let user = await User.findOne({ email });
+// const findUser = async (email) => {
+//   let user = await User.findOne({ email });
+//   return user;
+// };
+
+const findUser = async (userId) => {
+  const user = await clerkClient.users.getUser(userId);
   return user;
 };
 
@@ -82,10 +84,40 @@ const getGapiToken = async (email) => {
   return user.gapitoken;
 };
 
+async function addPositionsToSyncNewUser(userId) {
+  try {
+    await clerkClient.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        positionsToSync: initialPositions,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Error syncinc initial positions to sync to new user: ",
+      err.message
+    );
+  }
+}
+
+async function addSlingIdToNewUser(userId, userEmail) {
+  const slingId = utils.getSlingIdByEmail(userEmail);
+  try {
+    await clerkClient.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        slingId,
+      },
+    });
+  } catch (err) {
+    console.error("Error adding slingId to user: ", err.message);
+  }
+}
+
 export default {
   createUser,
   findUser,
   addGapiToken,
   getGapiToken,
   getAllUsersWithTokens,
+  addPositionsToSyncNewUser,
+  addSlingIdToNewUser,
 };

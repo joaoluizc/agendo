@@ -1,11 +1,10 @@
 import bcrypt from "bcrypt";
 import process from "process";
 import { Webhook } from "svix";
-import { initialPositions } from "../database/seeds/initialPositions.js";
 import userService from "../services/userService.js";
 import { sendCookies } from "../middlewares/sendCookies.js";
-import { clerkClient } from "@clerk/express";
 
+// no longer used
 const registerUser = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
   if (!firstName || !lastName || !email || !password) {
@@ -23,6 +22,7 @@ const registerUser = async (req, res) => {
   }
 };
 
+// no longer used
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -48,6 +48,7 @@ const loginUser = async (req, res) => {
   }
 };
 
+// no longer used
 const logoutUser = async (req, res) => {
   res.cookie("jwt", "", {
     maxAge: 1,
@@ -59,7 +60,8 @@ const logoutUser = async (req, res) => {
 };
 
 const userInfo = async (req, res) => {
-  const userEmail = req.user.email;
+  const { userEmail } = req.auth;
+  // const userEmail = req.user.email;
   console.log(userEmail);
   if (!userEmail) {
     return res.status(400).json({ message: "email is required" });
@@ -78,21 +80,6 @@ const userInfo = async (req, res) => {
   };
   res.status(200).json(response);
 };
-
-async function addPositionsToSyncNewUser(userId) {
-  try {
-    await clerkClient.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        positionsToSync: initialPositions,
-      },
-    });
-  } catch (err) {
-    console.error(
-      "Error syncinc initial positions to sync to new user: ",
-      err.message
-    );
-  }
-}
 
 const newClerkUser = async (req, res) => {
   const secret = process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET;
@@ -114,12 +101,16 @@ const newClerkUser = async (req, res) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
+  const userEmail = msg.email_addresses[0].email_address;
+  const userId = msg.id;
+
   console.log(
     "Message received from clerk via webhook. New user created: ",
-    msg.email_addresses[0].email_address
+    userEmail
   );
 
-  await addPositionsToSyncNewUser(msg.id);
+  await userService.addPositionsToSyncNewUser(userId);
+  await userService.addSlingIdToNewUser(userId, userEmail);
 
   res.json();
 };
