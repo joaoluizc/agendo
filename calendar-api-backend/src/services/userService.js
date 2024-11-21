@@ -62,6 +62,8 @@ async function getUserGoogleOAuthToken_cl(userId) {
     userId,
     provider
   );
+  const data = response[0];
+  data.access_token = data.token;
   return response;
 }
 
