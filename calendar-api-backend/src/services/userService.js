@@ -53,7 +53,7 @@ const getAllUsersWithTokens = async () => {
 
 async function getAllUsers_cl() {
   const response = await clerkClient.users.getUserList();
-  return response;
+  return response.data;
 }
 
 async function getUserGoogleOAuthToken(userId) {
