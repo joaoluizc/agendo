@@ -407,7 +407,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
     );
     const usersTokensResponse = await userService.getAllUsersWithTokens_cl();
-    const usersWithGoogle = usersTokensResponse.map((user) => {
+    const usersWithGoogle = usersTokensResponse.filter((user) => {
       if (!user.GoogleAccessToken) {
         usersWithErrors.push({
           userId: user.id,
@@ -415,9 +415,9 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
           lastName: user.lastName,
           error: "User not Google authenticated",
         });
-        return;
+        return false;
       }
-      return user;
+      return true;
     });
     console.log(
       `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`
