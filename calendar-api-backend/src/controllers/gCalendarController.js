@@ -253,7 +253,10 @@ gCalendarRouter.post(
       console.log(
         `[${req.requestId}] gCalendarController day's shifts to gcal 2: Shifts added to GCal for date ${date}`
       );
-      return res.status(result.status).json(result.message);
+      return res.status(result.status).json({
+        message: result.message,
+        errors: result.usersWithErrors,
+      });
     } catch (error) {
       console.error(`[${req.requestId}] Error adding shifts to GCal:`, error);
       return res.status(500).json({ error: "Failed to add shifts to GCal" });

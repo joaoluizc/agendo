@@ -8,6 +8,24 @@ type SyncWithGCalBtnProps = {
   selectedDate: Date;
 };
 
+type SyncWithGCalSuccessResponse = {
+  message: string;
+  errors: {
+    userId: string;
+    firstName: string;
+    lastName: string;
+    error: string;
+  }[];
+};
+
+type SyncWithGCalErrorResponse = {
+  error: string;
+};
+
+type SyncWithGCalResponse =
+  | SyncWithGCalSuccessResponse
+  | SyncWithGCalErrorResponse;
+
 const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
   const { selectedDate } = props;
   const { type: userType } = useUserSettings();
@@ -24,7 +42,7 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
       },
       body: JSON.stringify({ date: selectedDate }),
     });
-    const data = await response.json();
+    const data: SyncWithGCalResponse = await response.json();
     console.log("syncWithGCal response: ", data);
     if (response.status !== 200) {
       console.log("error syncing shifts to calendar: ", data);
@@ -32,8 +50,15 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
       setIsLoading(false);
       return;
     }
-    toast.success(data);
-    setIsLoading(false);
+    if ("message" in data) {
+      toast.success(data.message);
+      data.errors.forEach((userWithError) => {
+        toast.error(
+          `Error syncing shifts for ${userWithError.firstName}. Reason: ${userWithError.error}`
+        );
+      });
+      setIsLoading(false);
+    }
   };
 
   return (
