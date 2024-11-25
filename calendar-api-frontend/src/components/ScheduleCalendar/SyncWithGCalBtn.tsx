@@ -52,13 +52,12 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
     }
     if ("message" in data) {
       toast.success(data.message);
-      data.errors.forEach((userWithError) => {
-        const errorString =
-          "Error syncing shifts for " +
-          userWithError.firstName +
-          ". Reason: " +
-          userWithError.error;
-        toast.error(errorString);
+      data.errors.map((userWithError) => {
+        toast.error(
+          `Error syncing shifts for ${String(
+            userWithError.firstName
+          )}. Reason: ${String(userWithError.error)}`
+        );
       });
       setIsLoading(false);
     }
