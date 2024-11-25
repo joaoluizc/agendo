@@ -28,11 +28,6 @@ export default function ShiftsToAddToCal() {
     getData();
   }, []);
 
-  // const handleSave = async () => {
-  //     await savePositionsToSync(rowSelection, positionsToSync);
-  //     setInitialPositions(positionsToSync);
-  // };
-
   return (
     <Card className="scroll-mt-20" id="shifts-to-add-to-cal">
       <CardHeader>

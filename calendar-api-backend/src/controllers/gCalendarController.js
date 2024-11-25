@@ -6,7 +6,7 @@ import process from "process";
 import gCalendarService from "../services/gCalendarService.js";
 import userService from "../services/userService.js";
 import utils from "../utils/utils.js";
-import verifyUserAuth from "../middlewares/verifyUserAuth.js";
+import { requireAuth } from "@clerk/express";
 import { sendCookies } from "../middlewares/sendCookies.js";
 
 dotenv.config();
@@ -127,11 +127,13 @@ gCalendarRouter.get("/redirect", async (req, res) => {
   });
 });
 
-gCalendarRouter.get("/userinfo", verifyUserAuth, async (req, res) => {
+//updated to use Clerk
+gCalendarRouter.get("/userinfo", requireAuth(), async (req, res) => {
   console.log(
-    `[${req.requestId}] UserInfo 1: Fetching user info for ${req.user.email}`
+    `[${req.requestId}] UserInfo 1: Fetching user info for ${req.auth.userId}`
   );
-  const tokens = await userService.getGapiToken(req.user.email);
+  const tokens = await userService.getUserGoogleOAuthToken_cl(req.auth.userId);
+  // const tokens = await userService.getGapiToken(req.user.email);
   if (!tokens) {
     console.log(
       `[${req.requestId}] UserInfo 2: User ${req.user.email} not authenticated with Google`
@@ -145,7 +147,7 @@ gCalendarRouter.get("/userinfo", verifyUserAuth, async (req, res) => {
   res.status(200).json(data);
 });
 
-gCalendarRouter.post("/disconnect", verifyUserAuth, async (req, res) => {
+gCalendarRouter.post("/disconnect", requireAuth(), async (req, res) => {
   console.log(
     `[${req.requestId}] Disconnecting user ${req.user.email} from Google OAuth2`
   );
@@ -156,7 +158,7 @@ gCalendarRouter.post("/disconnect", verifyUserAuth, async (req, res) => {
   res.status(200).send("Disconnected");
 });
 
-gCalendarRouter.get("/calendars", verifyUserAuth, async (req, res) => {
+gCalendarRouter.get("/calendars", requireAuth(), async (req, res) => {
   const tokens = await userService.getGapiToken(req.user.email); // Retrieve tokens from the user service
   if (!tokens) {
     return res.status(401).send("User not authenticated");
@@ -173,11 +175,12 @@ gCalendarRouter.get("/calendars", verifyUserAuth, async (req, res) => {
   });
 });
 
-gCalendarRouter.get("/events", verifyUserAuth, async (req, res) => {
+gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
   console.log(
-    `[${req.requestId}] Fetching GCalendar events for ${req.user.email}`
+    `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId}`
   );
-  const tokens = await userService.getGapiToken(req.user.email);
+  // const tokens = await userService.getGapiToken(req.user.email);
+  const tokens = await userService.getUserGoogleOAuthToken_cl(req.auth.userId);
   if (!tokens) {
     return res.status(401).send("User not Google authenticated");
   }
@@ -194,7 +197,7 @@ gCalendarRouter.get("/events", verifyUserAuth, async (req, res) => {
     },
     (err, response) => {
       if (err) {
-        console.log(`[${req.requestId}] Can't fetch events`, err);
+        console.error(`[${req.requestId}] Can't fetch events`, err);
         return res.send("Error");
       }
       console.log(
@@ -206,13 +209,13 @@ gCalendarRouter.get("/events", verifyUserAuth, async (req, res) => {
   );
 });
 
-gCalendarRouter.get("/all-events", verifyUserAuth, async (req, res) => {
+gCalendarRouter.get("/all-events", requireAuth(), async (req, res) => {
   const date = new Date(req.query.date.split("/")[0]);
   console.log(
-    `[${req.requestId}] Fetching GCalendar events for ${req.user.email} on date ${date}`
+    `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId} on date ${date}`
   );
   try {
-    const events = await gCalendarService.getAllUsersEvents(
+    const events = await gCalendarService.getAllUsersEvents_cl(
       date,
       req.requestId
     );
@@ -234,16 +237,16 @@ gCalendarRouter.get("/all-events", verifyUserAuth, async (req, res) => {
 
 gCalendarRouter.post(
   "/days-shifts-to-gcal",
-  verifyUserAuth,
+  requireAuth(),
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
       : utils.todayISO(new Date());
     console.log(
-      `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.user.email}`
+      `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.auth.firstName}`
     );
     try {
-      const result = await gCalendarService.addDaysShiftsToGcal(
+      const result = await gCalendarService.addDaysShiftsToGcal_cl(
         date,
         req.requestId
       );
@@ -260,20 +263,28 @@ gCalendarRouter.post(
 
 gCalendarRouter.post(
   "/user-day-shifts-to-gcal",
-  verifyUserAuth,
+  requireAuth(),
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
       : utils.todayISO(new Date());
+    const userId = req.auth.userId;
+
     console.log(
-      `[${req.requestId}] gCalendarController user day's shifts to gcal 1: Adding user shifts to GCal for date ${date}. Request from user ${req.user.email}`
+      `[${req.requestId}] gCalendarController user day's shifts to gcal 1: Adding user shifts to GCal for date ${date}. Request from user ${userId}`
     );
-    const user = await userService.findUser(req.user.email);
+
+    const user = await userService.findUser_cl(userId);
     console.log(
-      `[${req.requestId}] User found: ${user.email}. ${JSON.stringify(user)}`
+      `[${
+        req.requestId
+      }] gCalendarController - User found for ${userId}. ${JSON.stringify(
+        user
+      )}`
     );
+
     try {
-      const result = await gCalendarService.addUsersDayShifts(
+      const result = await gCalendarService.addUsersDayShifts_cl(
         user,
         date,
         req.requestId

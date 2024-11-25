@@ -23,6 +23,32 @@ const addEvents = async (user, events, requestId = "req-id-nd") => {
   }
 };
 
+const addEvents_cl = async (user, events, requestId = "req-id-nd") => {
+  console.log(
+    `[${requestId}] addedGCalEventsService: Saving on database events that were synced to google from user ${user.firstName} with id ${user.id}`
+  );
+  const userEvents = await UsersGCalEvents.findOne({ userId: user.id });
+  if (userEvents) {
+    userEvents.events.push(...events);
+    await userEvents.save();
+    console.log(
+      `[${requestId}] Added ${events.length} events on UserGCalEvents to user ${user.firstName} with id ${user.id}`
+    );
+  } else {
+    console.log(
+      `[${requestId}] No events found for user ${user.firstName} with id ${user.id}, creating new UserGCalEvents`
+    );
+    const newUserEvents = new UsersGCalEvents({
+      userId: user.id,
+      events: events,
+    });
+    await newUserEvents.save();
+    console.log(
+      `[${requestId}] Added ${events.length} events on UserGCalEvents to user ${user.firstName} with id ${user.id}`
+    );
+  }
+};
+
 const findEventsByDate = async (date, requestId = "req-id-nd") => {
   console.log(
     `[${requestId}] findEventsByDate: Starting findEventsByDate with date: ${date}`
@@ -93,6 +119,7 @@ const deleteEvents = async (userId, events, requestId = "req-id-nd") => {
 
 export default {
   addEvents: addEvents,
+  addEvents_cl,
   findEventsByDate,
   deleteEvents,
 };

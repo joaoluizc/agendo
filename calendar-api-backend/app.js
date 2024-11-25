@@ -3,14 +3,13 @@ import session from "express-session";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import process from "process";
-import { clerkMiddleware } from "@clerk/express";
+import { clerkMiddleware, requireAuth } from "@clerk/express";
 
 import connectDB from "./src/database/db.js";
 import userRouter from "./src/routers/userRouter.js";
 import gCalendarRouter from "./src/controllers/gCalendarController.js";
 import slingRouter from "./src/routers/slingRouter.js";
 import positionRouter from "./src/routers/positionRouters.js";
-import verifyUserAuth from "./src/middlewares/verifyUserAuth.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import seedPositions from "./src/database/seeds/seedPositions.js";
 
@@ -31,6 +30,7 @@ app.use(
 );
 app.use(clerkMiddleware());
 app.use(cookieParser());
+app.use(clerkMiddleware());
 const corsOptions = {
   origin: corsOrigin,
   optionsSuccessStatus: 200,
@@ -52,11 +52,11 @@ connectDB();
 await seedPositions();
 
 app.use("/gcalendar", addRequestId, gCalendarRouter);
-app.use("/sling", addRequestId, verifyUserAuth, slingRouter);
-app.use("/position", addRequestId, verifyUserAuth, positionRouter);
+app.use("/sling", addRequestId, requireAuth(), slingRouter);
+app.use("/position", addRequestId, requireAuth(), positionRouter);
 app.use("/user", addRequestId, userRouter);
 
-app.get("/auth-check", verifyUserAuth, (req, res) =>
+app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" })
 );
 

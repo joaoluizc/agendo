@@ -57,6 +57,7 @@ async function getAllUsers_cl() {
 }
 
 async function getUserGoogleOAuthToken_cl(userId) {
+  console.log("Getting google oauth token for user: ", userId);
   const provider = "oauth_google";
   const response = await clerkClient.users.getUserOauthAccessToken(
     userId,
@@ -129,13 +130,15 @@ async function addPositionsToSyncNewUser(userId) {
   }
 }
 
-async function addSlingIdToNewUser(userId, userEmail) {
+async function addBasicPropertiesToNewUser(userId, userEmail) {
   console.log("Adding slingId to new user. userId: ", userId);
   const slingId = utils.getSlingIdByEmail(userEmail);
   try {
     await clerkClient.users.updateUserMetadata(userId, {
       publicMetadata: {
         slingId,
+        type: "normal",
+        timeZone: 0,
       },
     });
   } catch (err) {
@@ -168,5 +171,5 @@ export default {
   getAllUsersWithTokens,
   getAllUsersWithTokens_cl,
   addPositionsToSyncNewUser,
-  addSlingIdToNewUser,
+  addBasicPropertiesToNewUser,
 };

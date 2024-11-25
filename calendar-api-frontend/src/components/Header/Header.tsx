@@ -195,7 +195,7 @@ const Header = () => {
                 variant="default"
                 className="self-start justify-self-start"
               >
-                <SignInButton />
+                Sign In
               </Button>
             </Link>
           </SignedOut>

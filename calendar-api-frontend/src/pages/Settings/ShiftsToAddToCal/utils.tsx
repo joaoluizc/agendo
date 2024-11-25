@@ -1,5 +1,6 @@
 import { Position, PositionSync } from "@/types/positionTypes.ts";
 import { RowSelectionState } from "@tanstack/react-table";
+import { toast } from "sonner";
 
 export async function getPositionsToSync(): Promise<Position[]> {
   console.log("fetching positions to sync");
@@ -62,7 +63,9 @@ export async function savePositionsToSync(
       },
       body: JSON.stringify(selectedPositions),
     });
+    toast.success("Positions saved successfully");
   } catch (error) {
     console.error("Failed to save positions:", error);
+    toast.error("Failed to save positions");
   }
 }
