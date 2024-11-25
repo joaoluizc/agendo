@@ -59,10 +59,16 @@ async function getAllUsers_cl() {
 async function getUserGoogleOAuthToken_cl(userId) {
   console.log("Getting google oauth token for user: ", userId);
   const provider = "oauth_google";
-  const response = await clerkClient.users.getUserOauthAccessToken(
-    userId,
-    provider
-  );
+  let response;
+  try {
+    response = await clerkClient.users.getUserOauthAccessToken(
+      userId,
+      provider
+    );
+  } catch (e) {
+    console.error("Error getting google oauth token: ", JSON.stringify(e));
+    return null;
+  }
 
   const data = response.data[0];
   data.access_token = data.token;
@@ -75,6 +81,9 @@ async function getAllUsersWithTokens_cl() {
   const usersWithTokens = await Promise.all(
     users.map(async (user) => {
       const userTokensResponse = await getUserGoogleOAuthToken_cl(user.id);
+      if (!userTokensResponse) {
+        return { ...user };
+      }
       return { ...user, GoogleAccessToken: userTokensResponse };
     })
   );
@@ -144,21 +153,6 @@ async function addBasicPropertiesToNewUser(userId, userEmail) {
   } catch (err) {
     console.error("Error adding slingId to new user: ", err.message);
   }
-
-  console.log("Testing getting all users with google auth tokens");
-  let usersWithTokens;
-  try {
-    usersWithTokens = await getAllUsersWithTokens_cl();
-  } catch (err) {
-    return console.error(
-      "Error getting all users with google auth tokens: ",
-      err.message
-    );
-  }
-  console.log(
-    "Successfully got all users with google auth tokens: ",
-    usersWithTokens
-  );
 }
 
 export default {

@@ -388,7 +388,10 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
       addedEvents: usersWithChanges,
     };
   } catch (e) {
-    console.log(`[${requestId}] - Error adding shifts to GCal: `, e.message);
+    console.error(
+      `[${requestId}] - Error adding shifts to GCal: `,
+      JSON.stringify(e)
+    );
     return { status: 500, message: "Error adding shifts to GCal" };
   }
 };
@@ -397,12 +400,25 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
   console.log(`[${requestId}] - Adding day's shifts to GCal`);
   let usersWithChanges = [];
   let numberOfAddedEvents = 0;
+  const usersWithErrors = [];
   try {
     const calendar = await slingController.getCalendar(date);
     console.log(
       `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
     );
     const usersWithGoogle = await userService.getAllUsersWithTokens_cl();
+    usersWithGoogle.map((user) => {
+      if (!user.GoogleAccessToken) {
+        usersWithErrors.push({
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          error: "User not Google authenticated",
+        });
+        return;
+      }
+      return user;
+    });
     console.log(
       `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`
     );
@@ -487,12 +503,17 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       })
     );
     if (numberOfAddedEvents?.length === 0 && usersWithChanges?.length === 0) {
-      return { status: 200, message: "No shifts eligible to be added to GCal" };
+      return {
+        status: 200,
+        message: "No shifts eligible to be added to GCal",
+        usersWithErrors,
+      };
     }
     return {
       status: 200,
       message: `${numberOfAddedEvents} shifts added to GCal for ${usersWithChanges.length} users`,
       addedEvents: usersWithChanges,
+      usersWithErrors,
     };
   } catch (e) {
     console.log(`[${requestId}] - Error adding shifts to GCal: `, e.message);
