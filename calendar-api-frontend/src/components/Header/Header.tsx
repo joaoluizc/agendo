@@ -18,12 +18,7 @@ import faviconLight from "../../resources/favicon-light.svg";
 import faviconDark from "../../resources/favicon-dark.svg";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useEffect } from "react";
-import {
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  UserButton,
-} from "@clerk/clerk-react";
+import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 
 function setFavicon(url: string) {
   const link =
