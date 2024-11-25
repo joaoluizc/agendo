@@ -33,6 +33,7 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
 
   const syncWithGCal = async () => {
     setIsLoading(true);
+
     const response = await fetch("api/gcalendar/days-shifts-to-gcal", {
       method: "POST",
       mode: "cors",
@@ -42,23 +43,29 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
       },
       body: JSON.stringify({ date: selectedDate }),
     });
+
     const data: SyncWithGCalResponse = await response.json();
     console.log("syncWithGCal response: ", data);
+
     if (response.status !== 200) {
       console.log("error syncing shifts to calendar: ", data);
       toast.error("Error syncing shifts to calendar");
       setIsLoading(false);
       return;
     }
+
     if ("message" in data) {
       toast.success(data.message);
-      data.errors.map((userWithError) => {
-        toast.error(
-          `Error syncing shifts for ${String(
-            userWithError.firstName
-          )}. Reason: ${String(userWithError.error)}`
-        );
-      });
+
+      if (data.errors && Array.isArray(data.errors)) {
+        for (const userWithError of data.errors) {
+          if (userWithError && userWithError.firstName && userWithError.error) {
+            const errorMessage = `Error syncing shifts for ${userWithError.firstName}. Reason: ${userWithError.error}`;
+            toast.error(errorMessage);
+          }
+        }
+      }
+
       setIsLoading(false);
     }
   };

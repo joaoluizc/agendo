@@ -64,7 +64,7 @@ export const getShifts = async (
 export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date): Promise<CalendarUser[]> => {
   const selectedDate = utils.getLocalTimeframeISO(date)
   const response = await fetch(`api/gcalendar/all-events?date=${selectedDate}`);
-  if (response.status === 204) {
+  if (response.status === 204 || response.status === 500) {
     setgCalendarEvents([]);
     return [];
   }
