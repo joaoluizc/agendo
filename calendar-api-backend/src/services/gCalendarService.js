@@ -406,8 +406,8 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
     console.log(
       `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
     );
-    const usersWithGoogle = await userService.getAllUsersWithTokens_cl();
-    usersWithGoogle.map((user) => {
+    const usersTokensResponse = await userService.getAllUsersWithTokens_cl();
+    const usersWithGoogle = usersTokensResponse.map((user) => {
       if (!user.GoogleAccessToken) {
         usersWithErrors.push({
           userId: user.id,
