@@ -1,4 +1,4 @@
-import { User, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import gCalendarLogo from "../../resources/calendar-icon.svg";
 import { Button } from "../ui/button.tsx";
 import { toast } from "sonner";
