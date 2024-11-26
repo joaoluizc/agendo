@@ -1,6 +1,36 @@
 import utils from '../../utils/utils.ts';
 import { Shift, User } from '../../types/slingTypes.ts';
 import { CalendarUser } from '@/types/gCalendarTypes.ts';
+import { toast } from "sonner";
+
+type GetCalEventsSuccessResponse = {
+  events: CalendarUser[];
+  errors: {
+    userId: string;
+    firstName: string;
+    lastName: string;
+    error: string;
+  }[];
+};
+
+type GetCalEventsEmptyResponse = {
+  message: string;
+  errors: {
+    userId: string;
+    firstName: string;
+    lastName: string;
+    error: string;
+  }[];
+};
+
+type GetCalEventsErrorResponse = {
+  error: string;
+};
+
+type GetCalEventsResponse =
+  | GetCalEventsSuccessResponse
+  | GetCalEventsErrorResponse
+  | GetCalEventsEmptyResponse;
 
 /** Sort shifts for each user by start time
  * @param {User[]} data - array of users with shifts
@@ -64,27 +94,56 @@ export const getShifts = async (
 export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date): Promise<CalendarUser[]> => {
   const selectedDate = utils.getLocalTimeframeISO(date)
   const response = await fetch(`api/gcalendar/all-events?date=${selectedDate}`);
-  if (response.status === 204 || response.status === 500) {
+  
+  const data: GetCalEventsResponse = await response.json();
+
+  if (response.status === 204 && 'message' in data) {
     setgCalendarEvents([]);
+    toast.error(data.message);
+
+    data.errors.forEach((user) => {
+      toast.error(`Failed to fetch calendar events for ${user.firstName}`, {
+      description: user.error,
+      });
+    });
     return [];
   }
-  let data = await response.json();
 
-  // Filter out events that are not of type 'default' and do not match the selected date
-  data = data.map((user: CalendarUser) => {
-    const filteredEvents = user.events.filter((event) => {
-      const eventDate = new Date(event.start.dateTime).getDate();
-      const selectedDate = date.getDate();
-      return event.eventType === "default" && eventDate === selectedDate;
+  if (response.status === 500 && 'error' in data) {
+    setgCalendarEvents([]);
+    toast.error(data.error);
+    return [];
+  }
+
+  let filteredData: CalendarUser[] = [];
+  if (response.status === 200 && 'events' in data) {
+    // Filter out events that are not of type 'default' and do not match the selected date
+    if(data.events.length === 0) {
+      filteredData = data.events.map((user: CalendarUser) => {
+        const filteredEvents = user.events.filter((event) => {
+          const eventDate = new Date(event.start.dateTime).getDate();
+          const selectedDate = date.getDate();
+          return event.eventType !== "birthday" && event.eventType !== "workingLocation" && eventDate === selectedDate;
+        });
+
+        return {
+          ...user,
+          events: filteredEvents,
+        };
+      });
+    }
+
+    data?.errors.forEach((user) => {
+      toast.error(`Failed to fetch calendar events for ${user.firstName}`, {
+      description: user.error,
+      });
     });
 
-    return {
-      ...user,
-      events: filteredEvents,
-    };
-  });
-  setgCalendarEvents(data);
-  return data;
+    setgCalendarEvents(filteredData);
+    return filteredData;
+  }
+
+  return filteredData;
 };
 
 /** 

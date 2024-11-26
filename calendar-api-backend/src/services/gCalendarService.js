@@ -140,16 +140,33 @@ const getAllUsersEvents_cl = async (date, requestId = "req-id-nd") => {
   console.log(`[${requestId}] - Fetching all users events`);
   const users = await userService.getAllUsersWithTokens_cl();
 
+  let usersWithErrors = [];
+
   const allEventsPromises = users.map(async (user) => {
     const slingId = user.publicMetadata.slingId;
     const userId = user.id;
 
-    const events = await getUserEvents_cl(user, date, requestId);
+    let events;
+    try {
+      events = await getUserEvents_cl(user, date, requestId);
+    } catch (e) {
+      console.log(
+        `[${requestId}] - Error fetching events for user ${user.firstName}: `,
+        e
+      );
+      usersWithErrors.push({
+        userId: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        error: e.errors[0].message,
+      });
+      return {};
+    }
     return { userId, slingId, events };
   });
 
   const allEvents = await Promise.all(allEventsPromises);
-  return allEvents;
+  return { events: allEvents, usersWithErrors };
 };
 
 const addEvent = async (user, event, requestId = "req-id-nd") => {

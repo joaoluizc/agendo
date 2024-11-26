@@ -215,19 +215,23 @@ gCalendarRouter.get("/all-events", requireAuth(), async (req, res) => {
     `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId} on date ${date}`
   );
   try {
-    const events = await gCalendarService.getAllUsersEvents_cl(
+    const response = await gCalendarService.getAllUsersEvents_cl(
       date,
       req.requestId
     );
+    const events = response.events;
+    const usersWithErrors = response.usersWithErrors;
 
     if (Array.isArray(events) && events.length > 0) {
       console.log(
         `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events`
       );
-      res.status(200).json(events);
+      res.status(200).json({ events, errors: usersWithErrors });
     } else {
-      console.warn(`[${req.requestId}] No events found`);
-      res.status(204).json({ message: "No events found" });
+      console.warn(`[${req.requestId}] No eligible events found`);
+      res
+        .status(204)
+        .json({ message: "No eligible events found", errors: usersWithErrors });
     }
   } catch (error) {
     console.error(`[${req.requestId}] Error fetching all user events:`, error);
