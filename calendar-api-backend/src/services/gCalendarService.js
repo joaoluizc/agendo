@@ -195,7 +195,7 @@ const addEvent_cl = async (user, event, requestId = "req-id-nd") => {
       },
       (err, response) => {
         if (err) {
-          console.log(
+          console.error(
             `[${requestId}] - Error adding event to user ${user.firstName}`,
             err
           );
@@ -493,12 +493,30 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
           addedEvents: userEvents,
         });
         numberOfAddedEvents += userEvents.length;
-        const addedEvents = await Promise.all(
-          userEvents.map(
-            async (event) => await addEvent_cl(user, event, requestId)
-          )
-        );
-        await addedGCalEventsService.addEvents_cl(user, addedEvents, requestId);
+        let addedEvents = [];
+        try {
+          addedEvents = await Promise.all(
+            userEvents.map(
+              async (event) => await addEvent_cl(user, event, requestId)
+            )
+          );
+          await addedGCalEventsService.addEvents_cl(
+            user,
+            addedEvents,
+            requestId
+          );
+        } catch (error) {
+          console.error(
+            `[${requestId}] - Error adding event for user ${user.firstName}: `,
+            error.errors[0].message
+          );
+          usersWithErrors.push({
+            userId: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            error: error.errors[0].message,
+          });
+        }
         console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
       })
     );
