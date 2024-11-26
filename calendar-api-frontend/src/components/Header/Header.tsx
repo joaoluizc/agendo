@@ -1,16 +1,14 @@
 import { Link, NavLink } from "react-router-dom";
-import { CircleUser, Menu, Sun, Moon } from "lucide-react";
+import { Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
-import { useNavigate } from "react-router-dom";
-import agendoLogo from "../../resources/agendo-logo.svg";
+import agendoLogoLight from "../../resources/agendo-logo.svg";
+import agendoLogoDark from "../../resources/agendo-logo-dark.svg";
 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -31,8 +29,7 @@ function setFavicon(url: string) {
 }
 
 const Header = () => {
-  const { setTheme } = useTheme();
-  const navigate = useNavigate();
+  const { setTheme, theme } = useTheme();
   const {
     setFirstName,
     setLastName,
@@ -52,23 +49,6 @@ const Header = () => {
     } else {
       setTheme("system");
       setFavicon(faviconLight);
-    }
-  };
-
-  const logout = async () => {
-    const response = await fetch("/api/user/logout", {
-      method: "POST",
-      mode: "cors",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    console.log(JSON.stringify(response));
-    if (response.ok) {
-      navigate("/login");
-    } else {
-      console.error("Logout failed");
     }
   };
 
@@ -105,7 +85,7 @@ const Header = () => {
             to="/"
             className="flex items-center gap-2 text-lg font-semibold md:text-base h-6 w-6"
           >
-            <img src={agendoLogo} />
+            <img src={theme === "light" ? agendoLogoDark : agendoLogoLight} />
             <span className="sr-only">Agendo</span>
           </NavLink>
           <NavLink
@@ -118,26 +98,28 @@ const Header = () => {
           >
             Home
           </NavLink>
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              `${
-                isActive ? "text-foreground" : "text-muted-foreground"
-              } transition-colors hover:text-foreground`
-            }
-          >
-            Dashboard
-          </NavLink>
-          <NavLink
-            to="/dashboard/settings"
-            className={({ isActive }) =>
-              `${
-                isActive ? "text-foreground" : "text-muted-foreground"
-              } transition-colors hover:text-foreground`
-            }
-          >
-            Settings
-          </NavLink>
+          <SignedIn>
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) =>
+                `${
+                  isActive ? "text-foreground" : "text-muted-foreground"
+                } transition-colors hover:text-foreground`
+              }
+            >
+              Dashboard
+            </NavLink>
+            <NavLink
+              to="/dashboard/settings"
+              className={({ isActive }) =>
+                `${
+                  isActive ? "text-foreground" : "text-muted-foreground"
+                } transition-colors hover:text-foreground`
+              }
+            >
+              Settings
+            </NavLink>
+          </SignedIn>
         </nav>
         <Sheet>
           <SheetTrigger asChild>
@@ -156,7 +138,9 @@ const Header = () => {
                 to="#"
                 className="flex items-center gap-2 text-lg font-semibold h-6 w-6"
               >
-                <img src={agendoLogo} />
+                <img
+                  src={theme === "light" ? agendoLogoDark : agendoLogoLight}
+                />
                 <span className="sr-only">Agendo</span>
               </NavLink>
               <NavLink
@@ -165,18 +149,20 @@ const Header = () => {
               >
                 Home
               </NavLink>
-              <NavLink
-                to="/dashboard"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Dashboard
-              </NavLink>
-              <NavLink
-                to="/dashboard/settings"
-                className="hover:text-foreground"
-              >
-                Settings
-              </NavLink>
+              <SignedIn>
+                <NavLink
+                  to="/dashboard"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Dashboard
+                </NavLink>
+                <NavLink
+                  to="/dashboard/settings"
+                  className="hover:text-foreground"
+                >
+                  Settings
+                </NavLink>
+              </SignedIn>
             </nav>
           </SheetContent>
         </Sheet>
@@ -216,33 +202,6 @@ const Header = () => {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="icon" className="rounded-full">
-                <CircleUser className="h-5 w-5" />
-                <span className="sr-only">Toggle user menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <NavLink
-                  to="/dashboard/settings"
-                  className="hover:text-foreground"
-                >
-                  Settings
-                </NavLink>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <a href="mailto:joao.coelho@duda.co">Support</a>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="cursor-pointer">
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </header>
     </>

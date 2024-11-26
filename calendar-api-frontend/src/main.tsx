@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import "./index.css";
 import Login from "./pages/Login/Login.tsx";
-import Signup from "./pages/Signup/Signup.tsx";
 import Home from "./pages/Home/Home.tsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
 import Dashboard from "./pages/Dashboard/Dashboard.tsx";
@@ -13,6 +12,7 @@ import Settings from "./pages/Settings/Settings.tsx";
 import { Providers } from "./providers/Providers.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import RootLayout from "./layouts/root-layout.tsx";
+import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
 
 const router = createBrowserRouter([
   {
@@ -20,8 +20,8 @@ const router = createBrowserRouter([
     children: [
       { path: "/", element: <Home /> },
       { path: "/login", element: <Login /> },
-      { path: "/signup", element: <Signup /> },
       { path: "/privacy", element: <PrivacyPolicy /> },
+      { path: "/terms", element: <TermsOfService /> },
       { path: "*", element: <NotFound /> },
       {
         element: <ProtectedRoute />,

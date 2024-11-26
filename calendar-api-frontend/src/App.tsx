@@ -5,7 +5,6 @@ import {
   RouterProvider,
 } from "react-router-dom";
 import Login from "./pages/Login/Login.tsx";
-import Signup from "./pages/Signup/Signup.tsx";
 import Home from "./pages/Home/Home.tsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
 import Dashboard from "./pages/Dashboard/Dashboard.tsx";
@@ -28,7 +27,6 @@ const router = createBrowserRouter(
       </Route>
       <Route path="" element={<Home />} />
       <Route path="login" element={<Login />} />
-      <Route path="signup" element={<Signup />} />
       <Route path="privacy" element={<PrivacyPolicy />} />
       <Route path="*" element={<NotFound />} />
     </Route>
