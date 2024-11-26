@@ -55,13 +55,17 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
     }
 
     if ("message" in data) {
-      toast.success(data.message);
+      toast.success("Shifts synced to calendar", {
+        description: data.message,
+      });
 
       if (data.errors && Array.isArray(data.errors)) {
         for (const userWithError of data.errors) {
           if (userWithError && userWithError.firstName && userWithError.error) {
-            const errorMessage = "error syncing";
-            toast(errorMessage);
+            const errorMessage = `Error syncing shifts for ${userWithError.firstName}.`;
+            toast.error(errorMessage, {
+              description: userWithError.error,
+            });
           }
         }
       }
