@@ -1,6 +1,6 @@
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import gCalendarLogo from "../../resources/calendar-icon.svg";
-import { Users, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { Button } from "../ui/button.tsx";
 import { toast } from "sonner";
 import { useState } from "react";
