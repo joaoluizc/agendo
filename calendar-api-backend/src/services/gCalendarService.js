@@ -166,7 +166,8 @@ const getAllUsersEvents_cl = async (date, requestId = "req-id-nd") => {
   });
 
   const allEvents = await Promise.all(allEventsPromises);
-  return { events: allEvents, usersWithErrors };
+  const allEventsFiltered = allEvents.filter((event) => event.events);
+  return { events: allEventsFiltered, usersWithErrors };
 };
 
 const addEvent = async (user, event, requestId = "req-id-nd") => {
