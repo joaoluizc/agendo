@@ -1,4 +1,5 @@
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
+import gCalendarLogo from "../../resources/calendar-icon.svg";
 import { Users, LoaderCircle } from "lucide-react";
 import { Button } from "../ui/button.tsx";
 import { toast } from "sonner";
@@ -78,7 +79,12 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
     userType === "admin" &&
     (!isLoading ? (
       <Button variant={"outline"} onClick={syncWithGCal}>
-        <Users className="mr-2 h-4 w-4" />
+        {/* <Users className="mr-2 h-4 w-4" /> */}
+        <img
+          src={gCalendarLogo}
+          alt="Google Calendar Logo"
+          className="mr-2 h-4 w-4"
+        />
         Sync to team calendars
       </Button>
     ) : (

@@ -1,4 +1,5 @@
 import { User, LoaderCircle } from "lucide-react";
+import gCalendarLogo from "../../resources/calendar-icon.svg";
 import { Button } from "../ui/button.tsx";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -36,7 +37,11 @@ const SyncMyGCalBtn = (props: SyncMyGCalBtnProps) => {
 
   return !isLoading ? (
     <Button variant={"outline"} onClick={syncWithGCal}>
-      <User className="mr-2 h-4 w-4" />
+      <img
+        src={gCalendarLogo}
+        alt="Google Calendar Logo"
+        className="mr-2 h-4 w-4"
+      />
       Sync to my calendar
     </Button>
   ) : (
