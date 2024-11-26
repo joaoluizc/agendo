@@ -60,8 +60,8 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
       if (data.errors && Array.isArray(data.errors)) {
         for (const userWithError of data.errors) {
           if (userWithError && userWithError.firstName && userWithError.error) {
-            const errorMessage = `Error syncing shifts for ${userWithError.firstName}. Reason: ${userWithError.error}`;
-            toast.error(errorMessage);
+            const errorMessage = "error syncing";
+            toast(errorMessage);
           }
         }
       }
