@@ -118,7 +118,7 @@ export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: C
   let filteredData: CalendarUser[] = [];
   if (response.status === 200 && 'events' in data) {
     // Filter out events that are not of type 'default' and do not match the selected date
-    if(data.events.length === 0) {
+    if(data.events.length !== 0) {
       filteredData = data.events.map((user: CalendarUser) => {
         const filteredEvents = user.events.filter((event) => {
           const eventDate = new Date(event.start.dateTime).getDate();
