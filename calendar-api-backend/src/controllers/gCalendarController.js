@@ -1,13 +1,14 @@
 import dotenv from "dotenv";
 import express from "express";
 import { google } from "googleapis";
-import cron from "node-cron";
+// import cron from "node-cron";
 import process from "process";
 import gCalendarService from "../services/gCalendarService.js";
 import userService from "../services/userService.js";
 import utils from "../utils/utils.js";
 import { requireAuth } from "@clerk/express";
 import { sendCookies } from "../middlewares/sendCookies.js";
+import adminOnly from "../middlewares/adminOnly.js";
 
 dotenv.config();
 
@@ -209,39 +210,49 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
   );
 });
 
-gCalendarRouter.get("/all-events", requireAuth(), async (req, res) => {
-  const date = new Date(req.query.date.split("/")[0]);
-  console.log(
-    `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId} on date ${date}`
-  );
-  try {
-    const response = await gCalendarService.getAllUsersEvents_cl(
-      date,
-      req.requestId
+gCalendarRouter.get(
+  "/all-events",
+  requireAuth(),
+  adminOnly,
+  async (req, res) => {
+    const date = new Date(req.query.date.split("/")[0]);
+    console.log(
+      `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId} on date ${date}`
     );
-    const events = response.events;
-    const usersWithErrors = response.usersWithErrors;
-
-    if (Array.isArray(events) && events.length > 0) {
-      console.log(
-        `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events`
+    try {
+      const response = await gCalendarService.getAllUsersEvents_cl(
+        date,
+        req.requestId
       );
-      res.status(200).json({ events, errors: usersWithErrors });
-    } else {
-      console.warn(`[${req.requestId}] No eligible events found`);
-      res
-        .status(204)
-        .json({ message: "No eligible events found", errors: usersWithErrors });
+      const events = response.events;
+      const usersWithErrors = response.usersWithErrors;
+
+      if (Array.isArray(events) && events.length > 0) {
+        console.log(
+          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events`
+        );
+        res.status(200).json({ events, errors: usersWithErrors });
+      } else {
+        console.warn(`[${req.requestId}] No eligible events found`);
+        res.status(204).json({
+          message: "No eligible events found",
+          errors: usersWithErrors,
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[${req.requestId}] Error fetching all user events:`,
+        error
+      );
+      res.status(500).json({ error: "Failed to fetch events" });
     }
-  } catch (error) {
-    console.error(`[${req.requestId}] Error fetching all user events:`, error);
-    res.status(500).json({ error: "Failed to fetch events" });
   }
-});
+);
 
 gCalendarRouter.post(
   "/days-shifts-to-gcal",
   requireAuth(),
+  adminOnly,
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
@@ -308,36 +319,36 @@ gCalendarRouter.get("/", (req, res) =>
   res.status(200).json({ message: "hey there :-))))" })
 );
 
-// Cron job to check and refresh gapi tokens every 30 minutes
-cron.schedule("*/30 * * * *", async () => {
-  console.log("Running cron job to check and refresh tokens");
-  const users = await userService.getAllUsersWithTokens();
-  users.forEach(async (user) => {
-    const { email, tokens } = user;
-    const oauth2Client = getOAuth2Client(tokens);
+// // Cron job to check and refresh gapi tokens every 30 minutes
+// cron.schedule("*/30 * * * *", async () => {
+//   console.log("Running cron job to check and refresh tokens");
+//   const users = await userService.getAllUsersWithTokens();
+//   users.forEach(async (user) => {
+//     const { email, tokens } = user;
+//     const oauth2Client = getOAuth2Client(tokens);
 
-    // Check if the token is about to expire in the next 10 minutes
-    const expirationTime = tokens.expiry_date;
-    const currentTime = new Date().getTime();
-    const sixtyMinutes = 60 * 60 * 1000;
+//     // Check if the token is about to expire in the next 10 minutes
+//     const expirationTime = tokens.expiry_date;
+//     const currentTime = new Date().getTime();
+//     const sixtyMinutes = 60 * 60 * 1000;
 
-    if (expirationTime - currentTime < sixtyMinutes) {
-      console.log(`Refreshing token for user: ${email}`);
-      oauth2Client.refreshAccessToken(async (err, newTokens) => {
-        if (err) {
-          console.error(`Error refreshing token for user: ${email}`, err);
-        } else {
-          try {
-            await userService.addGapiToken(email, newTokens);
-          } catch (e) {
-            console.error(`Error saving new token for user: ${email}`, e);
-            return;
-          }
-          console.log(`Token refreshed for user: ${email}`);
-        }
-      });
-    }
-  });
-});
+//     if (expirationTime - currentTime < sixtyMinutes) {
+//       console.log(`Refreshing token for user: ${email}`);
+//       oauth2Client.refreshAccessToken(async (err, newTokens) => {
+//         if (err) {
+//           console.error(`Error refreshing token for user: ${email}`, err);
+//         } else {
+//           try {
+//             await userService.addGapiToken(email, newTokens);
+//           } catch (e) {
+//             console.error(`Error saving new token for user: ${email}`, e);
+//             return;
+//           }
+//           console.log(`Token refreshed for user: ${email}`);
+//         }
+//       });
+//     }
+//   });
+// });
 
 export default gCalendarRouter;

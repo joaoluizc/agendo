@@ -27,6 +27,7 @@ import { Button } from "../ui/button.tsx";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import SyncWithGCalBtn from "./SyncWithGCalBtn.tsx";
 import SyncMyGCalBtn from "./SyncMyGCalBtn.tsx";
+import { useUserSettings } from "@/providers/useUserSettings.tsx";
 
 const userHasGcal = (user: User, gCalendarEvents: CalendarUser[]) => {
   return gCalendarEvents.some(
@@ -39,6 +40,7 @@ const Schedule = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [gCalendarEvents, setgCalendarEvents] = useState<CalendarUser[]>([]);
+  const { type } = useUserSettings();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,14 +50,18 @@ const Schedule = () => {
           if (Array.isArray(date)) date = date[0]; // AirDatepicker might return an array of dates
           await getShifts(date, setIsLoading, setSortedCalendar);
           setSelectedDate(date);
-          await getGCalendarEvents(setgCalendarEvents, date);
+          if (type === "admin") {
+            await getGCalendarEvents(setgCalendarEvents, date);
+          }
         },
         locale: localeEn,
       });
     };
     fetchData();
     getShifts(new Date(), setIsLoading, setSortedCalendar);
-    getGCalendarEvents(setgCalendarEvents, new Date());
+    if (type === "admin") {
+      getGCalendarEvents(setgCalendarEvents, new Date());
+    }
   }, []);
 
   return (
