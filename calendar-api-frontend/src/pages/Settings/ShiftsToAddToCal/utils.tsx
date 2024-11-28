@@ -5,7 +5,7 @@ import { toast } from "sonner";
 export async function getPositionsToSync(): Promise<Position[]> {
   console.log("fetching positions to sync");
   try {
-    const positionsResponse = await fetch("/api/position", {
+    const positionsResponse = await fetch("/api/position/all", {
       method: "GET",
       mode: "cors",
       credentials: "include",
