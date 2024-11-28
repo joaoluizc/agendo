@@ -10,6 +10,7 @@ userRouter.post("/login", userController.loginUser);
 userRouter.post("/logout", userController.logoutUser);
 // userRouter.get("/info", verifyUserAuth, userController.userInfo);
 userRouter.get("/info", requireAuth(), userController.userInfo_cl);
+userRouter.get("/all", userController.getAllUsers_cl);
 userRouter.post("/clerk/new", userController.newClerkUser);
 
 export default userRouter;

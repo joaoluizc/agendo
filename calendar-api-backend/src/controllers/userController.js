@@ -142,6 +142,16 @@ const newClerkUser = async (req, res) => {
   res.json();
 };
 
+const getAllUsers_cl = async (req, res) => {
+  const users = await userService.getAllUsers_cl();
+  try {
+    res.status(200).json(users);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: `caught error: ${err.message}` });
+  }
+};
+
 export default {
   registerUser,
   loginUser,
@@ -149,4 +159,5 @@ export default {
   userInfo,
   userInfo_cl,
   newClerkUser,
+  getAllUsers_cl,
 };
