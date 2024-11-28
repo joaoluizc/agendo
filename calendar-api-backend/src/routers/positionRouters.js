@@ -3,11 +3,11 @@ import positionController from "../controllers/positionController.js";
 
 const positionRouter = express.Router();
 
-positionRouter.get("/", (req, res) => {
+positionRouter.get("/all", (req, res) => {
   positionController.getAllPositions(req, res);
 });
 
-positionRouter.post("/", (req, res) => {
+positionRouter.post("/new", (req, res) => {
   positionController.createPosition(req, res);
 });
 
