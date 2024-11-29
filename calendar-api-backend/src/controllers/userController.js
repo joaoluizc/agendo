@@ -1,52 +1,52 @@
-import bcrypt from "bcrypt";
+// import bcrypt from "bcrypt";
 import process from "process";
 import { Webhook } from "svix";
 import userService from "../services/userService.js";
-import { sendCookies } from "../middlewares/sendCookies.js";
+// import { sendCookies } from "../middlewares/sendCookies.js";
 
 // no longer used
-const registerUser = async (req, res) => {
-  const { firstName, lastName, email, password } = req.body;
-  if (!firstName || !lastName || !email || !password) {
-    return res.status(400).json({
-      message: "firstName, lastName, email, and password are required fields",
-    });
-  }
-  try {
-    console.log({ firstName, lastName, email, password });
-    await userService.createUser(req.body);
-    sendCookies(req, res);
-  } catch (err) {
-    console.error(err.message);
-    res.status(400).json({ msg: err.message });
-  }
-};
+// const registerUser = async (req, res) => {
+//   const { firstName, lastName, email, password } = req.body;
+//   if (!firstName || !lastName || !email || !password) {
+//     return res.status(400).json({
+//       message: "firstName, lastName, email, and password are required fields",
+//     });
+//   }
+//   try {
+//     console.log({ firstName, lastName, email, password });
+//     await userService.createUser(req.body);
+//     sendCookies(req, res);
+//   } catch (err) {
+//     console.error(err.message);
+//     res.status(400).json({ msg: err.message });
+//   }
+// };
 
 // no longer used
-const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+// const loginUser = async (req, res) => {
+//   const { email, password } = req.body;
 
-  try {
-    const user = await userService.findUser(email);
-    if (!user) {
-      return res
-        .status(400)
-        .json({ msg: "Invalid credentials. Email not found." });
-    }
+//   try {
+//     const user = await userService.findUser(email);
+//     if (!user) {
+//       return res
+//         .status(400)
+//         .json({ msg: "Invalid credentials. Email not found." });
+//     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res
-        .status(400)
-        .json({ msg: "Invalid credentials. Wrong password." });
-    }
+//     const isMatch = await bcrypt.compare(password, user.password);
+//     if (!isMatch) {
+//       return res
+//         .status(400)
+//         .json({ msg: "Invalid credentials. Wrong password." });
+//     }
 
-    sendCookies(req, res);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: `caught error: ${err.message}` });
-  }
-};
+//     sendCookies(req, res);
+//   } catch (err) {
+//     console.error(err.message);
+//     res.status(500).json({ message: `caught error: ${err.message}` });
+//   }
+// };
 
 // no longer used
 const logoutUser = async (req, res) => {
@@ -153,8 +153,8 @@ const getAllUsers_cl = async (_req, res) => {
 };
 
 export default {
-  registerUser,
-  loginUser,
+  // registerUser,
+  // loginUser,
   logoutUser,
   userInfo,
   userInfo_cl,

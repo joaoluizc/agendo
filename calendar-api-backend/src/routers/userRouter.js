@@ -5,8 +5,8 @@ import { requireAuth } from "@clerk/express";
 
 const userRouter = express.Router();
 
-userRouter.post("/register", userController.registerUser);
-userRouter.post("/login", userController.loginUser);
+// userRouter.post("/register", userController.registerUser);
+// userRouter.post("/login", userController.loginUser);
 userRouter.post("/logout", userController.logoutUser);
 // userRouter.get("/info", verifyUserAuth, userController.userInfo);
 userRouter.get("/info", requireAuth(), userController.userInfo_cl);
