@@ -1,4 +1,4 @@
-import Shift from "../models/shiftModel.js";
+import Shift from "../models/ShiftModel.js";
 
 async function createShift(shiftDetails) {
   const { startTime, endTime, userId, positionId, createdBy } = shiftDetails;
