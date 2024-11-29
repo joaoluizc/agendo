@@ -3,20 +3,14 @@ import positionController from "../controllers/positionController.js";
 
 const positionRouter = express.Router();
 
-positionRouter.get("/all", (req, res) => {
-  positionController.getAllPositions(req, res);
-});
+positionRouter.get("/all", positionController.getAllPositions);
 
-positionRouter.post("/new", (req, res) => {
-  positionController.createPosition(req, res);
-});
+positionRouter.post("/new", positionController.createPosition);
 
-positionRouter.get("/sync", (req, res) => {
-  positionController.getUserPositionsToSync_cl(req, res);
-});
+positionRouter.get("/", positionController.getPosition);
 
-positionRouter.put("/sync", (req, res) => {
-  positionController.setUserPositionsToSync_cl(req, res);
-});
+positionRouter.get("/sync", positionController.getUserPositionsToSync_cl);
+
+positionRouter.put("/sync", positionController.setUserPositionsToSync_cl);
 
 export default positionRouter;

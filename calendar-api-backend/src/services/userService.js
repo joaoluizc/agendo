@@ -56,6 +56,24 @@ async function getAllUsers_cl() {
   return response.data;
 }
 
+async function getAllUsersSafeInfo_cl() {
+  const response = await clerkClient.users.getUserList();
+  return response.data.map((user) => {
+    return {
+      id: user.id,
+      email: user.emailAddresses[0].emailAddress,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      imageUrl: user.imageUrl,
+      hasImage: user.hasImage,
+      publicMetadata: {
+        slingId: user?.publicMetadata?.slingId,
+        type: user?.publicMetadata?.type,
+      },
+    };
+  });
+}
+
 async function getUserGoogleOAuthToken_cl(userId) {
   console.log("Getting google oauth token for user: ", userId);
   const provider = "oauth_google";
@@ -182,6 +200,7 @@ export default {
   getUserGoogleOAuthToken_cl,
   getAllUsersWithTokens,
   getAllUsersWithTokens_cl,
+  getAllUsersSafeInfo_cl,
   addPositionsToSyncNewUser,
   addBasicPropertiesToNewUser,
 };

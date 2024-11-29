@@ -10,8 +10,9 @@ import userRouter from "./src/routers/userRouter.js";
 import gCalendarRouter from "./src/controllers/gCalendarController.js";
 import slingRouter from "./src/routers/slingRouter.js";
 import positionRouter from "./src/routers/positionRouters.js";
+import shiftRouter from "./src/routers/shiftRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
-import seedPositions from "./src/database/seeds/seedPositions.js";
+// import seedPositions from "./src/database/seeds/seedPositions.js";
 
 const port = process.env.PORT || 3001;
 
@@ -49,12 +50,15 @@ app.use(cors(corsOptions));
 
 connectDB();
 
-await seedPositions();
+// await seedPositions();
 
 app.use("/gcalendar", addRequestId, gCalendarRouter);
 app.use("/sling", addRequestId, requireAuth(), slingRouter);
-app.use("/position", addRequestId, requireAuth(), positionRouter);
+// app.use("/position", addRequestId, requireAuth(), positionRouter);
+app.use("/position", addRequestId, positionRouter);
 app.use("/user", addRequestId, userRouter);
+app.use("/shift", addRequestId, shiftRouter); // UNPROTECTED FOR DEV TESTING
+// app.use("/shift", addRequestId, requireAuth(), shiftRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" })

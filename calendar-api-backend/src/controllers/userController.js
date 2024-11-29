@@ -142,9 +142,9 @@ const newClerkUser = async (req, res) => {
   res.json();
 };
 
-const getAllUsers_cl = async (req, res) => {
-  const users = await userService.getAllUsers_cl();
+const getAllUsers_cl = async (_req, res) => {
   try {
+    const users = await userService.getAllUsersSafeInfo_cl();
     res.status(200).json(users);
   } catch (err) {
     console.error(err.message);

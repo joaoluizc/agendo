@@ -90,6 +90,16 @@ const setUserPositionsToSync_cl = async (req, res) => {
   }
 };
 
+async function getPosition(req, res) {
+  const positionId = req.params.positionId;
+  try {
+    const position = await positionService.getPosition(positionId);
+    res.status(200).json(position);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
 export default {
   createPosition,
   getUserPositionsToSync,
@@ -97,4 +107,5 @@ export default {
   getAllPositions,
   setUserPositionsToSync,
   setUserPositionsToSync_cl,
+  getPosition,
 };
