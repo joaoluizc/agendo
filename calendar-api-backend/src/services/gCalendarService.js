@@ -486,7 +486,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
         )[0];
         if (!slingUser) {
           console.log(
-            `[${requestId}] - Found no shifts for user ${user.firstNama}, no event was added to calendar`
+            `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`
           );
           return;
         }
