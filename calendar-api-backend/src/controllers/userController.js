@@ -5,24 +5,6 @@ import userService from "../services/userService.js";
 // import { sendCookies } from "../middlewares/sendCookies.js";
 
 // no longer used
-// const registerUser = async (req, res) => {
-//   const { firstName, lastName, email, password } = req.body;
-//   if (!firstName || !lastName || !email || !password) {
-//     return res.status(400).json({
-//       message: "firstName, lastName, email, and password are required fields",
-//     });
-//   }
-//   try {
-//     console.log({ firstName, lastName, email, password });
-//     await userService.createUser(req.body);
-//     sendCookies(req, res);
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(400).json({ msg: err.message });
-//   }
-// };
-
-// no longer used
 // const loginUser = async (req, res) => {
 //   const { email, password } = req.body;
 

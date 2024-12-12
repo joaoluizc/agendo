@@ -1,7 +1,15 @@
 import Shift from "../models/ShiftModel.js";
 
 async function createShift(shiftDetails) {
-  const { startTime, endTime, userId, positionId, createdBy } = shiftDetails;
+  const {
+    startTime,
+    endTime,
+    userId,
+    positionId,
+    createdBy,
+    isSynced = false,
+    syncedEvent = {},
+  } = shiftDetails;
 
   const shift = new Shift({
     startTime,
@@ -9,6 +17,8 @@ async function createShift(shiftDetails) {
     userId,
     positionId,
     createdBy,
+    isSynced,
+    syncedEvent,
   });
 
   await shift.save();
@@ -32,11 +42,14 @@ async function updateShift(shiftId, shiftDetails) {
   console.log(`shiftId: ${shiftId}`);
   console.log(`shiftDetails: ${shiftDetails}`);
 
-  const { startTime, endTime, userId, positionId } = shiftDetails;
+  const { startTime, endTime, userId, positionId, isSynced, syncedEvent } =
+    shiftDetails;
   shift.startTime = startTime;
   shift.endTime = endTime;
   shift.userId = userId;
   shift.positionId = positionId;
+  shift.isSynced = isSynced;
+  shift.syncedEvent = syncedEvent;
 
   await shift.save();
 

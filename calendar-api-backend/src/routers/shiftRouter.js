@@ -13,4 +13,9 @@ shiftRouter.put("/", shiftController.updateShift);
 
 shiftRouter.delete("/", shiftController.deleteShift);
 
+shiftRouter.get(
+  "/range/with-sling",
+  shiftController.findShiftsByRangeWithSling
+);
+
 export default shiftRouter;

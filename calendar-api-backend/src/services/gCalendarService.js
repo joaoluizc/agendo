@@ -5,6 +5,7 @@ import utils from "../utils/utils.js";
 import { google } from "googleapis";
 import process from "process";
 import addedGCalEventsService from "./addedGCalEventsService.js";
+import { newShiftToEvent } from "../utils/newShiftToEvent.js";
 
 dotenv.config();
 
@@ -255,7 +256,7 @@ const addEvents = async (user, events, requestId = "req-id-nd") => {
     });
   });
 
-  return Promise.all(eventsPromises);
+  return await Promise.all(eventsPromises);
 };
 
 const deleteEvents = async (user, events, requestId = "req-id-nd") => {
@@ -287,10 +288,13 @@ const deleteEvents = async (user, events, requestId = "req-id-nd") => {
 
 const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
   console.log(`[${requestId}] - Deleting events`);
+  console.log(`[${requestId}] - Deleting events for user ${user.id}`);
   const tokens = await userService.getUserGoogleOAuthToken_cl(user.id);
+  console.log(`[${requestId}] - Tokens: ${JSON.stringify(tokens)}`);
   const oauth2Client = getOAuth2Client(tokens);
   const calendar = google.calendar({ version: "v3", auth: oauth2Client });
   const eventsPromises = events.map(async (event) => {
+    console.log(`[${requestId}] - Deleting event ${event.id}`);
     return new Promise((resolve, reject) => {
       calendar.events.delete(
         {
@@ -309,7 +313,34 @@ const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
     });
   });
 
-  return Promise.all(eventsPromises);
+  return await Promise.all(eventsPromises);
+};
+
+const updateEvents_cl = async (user, events, requestId = "req-id-nd") => {
+  console.log(`[${requestId}] - Updating events`);
+  const tokens = await userService.getUserGoogleOAuthToken_cl(user.id);
+  const oauth2Client = getOAuth2Client(tokens);
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+  const eventsPromises = events.map(async (event) => {
+    return new Promise((resolve, reject) => {
+      calendar.events.update(
+        {
+          calendarId: "primary",
+          eventId: event.id,
+          resource: event,
+        },
+        (err, response) => {
+          if (err) {
+            console.log(`[${requestId}] - Error updating event`, err);
+            reject(err);
+          } else {
+            resolve(response);
+          }
+        }
+      );
+    });
+  });
+  await Promise.all(eventsPromises);
 };
 
 const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
@@ -719,12 +750,39 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
   }
 };
 
+const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
+  const user = await userService.findUser_cl(userId);
+  if (!shouldSyncShift(user, shift)) {
+    return;
+  }
+  const event = await newShiftToEvent(shift);
+  const addedEvent = await addEvent_cl(user, event, requestId);
+  await addedGCalEventsService.addEvents_cl(user, [addedEvent], requestId);
+  return addedEvent;
+};
+
+function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
+  console.log(
+    `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`
+  );
+  const positionsToSync = clerkUser.publicMetadata.positionsToSync.map(
+    (position) => position._id.toString()
+  );
+  const shouldSync = positionsToSync.includes(shift.positionId.toString());
+  console.log(`[${requestId}] - Shift ${shift._id} sync status: ${shouldSync}`);
+  return shouldSync;
+}
+
 export default {
   getUserInfo,
   getUserEvents,
   getAllUsersEvents,
   addEvent,
+  addEvent_cl,
   addEvents,
+  updateEvents_cl,
+  deleteEvents_cl,
+  addEventForShift,
   addDaysShiftsToGcal,
   addDaysShiftsToGcal_cl,
   addUsersDayShifts,

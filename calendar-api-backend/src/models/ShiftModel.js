@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { GCalEventSchema } from "./GCalEventModel.js";
+
 const Schema = mongoose.Schema;
 
 const ShiftSchema = new Schema({
@@ -22,6 +24,11 @@ const ShiftSchema = new Schema({
     type: String,
     required: true,
   },
+  isSynced: {
+    type: Boolean,
+    default: false,
+  },
+  syncedEvent: GCalEventSchema,
 });
 
 const Shift = mongoose.model("Shift", ShiftSchema);

@@ -52,12 +52,12 @@ const getAllUsersWithTokens = async () => {
 };
 
 async function getAllUsers_cl() {
-  const response = await clerkClient.users.getUserList();
+  const response = await clerkClient.users.getUserList({ limit: 100 });
   return response.data;
 }
 
 async function getAllUsersSafeInfo_cl() {
-  const response = await clerkClient.users.getUserList();
+  const response = await clerkClient.users.getUserList({ limit: 100 });
   return response.data.map((user) => {
     return {
       id: user.id,
@@ -97,14 +97,9 @@ async function getUserGoogleOAuthToken_cl(userId) {
 async function getAllUsersWithTokens_cl() {
   console.log("getAllUsersWithTokens_cl: Fetching all users from Clerk");
   const users = await getAllUsers_cl();
-  console.log("getAllUsersWithTokens_cl: Fetched users:", users);
 
   const usersWithTokens = await Promise.all(
     users.map(async (user) => {
-      console.log(
-        "getAllUsersWithTokens_cl: Fetching Google OAuth token for user:",
-        user.id
-      );
       const userTokensResponse = await getUserGoogleOAuthToken_cl(user.id);
       if (!userTokensResponse) {
         console.log(
@@ -113,16 +108,10 @@ async function getAllUsersWithTokens_cl() {
         );
         return { ...user };
       }
-      console.log(
-        "getAllUsersWithTokens_cl: Fetched Google OAuth token for user:",
-        user.id,
-        userTokensResponse
-      );
       return { ...user, GoogleAccessToken: userTokensResponse };
     })
   );
 
-  console.log("getAllUsersWithTokens_cl: Users with tokens:", usersWithTokens);
   return usersWithTokens;
 }
 
