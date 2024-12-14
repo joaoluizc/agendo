@@ -139,8 +139,8 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
   const deleteShift = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      const response = await fetch(`/api/shift/?shiftId=${shift._id}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/shift/delete?shiftId=${shift._id}`, {
+        method: "POST",
         credentials: "include",
       });
       if (!response.ok) throw new Error("Failed to delete shift");

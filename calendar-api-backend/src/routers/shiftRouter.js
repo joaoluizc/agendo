@@ -11,7 +11,7 @@ shiftRouter.get("/", shiftController.getShift);
 
 shiftRouter.put("/", shiftController.updateShift);
 
-shiftRouter.delete("/", shiftController.deleteShift);
+shiftRouter.post("/delete", shiftController.deleteShift);
 
 shiftRouter.get(
   "/range/with-sling",
