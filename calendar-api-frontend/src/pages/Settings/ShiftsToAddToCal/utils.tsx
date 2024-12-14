@@ -22,8 +22,10 @@ export async function getPositionsToSync(): Promise<Position[]> {
       },
     });
     const positionsData = (await positionsResponse.json()) as Position[];
+    console.log("all positions: ", positionsData);
     const toSyncData = (await toSyncResponse.json()) as PositionSync[];
     const positions = positionsData.map((position) => ({
+      _id: position._id,
       positionId: position.positionId,
       name: position.name,
       type: position.type,
@@ -47,6 +49,7 @@ export async function savePositionsToSync(
   const selectedPositions = Object.keys(rowSelection).map((index) => {
     const currPosition = positions[parseInt(index)];
     return {
+      _id: currPosition._id,
       positionId: currPosition.positionId,
       sync: rowSelection[index],
       name: currPosition.name,

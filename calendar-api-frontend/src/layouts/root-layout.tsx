@@ -4,6 +4,7 @@ import Header from "@/components/Header/Header";
 import Footer from "@/components/Footer/Footer";
 import { useTheme } from "@/providers/useTheme";
 import { dark } from "@clerk/themes";
+import { Providers } from "@/providers/Providers";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -24,11 +25,13 @@ export default function RootLayout() {
         baseTheme: theme === "dark" ? dark : undefined,
       }}
     >
-      <Header />
-      <main>
-        <Outlet />
-      </main>
-      <Footer />
+      <Providers>
+        <Header />
+        <main>
+          <Outlet />
+        </main>
+        <Footer />
+      </Providers>
     </ClerkProvider>
   );
 }

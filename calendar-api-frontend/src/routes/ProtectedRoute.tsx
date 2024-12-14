@@ -8,8 +8,6 @@ const ProtectedRoute: React.FC = () => {
   // const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   // const [authChecked, setAuthChecked] = useState<boolean>(false);
 
-  console.log("test", userId);
-
   useEffect(() => {
     if (isLoaded && !userId) {
       navigate("/login");

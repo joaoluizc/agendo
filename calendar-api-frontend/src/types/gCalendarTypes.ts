@@ -80,9 +80,18 @@ export type GCalendarEvent = {
 
 export type GCalendarEventList = GCalendarEvent[];
 
+export type FetchedCalendarUser = {
+    email: string;
+    slingId: string;
+    userId: string;
+    events: GCalendarEventList;
+};
+
 export type CalendarUser = {
     email: string;
     slingId: string;
+    userId: string;
+    numberOfEventOverlaps: number;
     events: GCalendarEventList;
 };
 
@@ -213,8 +222,8 @@ export const initialGCalendarEventList: GCalendarEvent[] = [
     }
 ];
 
-export const initialCalendarUser: CalendarUser[] = [{
-    email: "email@email.com",
-    slingId: "sling-id-placeholder",
-    events: initialGCalendarEventList
-}];
+// export const initialCalendarUser: CalendarUser[] = [{
+//     email: "email@email.com",
+//     slingId: "sling-id-placeholder",
+//     events: initialGCalendarEventList
+// }];

@@ -1,4 +1,5 @@
 export type Position = {
+    _id: string
     positionId: string
     name: string
     type: "live channel" | "tickets" | "meeting" | "break" | "development" | "training"

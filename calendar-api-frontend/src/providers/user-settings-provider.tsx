@@ -1,5 +1,7 @@
-import { createContext, useState } from "react";
+import { createContext, useState, useEffect } from "react";
 import { Position } from "@/types/positionTypes.ts";
+import { UserSafeInfo } from "@/types/userTypes";
+import { useAuth } from "@clerk/clerk-react"; // Assuming you are using Clerk's useAuth hook
 
 type UserSettingsProviderProps = {
   children: React.ReactNode;
@@ -12,6 +14,8 @@ type UserSettingsProviderState = {
   slingId: string;
   type: string;
   timeZone: number;
+  allPositions: Position[];
+  allUsers: UserSafeInfo[];
   positionsToSync: Position[];
   originalPositionsToSync: Position[];
   isGoogleAuthenticated: boolean;
@@ -23,6 +27,8 @@ type UserSettingsProviderState = {
   setSlingId: (value: string) => void;
   setType: (value: string) => void;
   setTimeZone: (value: number) => void;
+  setAllPositions: (value: Position[]) => void;
+  setAllUsers: (value: UserSafeInfo[]) => void;
   setPositionsToSync: (value: Position[]) => void;
   setOriginalPositionsToSync: (value: Position[]) => void;
   setIsGoogleAuthenticated: (value: boolean) => void;
@@ -41,6 +47,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [slingId, setSlingId] = useState("");
   const [type, setType] = useState("");
   const [timeZone, setTimeZone] = useState(0);
+  const [allPositions, setAllPositions] = useState<Position[]>([]);
+  const [allUsers, setAllUsers] = useState<UserSafeInfo[]>([]);
   const [positionsToSync, setPositionsToSync] = useState<Position[]>([]);
   const [originalPositionsToSync, setOriginalPositionsToSync] = useState<
     Position[]
@@ -48,6 +56,68 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
   const [userGoogleInfo, setUserGoogleInfo] = useState("");
   const [unsavedChangesAlertOpen, setUnsavedChangesAlertOpen] = useState(false);
+  const { isSignedIn } = useAuth();
+
+  useEffect(() => {
+    const getUserSettings = async () => {
+      const response = await fetch("api/user/info", {
+        method: "GET",
+        mode: "cors",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFirstName(data.firstName);
+        setLastName(data.lastName);
+        setEmail(data.email);
+        setSlingId(data.slingId);
+        setType(data.type);
+        setTimeZone(data.timeZone);
+      } else {
+        console.error("Failed to get user settings");
+      }
+    };
+    const getPositions = async () => {
+      const response = await fetch("api/position/all", {
+        method: "GET",
+        mode: "cors",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllPositions(data);
+      } else {
+        console.error("Failed to get positions");
+      }
+    };
+    const getUsers = async () => {
+      const response = await fetch("api/user/all", {
+        method: "GET",
+        mode: "cors",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllUsers(data);
+      } else {
+        console.error("Failed to get users");
+      }
+    };
+    if (isSignedIn) {
+      getUserSettings();
+      getPositions();
+      getUsers();
+    }
+  }, [isSignedIn]);
 
   const value = {
     firstName,
@@ -56,6 +126,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     slingId,
     type,
     timeZone,
+    allPositions,
+    allUsers,
     positionsToSync,
     originalPositionsToSync,
     isGoogleAuthenticated,
@@ -67,6 +139,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     setSlingId,
     setType,
     setTimeZone,
+    setAllPositions,
+    setAllUsers,
     setPositionsToSync,
     setOriginalPositionsToSync,
     setIsGoogleAuthenticated,

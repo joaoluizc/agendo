@@ -9,7 +9,6 @@ import Dashboard from "./pages/Dashboard/Dashboard.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
 import Settings from "./pages/Settings/Settings.tsx";
-import { Providers } from "./providers/Providers.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import RootLayout from "./layouts/root-layout.tsx";
 import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
@@ -37,11 +36,9 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Providers>
-      <div className="flex min-h-screen w-full flex-col font-sf">
-        <RouterProvider router={router} />
-      </div>
-      <Toaster />
-    </Providers>
+    <div className="flex min-h-screen w-full flex-col font-sf">
+      <RouterProvider router={router} />
+    </div>
+    <Toaster visibleToasts={6} />
   </React.StrictMode>
 );

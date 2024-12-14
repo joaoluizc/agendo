@@ -1,9 +1,8 @@
-import { CalendarUser, initialCalendarUser } from "@/types/gCalendarTypes.ts";
+import { CalendarUser } from "@/types/gCalendarTypes.ts";
 import { useState } from "react";
 
 const Calendar = () => {
-  const [calendars, setCalendars] =
-    useState<CalendarUser[]>(initialCalendarUser);
+  const [calendars, setCalendars] = useState<CalendarUser[]>([]);
 
   const fetchEvents = async () => {
     const response = await fetch("api/gcalendar/all-events");

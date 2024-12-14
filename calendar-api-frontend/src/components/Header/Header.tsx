@@ -12,70 +12,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import faviconLight from "../../resources/favicon-light.svg";
-import faviconDark from "../../resources/favicon-dark.svg";
-import { useUserSettings } from "@/providers/useUserSettings";
-import { useEffect } from "react";
 import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
-
-function setFavicon(url: string) {
-  const link =
-    (document.querySelector("link[rel*='icon']") as HTMLLinkElement) ||
-    document.createElement("link");
-  link.type = "image/x-icon";
-  link.rel = "shortcut icon";
-  link.href = url;
-  document.getElementsByTagName("head")[0].appendChild(link);
-}
 
 const Header = () => {
   const { setTheme, theme } = useTheme();
-  const {
-    setFirstName,
-    setLastName,
-    setEmail,
-    setType,
-    setTimeZone,
-    setSlingId,
-  } = useUserSettings();
 
   const setSiteTheme = (theme: string) => {
     if (theme === "light") {
       setTheme("light");
-      setFavicon(faviconLight);
     } else if (theme === "dark") {
       setTheme("dark");
-      setFavicon(faviconDark);
     } else {
       setTheme("system");
-      setFavicon(faviconLight);
     }
   };
-
-  useEffect(() => {
-    const getUserSettings = async () => {
-      const response = await fetch("api/user/info", {
-        method: "GET",
-        mode: "cors",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setFirstName(data.firstName);
-        setLastName(data.lastName);
-        setEmail(data.email);
-        setSlingId(data.slingId);
-        setType(data.type);
-        setTimeZone(data.timeZone);
-      } else {
-        console.error("Failed to get user settings");
-      }
-    };
-    getUserSettings();
-  });
 
   return (
     <>
