@@ -33,7 +33,12 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
       setIsLoading(false);
       return;
     }
-    toast.success(data);
+    toast.success(data.message);
+    if (data.errors.length > 0) {
+      data.errors.forEach((error: string) => {
+        console.error(error);
+      });
+    }
     setIsLoading(false);
   };
 
