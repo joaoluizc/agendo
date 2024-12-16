@@ -45,9 +45,11 @@ const calcUserRowHeight = (
   { events: gCalendarEvents, shifts }: CalendarState
 ) => {
   let height = 0;
-  const calendarUser = gCalendarEvents.find(
-    (calUser: CalendarUser) => calUser.userId === userId
-  );
+  const calendarUser = gCalendarEvents.find((calUser: CalendarUser) => {
+    console.log("calUser.slingId", calUser.slingId);
+    console.log("userId", userId);
+    return String(calUser.slingId) === String(userId);
+  });
 
   if (calendarUser) {
     height += calendarUser.numberOfEventOverlaps * 2;
@@ -193,7 +195,7 @@ const SlingSchedule = () => {
                 {userHasGcal(user, gCalendarEvents) ? (
                   <div
                     id="gcalendar-wrapper"
-                    className="grid h-8"
+                    className="grid"
                     style={{
                       gridTemplateColumns: "repeat(48, minmax(0, 1fr))",
                     }}
