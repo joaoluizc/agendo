@@ -23,6 +23,7 @@ export type Shift = {
     user: {
       id: number;
     };
+    dateRequested?: string;
   };
 
   export type User = {
@@ -43,6 +44,10 @@ export type Shift = {
     shifts: Shift[];
     orgs?: Organization[];
   };
+
+  export type SortedCalendar = {
+    [key: string]: Shift[];
+  }
 
   type Organization = {
     businessCategory: string;

@@ -24,8 +24,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "../ui/button.tsx";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
-import SyncWithGCalBtn from "./SyncWithGCalBtn.tsx";
-import SyncMyGCalBtn from "./SyncMyGCalBtn.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { SortedCalendar } from "@/types/shiftTypes.ts";
 import CreateShiftForm from "./CreateShiftBtn.tsx";
@@ -156,8 +154,6 @@ const Schedule = () => {
           />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2 h-5 w-5" />
         </Label>
-        <SyncWithGCalBtn selectedDate={selectedDate} />
-        <SyncMyGCalBtn selectedDate={selectedDate} />
         {/* <CreateShiftForm addNewShift={addShiftToCalendarState} /> */}
         <CreateShiftForm
           reloadScheduleCalendar={() => fetchData(selectedDate)}

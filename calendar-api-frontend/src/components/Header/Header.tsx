@@ -13,6 +13,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+  navigationMenuTriggerStyle,
+} from "../ui/navigation-menu";
+import { NavigationMenuItem } from "@radix-ui/react-navigation-menu";
+import React from "react";
+import { cn } from "@/lib/utils";
 
 const Header = () => {
   const { setTheme, theme } = useTheme();
@@ -30,47 +41,71 @@ const Header = () => {
   return (
     <>
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50">
-        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
-          <NavLink
-            to="/"
-            className="flex items-center gap-2 text-lg font-semibold md:text-base h-6 w-6"
-          >
-            <img src={theme === "light" ? agendoLogoDark : agendoLogoLight} />
-            <span className="sr-only">Agendo</span>
-          </NavLink>
-          <NavLink
-            to="/"
-            className={({ isActive }) =>
-              `${
-                isActive ? "text-foreground" : "text-muted-foreground"
-              } transition-colors hover:text-foreground`
-            }
-          >
-            Home
-          </NavLink>
-          <SignedIn>
-            <NavLink
-              to="/dashboard"
-              className={({ isActive }) =>
-                `${
-                  isActive ? "text-foreground" : "text-muted-foreground"
-                } transition-colors hover:text-foreground`
-              }
-            >
-              Dashboard
-            </NavLink>
-            <NavLink
-              to="/dashboard/settings"
-              className={({ isActive }) =>
-                `${
-                  isActive ? "text-foreground" : "text-muted-foreground"
-                } transition-colors hover:text-foreground`
-              }
-            >
-              Settings
-            </NavLink>
-          </SignedIn>
-        </nav>
+        <NavigationMenu className="hidden md:flex gap-4 items-center flex-1">
+          <NavigationMenuList>
+            <NavigationMenuItem>
+              <NavLink
+                to="/"
+                className="flex items-center gap-2 text-lg font-semibold md:text-base h-6 w-6 mr-3"
+              >
+                <NavigationMenuLink
+                  className={`group inline-flex h-6 w-6 items-center justify-center rounded-md bg-background px-0.5 py-0.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-accent/50 data-[state=open]:bg-accent/50`}
+                >
+                  <img
+                    src={theme === "light" ? agendoLogoDark : agendoLogoLight}
+                  />
+                  <span className="sr-only">Agendo</span>
+                </NavigationMenuLink>
+              </NavLink>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <NavLink
+                to="/"
+                className={({ isActive }) =>
+                  `${
+                    isActive ? "text-foreground" : "text-muted-foreground"
+                  } transition-colors hover:text-foreground`
+                }
+              >
+                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                  Home
+                </NavigationMenuLink>
+              </NavLink>
+            </NavigationMenuItem>
+
+            <SignedIn>
+              <NavigationMenuItem>
+                <NavigationMenuTrigger>Schedule</NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2">
+                    <ListItem href="/app/schedule" title="Agendo">
+                      See shifts made entirely in Agendo
+                    </ListItem>
+                    <li>
+                      <ListItem href="/app/sling-schedule" title="Sling">
+                        See shifts made in the old-fashioned Sling
+                      </ListItem>
+                    </li>
+                  </ul>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+              <NavigationMenuItem>
+                <NavLink
+                  to="/app/settings"
+                  className={({ isActive }) =>
+                    `${
+                      isActive ? "text-foreground" : "text-muted-foreground"
+                    } transition-colors hover:text-foreground`
+                  }
+                >
+                  <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                    Settings
+                  </NavigationMenuLink>
+                </NavLink>
+              </NavigationMenuItem>
+            </SignedIn>
+          </NavigationMenuList>
+        </NavigationMenu>
         <Sheet>
           <SheetTrigger asChild>
             <Button
@@ -99,17 +134,20 @@ const Header = () => {
               >
                 Home
               </NavLink>
+              <NavLink
+                to="/app/sling-schedule"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Sling Schedule
+              </NavLink>
               <SignedIn>
                 <NavLink
-                  to="/dashboard"
+                  to="/app/schedule"
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Dashboard
+                  Schedule
                 </NavLink>
-                <NavLink
-                  to="/dashboard/settings"
-                  className="hover:text-foreground"
-                >
+                <NavLink to="/app/settings" className="hover:text-foreground">
                   Settings
                 </NavLink>
               </SignedIn>
@@ -157,5 +195,31 @@ const Header = () => {
     </>
   );
 };
+
+const ListItem = React.forwardRef<
+  React.ElementRef<"a">,
+  React.ComponentPropsWithoutRef<"a">
+>(({ className, title, children, ...props }, ref) => {
+  return (
+    <li>
+      <NavigationMenuLink asChild>
+        <a
+          ref={ref}
+          className={cn(
+            "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+            className
+          )}
+          {...props}
+        >
+          <div className="text-sm font-medium leading-none">{title}</div>
+          <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+            {children}
+          </p>
+        </a>
+      </NavigationMenuLink>
+    </li>
+  );
+});
+ListItem.displayName = "ListItem";
 
 export default Header;

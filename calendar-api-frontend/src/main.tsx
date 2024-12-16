@@ -5,13 +5,14 @@ import "./index.css";
 import Login from "./pages/Login/Login.tsx";
 import Home from "./pages/Home/Home.tsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
-import Dashboard from "./pages/Dashboard/Dashboard.tsx";
+import Schedule from "./pages/Schedule/Schedule.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
 import Settings from "./pages/Settings/Settings.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import RootLayout from "./layouts/root-layout.tsx";
 import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
+import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
 
 const router = createBrowserRouter([
   {
@@ -24,10 +25,11 @@ const router = createBrowserRouter([
       { path: "*", element: <NotFound /> },
       {
         element: <ProtectedRoute />,
-        path: "/dashboard",
+        path: "/app",
         children: [
-          { path: "/dashboard", element: <Dashboard /> },
-          { path: "/dashboard/settings", element: <Settings /> },
+          { path: "/app/sling-schedule", element: <SlingSchedule /> },
+          { path: "/app/schedule", element: <Schedule /> },
+          { path: "/app/settings", element: <Settings /> },
         ],
       },
     ],

@@ -1,8 +1,93 @@
 import utils from '../../utils/utils.ts';
-// import { User } from '../../types/slingTypes.ts';
-import { Shift, SortedCalendar } from '../../types/shiftTypes.ts';
+import { Shift, User } from '../../types/slingTypes.ts';
 import { CalendarUser, FetchedCalendarUser, GCalendarEventList } from '@/types/gCalendarTypes.ts';
-import { toast } from "sonner";
+import { toast } from 'sonner';
+
+/** Sort shifts for each user by start time
+ * @param {User[]} data - array of users with shifts
+ * @param {string} selectedDate - date selected by the user
+ * @returns {User[]} - array of users with sorted shifts
+ * shifts are sorted by user and then by start time
+*/
+function sortShifts(data: User[], selectedDate: string): User[] {
+  return data.map((user: User) => ({
+    ...user,
+    shifts: user.shifts.sort(
+      (a: Shift, b: Shift) => new Date(a.dtstart).getTime() - new Date(b.dtstart).getTime()
+    ).map((shift: Shift) => ({ ...shift, dateRequested: selectedDate })),
+  })).sort((a: User, b: User) => new Date(a.shifts[0].dtstart).getTime() - new Date(b.shifts[0].dtstart).getTime());
+}
+
+/** Fetches shifts for a given date and sets the state
+ * @param {Date} date - date selected by the user
+ * @param {Function} setIsLoading - function to set loading state
+ * @param {Function} setSortedCalendar - function to set the state with sorted shifts
+ * @returns {Promise<User[]>}
+*/
+export const getShifts = async (
+  date: Date,
+  setIsLoading: (isLoading: boolean) => void,
+  setSortedCalendar: (data: User[]) => void,
+): Promise<User[]> => {
+
+  setIsLoading(true);
+  const selectedDate = utils.getLocalTimeframeISOld(date).todayISO;
+  console.log(`start shift fetch for ${date.toLocaleTimeString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`);
+  console.log(selectedDate);
+  const endpoint = `/api/sling/calendar?date=${selectedDate}`;
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    credentials: 'include',
+    mode: 'cors',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch shifts' + response.statusText);
+  }
+  const data: User[] = await response.json();
+  const sortedData = sortShifts(data, selectedDate);
+
+  console.log('successfully fetched shifts');
+  setSortedCalendar(sortedData);
+  setIsLoading(false);
+  console.log(sortedData);
+  return sortedData;
+}
+
+// /** Fetches Google Calendar events for a given date and sets the state
+//  * @param {Function} setgCalendarEvents - function to set the state with Google Calendar events
+//  * @param {Date} date - date selected by the user
+//  * @returns {Promise<CalendarUser[]>}
+// */
+// export const getGCalendarEvents = async (setgCalendarEvents: (gCalendarEvents: CalendarUser[]) => void, date: Date): Promise<CalendarUser[]> => {
+//   const selectedDate = utils.getLocalTimeframeISO(date).todayISO;
+//   const response = await fetch(`/api/gcalendar/all-events?date=${selectedDate}`);
+//   if (response.status === 204) {
+//     setgCalendarEvents([]);
+//     return [];
+//   }
+//   let data = await response.json();
+
+//   // Filter out events that are not of type 'default' and do not match the selected date
+//   data = data.map((user: CalendarUser) => {
+//     const filteredEvents = user.events.filter((event) => {
+//       const eventDate = new Date(event.start.dateTime).getDate();
+//       const selectedDate = date.getDate();
+//       return event.eventType === "default" && eventDate === selectedDate;
+//     });
+
+//     return {
+//       ...user,
+//       events: filteredEvents,
+//     };
+//   });
+//   setgCalendarEvents(data);
+//   return data;
+// };
+
 
 type GetCalEventsSuccessResponse = {
   events: CalendarUser[];
@@ -33,45 +118,6 @@ type GetCalEventsResponse =
   | GetCalEventsErrorResponse
   | GetCalEventsEmptyResponse;
 
-/** Fetches shifts for a given date and sets the state
- * @param {Date} date - date selected by the user
- * @param {Function} setIsLoading - function to set loading state
- * @param {Function} setSortedCalendar - function to set the state with sorted shifts
- * @returns {Promise<User[]>}
-*/
-export const getShifts = async (
-  date: Date,
-): Promise<SortedCalendar> => {
-
-  const { startOfDayISO, endOfDayISO } = utils.getLocalTimeframeISO(date);
-
-  const endpoint = `/api/shift/range?startTime=${startOfDayISO}&endTime=${endOfDayISO}&group=user`;
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    credentials: 'include',
-    mode: 'cors',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch shifts' + response.statusText);
-  }
-
-  const data: SortedCalendar = await response.json();
-  // const sortedData = sortShifts(data);
-
-  console.log('successfully fetched shifts');
-  console.log(data);
-  return data;
-}
-
-/** Fetches Google Calendar events for a given date and sets the state
- * @param {Function} setgCalendarEvents - function to set the state with Google Calendar events
- * @param {Date} date - date selected by the user
- * @returns {Promise<CalendarUser[]>}
-*/
 export const getGCalendarEvents = async (date: Date): Promise<CalendarUser[]> => {
   const { todayISO: selectedDate } = utils.getLocalTimeframeISO(date)
   console.log('1. fetching google calendar events');
@@ -117,6 +163,7 @@ export const getGCalendarEvents = async (date: Date): Promise<CalendarUser[]> =>
         };
       });
     }
+    
 
     console.log('3. filtered data: ', filteredData)
 
@@ -132,7 +179,8 @@ export const getGCalendarEvents = async (date: Date): Promise<CalendarUser[]> =>
   return filteredData;
 };
 
-/** Formats Date as 'pretty' string, removing minutes for round hours
+/** 
+ * Formats Date as 'pretty' string, removing minutes for round hours
  * @param {string} date - date to format
  * @returns {string} - formatted date
  * examples:
@@ -161,7 +209,7 @@ export const prettyTimeRange = (startRaw: string, endRaw: string) => {
 
 export const calculateGridColumnStart = (start: string, dateToRender: string) => {
   const startAsDate = new Date(start);
-  const dateToRenderAsDate = new Date(dateToRender);
+  const dateToRenderAsDate = new Date(dateToRender!.split('/')[1]);
   if (startAsDate.getDate() < dateToRenderAsDate.getDate()) return 0; // Shift starts on previous day
   const startHour = startAsDate.getHours();
   const startMinutes = startAsDate.getMinutes();
@@ -171,7 +219,7 @@ export const calculateGridColumnStart = (start: string, dateToRender: string) =>
 export const calculateGridColumnSpan = (start: string, end: string, dateToRender: string) => {
   const startAsDate = new Date(start);
   const endAdDate = new Date(end);
-  const dateRenderedAsDate = new Date(dateToRender);
+  const dateRenderedAsDate = new Date(dateToRender!.split('/')[1]);
   if (startAsDate.getDate() < dateRenderedAsDate.getDate()) return endAdDate.getHours() * 2;
   const durationInMinutes = (endAdDate.getTime() - startAsDate.getTime()) / (1000 * 60);
   return Math.ceil(durationInMinutes / 30); // Assuming each column represents 30 minutes
@@ -229,17 +277,17 @@ export const calculateShiftOverlapAmount = (shifts: Shift[]) => {
   }
 
   shifts.forEach((shift1, i) => {
-    const start1 = new Date(shift1.startTime).getTime();
-    const end1 = new Date(shift1.endTime).getTime();
+    const start1 = new Date(shift1.dtstart).getTime();
+    const end1 = new Date(shift1.dtend).getTime();
 
     const shift2 = shifts[i + 1];
     if (shift2) {
-      const start2 = new Date(shift2.startTime).getTime();
-      const end2 = new Date(shift2.endTime).getTime();
+      const start2 = new Date(shift2.dtstart).getTime();
+      const end2 = new Date(shift2.dtend).getTime();
 
       if (start1 < end2 && start2 < end1) {
         // Create unique identifier for this overlap pair
-        const overlapId = [shift1._id, shift2._id].sort().join('-');
+        const overlapId = [shift1.id, shift2.id].sort().join('-');
         overlapSet.add(overlapId);
         console.log('Shift overlap detected:', overlapId);
       }

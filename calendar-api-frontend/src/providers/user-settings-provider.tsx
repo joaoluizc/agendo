@@ -60,7 +60,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
 
   useEffect(() => {
     const getUserSettings = async () => {
-      const response = await fetch("api/user/info", {
+      const response = await fetch("/api/user/info", {
         method: "GET",
         mode: "cors",
         credentials: "include",
@@ -81,7 +81,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
     };
     const getPositions = async () => {
-      const response = await fetch("api/position/all", {
+      const response = await fetch("/api/position/all", {
         method: "GET",
         mode: "cors",
         credentials: "include",
@@ -97,7 +97,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
     };
     const getUsers = async () => {
-      const response = await fetch("api/user/all", {
+      const response = await fetch("/api/user/all", {
         method: "GET",
         mode: "cors",
         credentials: "include",
