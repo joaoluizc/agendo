@@ -180,14 +180,14 @@ const SlingSchedule = () => {
                         style={{
                           gridColumnStart: start,
                           gridColumnEnd: `span ${span}`,
-                          backgroundColor: `color-mix(in srgb, ${shift.position.color} 95%, hsl(var(--shiftmix)) 20%)`,
+                          backgroundColor: `color-mix(in srgb, ${shift?.position?.color} 95%, hsl(var(--shiftmix)) 20%)`,
                           fontSize: "0.6875rem",
                         }}
                       >
                         <div className="font-bold truncate">
                           {prettyTimeRange(shift.dtstart, shift.dtend)}
                         </div>
-                        <div className="truncate">{shift.position.name}</div>
+                        <div className="truncate">{shift?.position?.name}</div>
                       </div>
                     );
                   })}
