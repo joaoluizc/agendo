@@ -159,7 +159,7 @@ const getAllUsersEvents_cl = async (date, requestId = "req-id-nd") => {
         userId: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
-        error: e.errors[0].message,
+        error: e?.errors?.[0]?.message || "Unknown error",
       });
       return {};
     }

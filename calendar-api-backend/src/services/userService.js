@@ -61,14 +61,14 @@ async function getAllUsersSafeInfo_cl() {
   return response.data.map((user) => {
     return {
       id: user.id,
-      email: user.emailAddresses[0].emailAddress,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      imageUrl: user.imageUrl,
-      hasImage: user.hasImage,
+      email: user.emailAddresses?.[0]?.emailAddress || "",
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      imageUrl: user.imageUrl || "",
+      hasImage: user.hasImage || false,
       publicMetadata: {
-        slingId: user?.publicMetadata?.slingId,
-        type: user?.publicMetadata?.type,
+        slingId: user.publicMetadata?.slingId || "",
+        type: user.publicMetadata?.type || "",
       },
     };
   });
@@ -88,8 +88,8 @@ async function getUserGoogleOAuthToken_cl(userId) {
     return null;
   }
 
-  const data = response.data[0];
-  data.access_token = data.token;
+  const data = response?.data[0];
+  data ? (data.access_token = data?.token) : "";
 
   return data;
 }

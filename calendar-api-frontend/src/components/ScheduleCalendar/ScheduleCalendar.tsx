@@ -207,12 +207,12 @@ const Schedule = () => {
                     >
                       <div id="visual-grid-wrapper" className="relative">
                         <div
-                          className={`${cn(
+                          className={cn(
                             "grid absolute inset-0 grid border-b",
                             String(userId) === String(visitorId)
                               ? "bg-secondary/80"
                               : "background"
-                          )}`}
+                          )}
                           style={{
                             gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
                             height: calcUserRowHeight(userId, calendarData),
@@ -225,7 +225,7 @@ const Schedule = () => {
                                 className={cn(
                                   "border-r",
                                   String(userId) === String(visitorId)
-                                    ? "border-primary/50"
+                                    ? "border-primary/20"
                                     : "border-secondary",
                                   new Date().getHours() === value
                                     ? "bg-secondary/80"
@@ -256,7 +256,7 @@ const Schedule = () => {
                           ))
                         ) : (
                           <div
-                            className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded text-white h-11`}
+                            className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded text-white h-10`}
                           ></div>
                         )}
                       </div>
