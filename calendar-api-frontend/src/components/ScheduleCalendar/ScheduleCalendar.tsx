@@ -28,6 +28,8 @@ import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { SortedCalendar } from "@/types/shiftTypes.ts";
 import CreateShiftForm from "./CreateShiftBtn.tsx";
 import { Shift } from "./Shift.tsx";
+import { useUser } from "@clerk/clerk-react";
+import { cn } from "@/lib/utils.ts";
 
 interface CalendarState {
   shifts: SortedCalendar;
@@ -72,6 +74,8 @@ const Schedule = () => {
   });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { type, allUsers } = useUserSettings();
+  const { user } = useUser();
+  const visitorId = user?.id;
 
   const fetchData = async (date: Date) => {
     setCalendarData((prev) => ({ ...prev, isLoading: true }));
@@ -173,7 +177,12 @@ const Schedule = () => {
                   <div key={idx} className="flex">
                     <div
                       id="user-info-wrapper"
-                      className={`p-2 flex items-center border-b`}
+                      className={`${cn(
+                        "p-2 flex items-center border-b",
+                        String(userId) === String(visitorId)
+                          ? "bg-secondary/80"
+                          : "background"
+                      )}`}
                       style={{
                         width: "12%",
                         height: calcUserRowHeight(userId, calendarData),
@@ -198,7 +207,12 @@ const Schedule = () => {
                     >
                       <div id="visual-grid-wrapper" className="relative">
                         <div
-                          className={`grid absolute inset-0 grid border-b`}
+                          className={`${cn(
+                            "grid absolute inset-0 grid border-b",
+                            String(userId) === String(visitorId)
+                              ? "bg-secondary/80"
+                              : "background"
+                          )}`}
                           style={{
                             gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
                             height: calcUserRowHeight(userId, calendarData),
@@ -208,7 +222,15 @@ const Schedule = () => {
                             return (
                               <div
                                 key={`key-${value}`}
-                                className="border-r"
+                                className={cn(
+                                  "border-r",
+                                  String(userId) === String(visitorId)
+                                    ? "border-primary/50"
+                                    : "border-secondary",
+                                  new Date().getHours() === value
+                                    ? "bg-secondary/80"
+                                    : "background"
+                                )}
                               ></div>
                             );
                           })}

@@ -14,6 +14,10 @@ const CalendarHeader = () => {
               key={i}
               className={`col-span-2 border-r text-center text-xs font-bold truncate font-semibold py-4 ${
                 i % 2 === 0 ? "" : "hidden"
+              } ${
+                new Date().getHours() === i / 2
+                  ? "bg-secondary/80"
+                  : "background"
               }`}
               style={{ gridColumn: `span 2` }}
             >
