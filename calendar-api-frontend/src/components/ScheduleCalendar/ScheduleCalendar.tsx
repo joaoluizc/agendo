@@ -30,6 +30,7 @@ import CreateShiftForm from "./CreateShiftBtn.tsx";
 import { Shift } from "./Shift.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils.ts";
+import EmptySlot from "./calendar-components/EmptySlot.tsx";
 
 interface CalendarState {
   shifts: SortedCalendar;
@@ -220,18 +221,16 @@ const Schedule = () => {
                         >
                           {[...Array(24).keys()].map((value) => {
                             return (
-                              <div
-                                key={`key-${value}`}
-                                className={cn(
-                                  "border-r",
-                                  String(userId) === String(visitorId)
-                                    ? "border-primary/20"
-                                    : "border-secondary",
-                                  new Date().getHours() === value
-                                    ? "bg-secondary/80"
-                                    : "background"
-                                )}
-                              ></div>
+                              <EmptySlot
+                                userId={String(userId)}
+                                visitorId={String(visitorId)}
+                                currentHour={value}
+                                selectedDate={selectedDate}
+                                reloadScheduleCalendar={() =>
+                                  fetchData(selectedDate)
+                                }
+                                key={`${userId}-${value}`}
+                              />
                             );
                           })}
                         </div>
