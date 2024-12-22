@@ -46,8 +46,6 @@ const calcUserRowHeight = (
 ) => {
   let height = 0;
   const calendarUser = gCalendarEvents.find((calUser: CalendarUser) => {
-    console.log("calUser.slingId", calUser.slingId);
-    console.log("userId", userId);
     return String(calUser.slingId) === String(userId);
   });
 
@@ -57,8 +55,6 @@ const calcUserRowHeight = (
 
   const userShifts = shifts;
   height += calculateShiftOverlapAmount(userShifts) * 3;
-
-  console.log("Calculated height:", height);
 
   return `${height}rem`;
 };
@@ -222,6 +218,7 @@ const SlingSchedule = () => {
                                 key={idx}
                                 className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded`}
                                 style={{
+                                  gridRowStart: event.gridRowNumber,
                                   gridColumnStart: start,
                                   gridColumnEnd: `span ${span}`,
                                   backgroundColor: `color-mix(in srgb, white 95%, hsl(var(--shiftmix)) 20%)`,

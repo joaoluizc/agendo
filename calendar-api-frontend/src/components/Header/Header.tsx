@@ -75,7 +75,11 @@ const Header = () => {
 
             <SignedIn>
               <NavigationMenuItem>
-                <NavigationMenuTrigger>Schedule</NavigationMenuTrigger>
+                <NavigationMenuTrigger
+                  onPointerMove={(e) => e.preventDefault()}
+                >
+                  Schedule
+                </NavigationMenuTrigger>
                 <NavigationMenuContent>
                   <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2">
                     <ListItem href="/app/schedule" title="Agendo">

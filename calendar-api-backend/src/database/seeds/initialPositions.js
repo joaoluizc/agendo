@@ -374,4 +374,10 @@ export const allPositions = [
     type: "live channel",
     color: "#00CED1",
   },
+  {
+    positionId: "21950198",
+    name: "all channels",
+    color: "#a8b400",
+    type: "tickets",
+  },
 ];

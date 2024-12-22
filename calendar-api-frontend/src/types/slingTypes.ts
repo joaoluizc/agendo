@@ -24,6 +24,7 @@ export type Shift = {
       id: number;
     };
     dateRequested?: string;
+    rowNumber?: number;
   };
 
   export type User = {

@@ -221,18 +221,22 @@ const Schedule = () => {
                           gridTemplateColumns: "repeat(48, minmax(0, 1fr))",
                         }}
                       >
-                        {calendarData.shifts[userId]
-                          ? calendarData.shifts[userId].map((shift, idx) => (
-                              <Shift
-                                shift={shift}
-                                key={idx}
-                                selectedDate={selectedDate}
-                                reloadScheduleCalendar={() =>
-                                  fetchData(selectedDate)
-                                }
-                              />
-                            ))
-                          : null}
+                        {calendarData.shifts[userId] ? (
+                          calendarData.shifts[userId].map((shift, idx) => (
+                            <Shift
+                              shift={shift}
+                              key={idx}
+                              selectedDate={selectedDate}
+                              reloadScheduleCalendar={() =>
+                                fetchData(selectedDate)
+                              }
+                            />
+                          ))
+                        ) : (
+                          <div
+                            className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded text-white h-11`}
+                          ></div>
+                        )}
                       </div>
                       {userHasGcal(userId, calendarData.events) ? (
                         <div
@@ -254,6 +258,7 @@ const Schedule = () => {
                                       style={{
                                         gridColumnStart: event.gridStart,
                                         gridColumnEnd: `span ${event.gridSpan}`,
+                                        gridRowStart: event?.gridRowNumber,
                                         backgroundColor: `color-mix(in srgb, white 95%, hsl(var(--shiftmix)) 20%)`,
                                         fontSize: "0.6875rem",
                                       }}

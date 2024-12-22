@@ -82,7 +82,7 @@ export function Shift(props: ShiftProps) {
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
               <div
-                className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded text-white`}
+                className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded text-white h-11 flex flex-col justify-between `}
                 style={{
                   gridColumnStart: start,
                   gridColumnEnd: `span ${span}`,

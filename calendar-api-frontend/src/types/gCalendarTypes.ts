@@ -76,6 +76,7 @@ export type GCalendarEvent = {
         type: string;
         homeOffice: Record<string, unknown>;
     };
+    gridRowNumber?: number;
 };
 
 export type GCalendarEventList = GCalendarEvent[];
