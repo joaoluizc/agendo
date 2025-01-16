@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
 // import {
 //   Select,
 //   SelectContent,
@@ -67,6 +67,7 @@ export default function NewShiftForm({
   const [positionId, setPositionId] = useState<string>("");
   const [userPopOpen, setUserPopOpen] = useState(false);
   const [positionPopOpen, setPositionPopOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const {
     type: userType,
     allPositions: positions,
@@ -147,6 +148,8 @@ export default function NewShiftForm({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setLoading(true);
+
     const newShift: NewShift = {
       startTime,
       endTime,
@@ -155,6 +158,7 @@ export default function NewShiftForm({
     };
 
     let data: { message: string } = { message: "" };
+
     try {
       const response = await fetch("/api/shift/new", {
         method: "POST",
@@ -168,9 +172,11 @@ export default function NewShiftForm({
       if (!response.ok) throw new Error("Failed to create shift");
 
       data = await response.json();
+      setLoading(false);
       console.log(data);
     } catch (error) {
       console.error("Error creating shift:", error);
+      setLoading(false);
       return toast.error("Failed to create shift");
     }
 
@@ -418,7 +424,13 @@ export default function NewShiftForm({
             </div> */}
           </div>
           <DialogFooter>
-            <Button type="submit">Create Shift</Button>
+            <Button disabled={loading} type="submit">
+              {loading ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                "Create Shift"
+              )}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
