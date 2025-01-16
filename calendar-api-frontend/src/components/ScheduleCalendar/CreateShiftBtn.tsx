@@ -11,14 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
-// import {
-//   Select,
-//   SelectContent,
-//   SelectGroup,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
@@ -385,43 +377,6 @@ export default function NewShiftForm({
                 </PopoverContent>
               </Popover>
             </div>
-
-            {/* <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="userId" className="text-right">
-                User
-              </Label>
-              <Select onValueChange={setUserId} value={userId}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.firstName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div> */}
-            {/* <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="positionId" className="text-right">
-                Position
-              </Label>
-              <Select onValueChange={setPositionId} value={positionId}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a position" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {positions.map((position) => (
-                      <SelectItem key={position._id} value={position._id}>
-                        {position.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div> */}
           </div>
           <DialogFooter>
             <Button disabled={loading} type="submit">
