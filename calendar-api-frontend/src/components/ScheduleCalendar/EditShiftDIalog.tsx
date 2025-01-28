@@ -23,6 +23,7 @@ import { NewShift, Shift } from "@/types/shiftTypes";
 import { Input } from "../ui/input";
 import { toast } from "sonner";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { LoaderCircle } from "lucide-react";
 import * as chrono from "chrono-node";
 
 type EditShiftDialogProps = {
@@ -39,6 +40,7 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
   const [endTime, setEndTime] = useState<string>(shift.endTime);
   const [userId, setUserId] = useState<string>(shift.userId);
   const [positionId, setPositionId] = useState<string>(shift.positionId);
+  const [loading, setLoading] = useState(false);
   const { allPositions: positions, allUsers: users } = useUserSettings();
 
   const startDatepickerRef = useRef<AirDatepicker | null>(null);
@@ -106,12 +108,15 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setLoading(true);
+
     const newShift: NewShift = {
       startTime,
       endTime,
       userId,
       positionId,
     };
+
     try {
       const response = await fetch(`/api/shift?shiftId=${shift._id}`, {
         method: "PUT",
@@ -121,7 +126,9 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
         body: JSON.stringify(newShift),
         credentials: "include",
       });
+
       if (!response.ok) throw new Error("Failed to edit shift");
+
       console.log("Shift edited successfully");
       setStartTime("");
       setEndTime("");
@@ -130,7 +137,9 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
       setIsOpen(false);
       reloadScheduleCalendar();
       toast.success("Shift edited successfully");
+      setLoading(false);
     } catch (error) {
+      setLoading(false);
       console.error("Error editing shift:", error);
       toast.error("Failed to edit shift");
     }
@@ -138,17 +147,23 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
 
   const deleteShift = async (event: React.FormEvent) => {
     event.preventDefault();
+    setLoading(true);
+
     try {
       const response = await fetch(`/api/shift/delete?shiftId=${shift._id}`, {
         method: "POST",
         credentials: "include",
       });
+
       if (!response.ok) throw new Error("Failed to delete shift");
+
       console.log("Shift deleted successfully");
       setIsOpen(false);
       reloadScheduleCalendar();
       toast.success("Shift deleted successfully");
+      setLoading(false);
     } catch (error) {
+      setLoading(false);
       console.error("Error deleting shift:", error);
       toast.error("Failed to delete shift");
     }
@@ -258,10 +273,20 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
         <DialogFooter
           style={{ justifyContent: "space-between", paddingTop: "1rem" }}
         >
-          <Button variant="destructive" onClick={(e) => deleteShift(e)}>
-            Delete
+          <Button disabled={loading} variant="destructive" onClick={(e) => deleteShift(e)}>
+          {loading ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              "Delete"
+            )}
           </Button>
-          <Button type="submit">Update Shift</Button>
+          <Button disabled={loading} type="submit">
+            {loading ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              "Update Shift"
+            )}
+          </Button>
         </DialogFooter>
       </form>
     </DialogContent>
