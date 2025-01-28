@@ -10,15 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Check, ChevronsUpDown } from "lucide-react";
-// import {
-//   Select,
-//   SelectContent,
-//   SelectGroup,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
+import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
@@ -67,6 +59,7 @@ export default function NewShiftForm({
   const [positionId, setPositionId] = useState<string>("");
   const [userPopOpen, setUserPopOpen] = useState(false);
   const [positionPopOpen, setPositionPopOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const {
     type: userType,
     allPositions: positions,
@@ -147,6 +140,8 @@ export default function NewShiftForm({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setLoading(true);
+
     const newShift: NewShift = {
       startTime,
       endTime,
@@ -155,6 +150,7 @@ export default function NewShiftForm({
     };
 
     let data: { message: string } = { message: "" };
+
     try {
       const response = await fetch("/api/shift/new", {
         method: "POST",
@@ -168,9 +164,11 @@ export default function NewShiftForm({
       if (!response.ok) throw new Error("Failed to create shift");
 
       data = await response.json();
+      setLoading(false);
       console.log(data);
     } catch (error) {
       console.error("Error creating shift:", error);
+      setLoading(false);
       return toast.error("Failed to create shift");
     }
 
@@ -379,46 +377,15 @@ export default function NewShiftForm({
                 </PopoverContent>
               </Popover>
             </div>
-
-            {/* <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="userId" className="text-right">
-                User
-              </Label>
-              <Select onValueChange={setUserId} value={userId}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.firstName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div> */}
-            {/* <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="positionId" className="text-right">
-                Position
-              </Label>
-              <Select onValueChange={setPositionId} value={positionId}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a position" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {positions.map((position) => (
-                      <SelectItem key={position._id} value={position._id}>
-                        {position.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div> */}
           </div>
           <DialogFooter>
-            <Button type="submit">Create Shift</Button>
+            <Button disabled={loading} type="submit">
+              {loading ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                "Create Shift"
+              )}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
