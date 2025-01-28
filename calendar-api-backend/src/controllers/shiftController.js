@@ -5,6 +5,7 @@ import slingController from "./slingController.js";
 import { mergeShiftsFromSling } from "../utils/mergeShiftsFromSling.js";
 import gCalendarService from "../services/gCalendarService.js";
 import userService from "../services/userService.js";
+import { userIsAdmin } from "../utils/userIsAdmin.js";
 
 function validateShift(shift) {
   const requiredFields = ["startTime", "endTime", "userId", "positionId"];
@@ -24,17 +25,20 @@ function validateShift(shift) {
 async function createShift(req, res) {
   const { userId } = req.auth;
 
+  console.log(`[${req.requestId}] - starting shift creation flow`);
+
   let shift;
   try {
     shift = validateShift(req.body);
     shift.createdBy = userId;
   } catch (err) {
-    console.error(`[${req.requestId}]`, err.message);
+    console.error(`[${req.requestId}] - error validating shift: `, err.message);
     return res.status(400).json({ message: err.message });
   }
 
   const shiftUserId = shift.userId;
 
+  let errorAddingToCalendar = false;
   try {
     const addedEvent = await gCalendarService.addEventForShift(
       shiftUserId,
@@ -44,6 +48,7 @@ async function createShift(req, res) {
     if (addedEvent) {
       shift.isSynced = true;
       shift.syncedEvent = addedEvent;
+      console.log(`[${req.requestId}] - shift synced with google calendar`);
     }
   } catch (err) {
     console.error(
@@ -51,6 +56,7 @@ async function createShift(req, res) {
       err.message
     );
     shift.isSynced = false;
+    errorAddingToCalendar = true;
   }
 
   let createdShift;
@@ -69,7 +75,16 @@ async function createShift(req, res) {
   if (shift.isSynced) {
     return res.status(201).json({ message: "Shift created" });
   }
-  return res.status(201).json({ message: "Shift created but not synced" });
+  if (errorAddingToCalendar) {
+    return res.status(201).json({
+      message: "Shift created",
+      details: "Not synced. Error adding to google calendar.",
+    });
+  }
+  return res.status(201).json({
+    message: "Shift created",
+    details: "Not synced by user's request.",
+  });
 }
 
 async function findShiftsByRange(req, res) {
@@ -335,6 +350,92 @@ async function getShift(req, res) {
   return res.status(200).json(shift);
 }
 
+async function duplicateShiftsFromDay(req, res) {
+  const { sourceDate, targetDate, users } = req.query;
+  const { userId } = req.auth;
+
+  if (!userId || !(await userIsAdmin(userId))) {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  if (!sourceDate || !targetDate || !users) {
+    return res.status(400).json({
+      message:
+        "sourceDate, targetDate, and users are required query parameters",
+    });
+  }
+
+  let shifts;
+  try {
+    shifts = await shiftService.findShiftsByRange(sourceDate, sourceDate);
+  } catch (err) {
+    console.error(err.message);
+    return res
+      .status(500)
+      .json({ message: `caught error when finding shifts: ${err.message}` });
+  }
+
+  const usersArr = users.split(",");
+  const shiftsToDuplicate = shifts.filter((shift) =>
+    usersArr.includes(shift.userId)
+  );
+
+  const duplicatedShifts = shiftsToDuplicate.map((shift) => {
+    const newShift = { ...shift };
+    const shiftStartTime = new Date(shift.startTime);
+    newShift.startTime = shiftStartTime.setDate(targetDate);
+    const shiftEndTime = new Date(shift.endTime);
+    newShift.endTime = shiftEndTime.setDate(targetDate);
+    return newShift;
+  });
+
+  duplicatedShifts.forEach(async (shift) => {
+    try {
+      const addedEvent = await gCalendarService.addEventForShift(
+        shift.userId,
+        shift,
+        req.requestId
+      );
+      if (addedEvent) {
+        shift.isSynced = true;
+        shift.syncedEvent = addedEvent;
+      }
+    } catch (err) {
+      console.error(
+        `[${req.requestId}] Caught error adding duplicated shift to google calendar: `,
+        err.message
+      );
+      shift.isSynced = false;
+    }
+
+    try {
+      await shiftService.createShift(shift);
+    } catch (err) {
+      console.error(`[${req.requestId}]`, err.message);
+
+      if (shift.isSynced) {
+        try {
+          const user = await userService.findUser_cl(shift.userId);
+          await gCalendarService.deleteEvents_cl(
+            user,
+            [shift.syncedEvent],
+            req.requestId
+          );
+          shift.isSynced = false;
+        } catch (e) {
+          console.log(
+            `[${req.requestId}] - Error deleting event from google calendar after failing to create shift: ${e.message}`
+          );
+        }
+      }
+
+      return res
+        .status(500)
+        .json({ message: `Caught error when creating shift: ${err.message}` });
+    }
+  });
+}
+
 export default {
   createShift,
   findShiftsByRange,
@@ -342,4 +443,5 @@ export default {
   updateShift,
   deleteShift,
   getShift,
+  duplicateShiftsFromDay,
 };

@@ -751,19 +751,45 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
 };
 
 const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
+  console.log(`[${requestId}] - Starting addEventForShift flow`);
+
   const user = await userService.findUser_cl(userId);
-  if (!shouldSyncShift(user, shift)) {
+  if (!shouldSyncShift(user, shift, requestId)) {
+    console.log(
+      `[${requestId}] - Shift ${shift._id} not eligible to be synced. Ending addEventForShift flow.`
+    );
     return;
   }
-  const event = await newShiftToEvent(shift);
-  const addedEvent = await addEvent_cl(user, event, requestId);
-  await addedGCalEventsService.addEvents_cl(user, [addedEvent], requestId);
+
+  let event;
+  let addedEvent = null;
+  try {
+    // transform shift into calendar event
+    event = await newShiftToEvent(shift);
+    // add event to GCal
+    addedEvent = await addEvent_cl(user, event, requestId);
+    // add event to addedGCalEvents collection
+    await addedGCalEventsService.addEvents_cl(user, [addedEvent], requestId);
+  } catch (e) {
+    console.error(
+      `[${requestId}] - Error adding event to calendar for shift ${shift._id}: `,
+      e
+    );
+  }
+
   return addedEvent;
 };
 
 function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
   console.log(
     `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`
+  );
+  console.log(
+    `[${requestId}] - Details of shift being checked: ${JSON.stringify(
+      shift,
+      null,
+      2
+    )}`
   );
   const positionsToSync = clerkUser.publicMetadata.positionsToSync.map(
     (position) => position._id.toString()
