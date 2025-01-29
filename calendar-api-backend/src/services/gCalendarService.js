@@ -755,7 +755,7 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
   const user = await userService.findUser_cl(userId);
   if (!shouldSyncShift(user, shift, requestId)) {
     console.log(
-      `[${requestId}] - Shift ${shift._id} not eligible to be synced. Ending addEventForShift flow.`
+      `[${requestId}] - Shift not eligible to be synced. Ending addEventForShift flow.`
     );
     return;
   }
