@@ -89,7 +89,6 @@ async function getUserEvents_cl(
   const userId = user.id;
   const tokens = user.GoogleAccessToken;
 
-  console.log(`[${requestId}] - Fetching user events for ${userId}`);
   if (!tokens) {
     throw new Error(`User ${userId} not Google authenticated`);
   }
@@ -770,12 +769,15 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
     addedEvent = await addEvent_cl(user, event, requestId);
     // add event to addedGCalEvents collection
     await addedGCalEventsService.addEvents_cl(user, [addedEvent], requestId);
+    console.log(`[${requestId}] - Event added successfully to google calendar`);
   } catch (e) {
     console.error(
       `[${requestId}] - Error adding event to calendar for shift ${shift._id}: `,
       e
     );
   }
+
+  console.log(`[${requestId}] - Ending addEventForShift flow`);
 
   return addedEvent;
 };
@@ -795,7 +797,9 @@ function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
     (position) => position._id.toString()
   );
   const shouldSync = positionsToSync.includes(shift.positionId.toString());
-  console.log(`[${requestId}] - Shift ${shift._id} sync status: ${shouldSync}`);
+  console.log(
+    `[${requestId}] - Position ${shift.positionId} sync status: ${shouldSync}`
+  );
   return shouldSync;
 }
 

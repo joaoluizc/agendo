@@ -75,7 +75,6 @@ async function getAllUsersSafeInfo_cl() {
 }
 
 async function getUserGoogleOAuthToken_cl(userId) {
-  console.log("Getting google oauth token for user: ", userId);
   const provider = "oauth_google";
   let response;
   try {
