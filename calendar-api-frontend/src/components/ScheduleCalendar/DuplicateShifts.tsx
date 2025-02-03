@@ -13,7 +13,7 @@ import localeEn from "air-datepicker/locale/en";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Check, ChevronsUpDown, Copy } from "lucide-react";
+import { Check, ChevronsUpDown, Copy, LoaderCircle } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -43,6 +43,7 @@ const dateOptions: Intl.DateTimeFormatOptions = {
 
 function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [sourceDate, setSourceDate] = useState("");
   const [targetDate, setTargetDate] = useState("");
   // const [userId, setUserId] = useState("");
@@ -109,6 +110,15 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
   };
 
   const handleSubmit = async () => {
+    if (!sourceDate || !targetDate) {
+      return toast.error("Please select source and target dates");
+    }
+    if (selectedUserIds.length === 0) {
+      return toast.error("Please select at least one user");
+    }
+
+    setIsLoading(true);
+
     const sourceDateNormalized = new Date(sourceDate).setHours(0, 0, 0, 0);
 
     const sourceDateISO = new Date(sourceDateNormalized).toISOString();
@@ -137,11 +147,13 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
       console.log(data);
     } catch (error) {
       console.error("Error creating shift:", error);
+      setIsLoading(false);
       return toast.error("Failed to duplicate events");
     }
 
     toast.success(data.message);
 
+    setIsLoading(false);
     setIsOpen(false); // Close the dialog
 
     // Reset form fields
@@ -304,8 +316,14 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
           </div>
         </form>
         <DialogFooter>
-          <Button>Cancel</Button>
-          <Button onClick={handleSubmit}>Duplicate</Button>
+          {isLoading ? (
+            <Button disabled>
+              <LoaderCircle className="animate-spin" />
+              Duplicating...
+            </Button>
+          ) : (
+            <Button onClick={handleSubmit}>Duplicate</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
