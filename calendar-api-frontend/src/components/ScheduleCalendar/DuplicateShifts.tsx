@@ -250,7 +250,11 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                     <div className="flex flex-wrap">
                       {selectedUserIds.length > 0
                         ? selectedUserIds.map((id) => (
-                            <Badge variant="outline" className="mr-1" key={id}>
+                            <Badge
+                              variant="secondary"
+                              className="mr-1"
+                              key={id}
+                            >
                               {users.find((user) => user.id === id)?.firstName}
                             </Badge>
                           ))
