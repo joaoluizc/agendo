@@ -18,6 +18,6 @@ shiftRouter.get(
   shiftController.findShiftsByRangeWithSling
 );
 
-shiftRouter.get("duplicate-shifts", shiftController.duplicateShiftsFromDay);
+shiftRouter.post("/duplicate-shifts", shiftController.duplicateShiftsFromDay);
 
 export default shiftRouter;

@@ -31,6 +31,7 @@ import { Shift } from "./Shift.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils.ts";
 import EmptySlot from "./calendar-components/EmptySlot.tsx";
+import DuplicateShifts from "./DuplicateShifts.tsx";
 
 interface CalendarState {
   shifts: SortedCalendar;
@@ -159,11 +160,11 @@ const Schedule = () => {
           />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2 h-5 w-5" />
         </Label>
-        {/* <CreateShiftForm addNewShift={addShiftToCalendarState} /> */}
         <CreateShiftForm
           reloadScheduleCalendar={() => fetchData(selectedDate)}
           selectedDate={selectedDate}
         />
+        <DuplicateShifts selectedDate={selectedDate} />
       </div>
       {!calendarData.isLoading ? (
         <div className="flex flex-col">

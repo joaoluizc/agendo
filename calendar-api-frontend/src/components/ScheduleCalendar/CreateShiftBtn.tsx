@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
+import { Check, ChevronsUpDown, LoaderCircle, SquarePen } from "lucide-react";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
@@ -30,6 +30,7 @@ import {
 } from "../ui/command";
 import { CommandGroup } from "cmdk";
 import * as chrono from "chrono-node";
+import { todayButton } from "./calendar-components/today-button-datepicker";
 
 type NewShiftFormProps = {
   reloadScheduleCalendar: () => void;
@@ -70,15 +71,6 @@ export default function NewShiftForm({
   const endDatepickerRef = useRef<AirDatepicker | null>(null);
   const startTimeRef = useRef<HTMLInputElement | null>(null);
   const endTimeRef = useRef<HTMLInputElement | null>(null);
-
-  const todayButton = {
-    content: "Today",
-    onClick: (dp: AirDatepicker) => {
-      const date = new Date();
-      dp.selectDate(date);
-      dp.setViewDate(date);
-    },
-  };
 
   const initializeDatepickers = () => {
     if (startDatepickerRef.current) startDatepickerRef.current.destroy();
@@ -185,15 +177,16 @@ export default function NewShiftForm({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
           style={{
-            display: userType !== "admin" ? "none" : "block",
+            display: userType !== "admin" ? "none" : "flex",
+            alignItems: "center",
           }}
         >
-          Create New Shift
+          <SquarePen size="16" /> Create New Shift
         </Button>
       </DialogTrigger>
       <DialogContent

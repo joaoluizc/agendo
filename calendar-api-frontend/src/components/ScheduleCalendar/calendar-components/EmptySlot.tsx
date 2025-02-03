@@ -14,11 +14,13 @@ function EmptySlot(props: EmptySlotProps) {
   const { userId, visitorId, currentHour, selectedDate } = props;
   const { type: userType } = useUserSettings();
   const date = new Date(selectedDate);
+  date.setHours(currentHour);
+  date.setMinutes(0);
 
   return userType === "admin" ? (
     <CreateShiftDialog
       reloadScheduleCalendar={props.reloadScheduleCalendar}
-      selectedDate={new Date(date.setHours(currentHour - 1))}
+      selectedDate={date}
       selectedUserId={userId}
     >
       <div

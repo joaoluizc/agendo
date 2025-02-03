@@ -38,6 +38,12 @@ import {
 } from "../../ui/command";
 import { CommandGroup } from "cmdk";
 import * as chrono from "chrono-node";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { todayButton } from "./today-button-datepicker";
 
 type NewShiftFormProps = {
   reloadScheduleCalendar: () => void;
@@ -49,6 +55,11 @@ type NewShiftFormProps = {
 const THIRTY_MINUTES = 1800000;
 const ONE_HOUR = 3600000;
 
+const localeStringOptions: { dateStyle: "short"; timeStyle: "short" } = {
+  dateStyle: "short",
+  timeStyle: "short",
+};
+
 export default function CreateShiftDialog({
   reloadScheduleCalendar,
   selectedDate,
@@ -57,16 +68,15 @@ export default function CreateShiftDialog({
 }: NewShiftFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [startTime, setStartTime] = useState<string>(
-    new Date(
-      Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) * THIRTY_MINUTES
-    ).toISOString()
+    selectedDate.toLocaleString(undefined, localeStringOptions)
   );
   const [endTime, setEndTime] = useState<string>(
     new Date(
       Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) * THIRTY_MINUTES +
         ONE_HOUR
-    ).toISOString()
+    ).toLocaleString(undefined, localeStringOptions)
   );
+
   const [userId, setUserId] = useState<string>(selectedUserId);
   const [positionId, setPositionId] = useState<string>("");
   const [userPopOpen, setUserPopOpen] = useState(false);
@@ -78,14 +88,10 @@ export default function CreateShiftDialog({
   const startTimeRef = useRef<HTMLInputElement | null>(null);
   const endTimeRef = useRef<HTMLInputElement | null>(null);
 
-  const todayButton = {
-    content: "Today",
-    onClick: (dp: AirDatepicker) => {
-      const date = new Date();
-      dp.selectDate(date);
-      dp.setViewDate(date);
-    },
-  };
+  const [startTimeHovercardOpen, setStartTimeHovercardOpen] = useState(() => {
+    console.log("initializing start time hovercard open");
+    return false;
+  });
 
   const initializeDatepickers = () => {
     if (startDatepickerRef.current) startDatepickerRef.current.destroy();
@@ -96,15 +102,9 @@ export default function CreateShiftDialog({
       {
         timepicker: true,
         onSelect: ({ date }) => {
-          setStartTime((date as Date).toISOString());
+          handleStartTimeChange((date as Date).toISOString());
         },
-        selectedDates: [
-          new Date(
-            Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) *
-              THIRTY_MINUTES +
-              THIRTY_MINUTES
-          ),
-        ],
+        selectedDates: [selectedDate],
         locale: localeEn,
         position: "bottom left",
         container: ".air-datepicker-global",
@@ -112,6 +112,9 @@ export default function CreateShiftDialog({
         buttons: [todayButton, "clear"],
       }
     );
+    setTimeout(() => {
+      setStartTime(selectedDate.toLocaleString(undefined, localeStringOptions));
+    }, 500);
 
     endDatepickerRef.current = new AirDatepicker(
       document.querySelector("#endTime") as HTMLInputElement,
@@ -137,6 +140,15 @@ export default function CreateShiftDialog({
     );
   };
 
+  const handleStartTimeChange = (date: string) => {
+    const parsedDate = chrono.parseDate(date);
+    if (parsedDate) {
+      setStartTime(parsedDate.toLocaleString(undefined, localeStringOptions));
+    } else {
+      setStartTime("Invalid date");
+    }
+  };
+
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (open) {
@@ -145,11 +157,24 @@ export default function CreateShiftDialog({
     }
   };
 
+  const handleHoverCardOpenChange = (open: boolean, elementId: string) => {
+    if (document.activeElement?.id !== elementId) {
+      setStartTimeHovercardOpen(open);
+    }
+  };
+
+  const renderParsedDate = () => {
+    const parsedDate = chrono.parseDate(startTime);
+    return parsedDate
+      ? parsedDate.toLocaleString(undefined, localeStringOptions)
+      : "Invalid date";
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const newShift: NewShift = {
-      startTime,
-      endTime,
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date(endTime).toISOString(),
       userId,
       positionId,
     };
@@ -187,7 +212,7 @@ export default function CreateShiftDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent
         className={cn("sm:max-w-[425px]", "air-datepicker-global")}
@@ -201,32 +226,40 @@ export default function CreateShiftDialog({
         <form onSubmit={handleSubmit} tabIndex={0}>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label
-                htmlFor="startTime"
-                className="text-right"
-                autoFocus={false}
-              >
+              <Label htmlFor="startTime" className="text-right">
                 Start Time
               </Label>
-              <Input
-                id="startTime"
-                className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
-                ref={startTimeRef}
-                autoFocus={false}
-                onChange={(e) => {
-                  const parsedDate = chrono.parseDate(e.target.value);
-                  if (parsedDate) {
-                    setStartTime(parsedDate.toISOString());
-                  }
-                }}
-                onBlur={() => {
-                  if (startTimeRef.current) {
-                    startTimeRef.current.value = new Date(
-                      startTime
-                    ).toLocaleString();
-                  }
-                }}
-              />
+              <HoverCard
+                open={startTimeHovercardOpen}
+                onOpenChange={(o) => handleHoverCardOpenChange(o, "startTime")}
+              >
+                <HoverCardTrigger asChild>
+                  <Input
+                    id="startTime"
+                    className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
+                    ref={startTimeRef}
+                    onChange={(e) => {
+                      setStartTime(e.target.value);
+                    }}
+                    onFocus={() => {
+                      setStartTimeHovercardOpen(true);
+                    }}
+                    onBlur={() => {
+                      if (startTimeRef.current) {
+                        startTimeRef.current.value = new Date(
+                          startTime
+                        ).toLocaleString(undefined, localeStringOptions);
+                      }
+                      handleStartTimeChange(startTime);
+                      setStartTimeHovercardOpen(false);
+                    }}
+                    value={startTime}
+                  />
+                </HoverCardTrigger>
+                <HoverCardContent side="top">
+                  {renderParsedDate()}
+                </HoverCardContent>
+              </HoverCard>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="endTime" className="text-right">
@@ -244,9 +277,10 @@ export default function CreateShiftDialog({
                 }}
                 onBlur={() => {
                   if (endTimeRef.current) {
-                    endTimeRef.current.value = new Date(
-                      endTime
-                    ).toLocaleString();
+                    endTimeRef.current.value = new Date(endTime).toLocaleString(
+                      undefined,
+                      localeStringOptions
+                    );
                   }
                 }}
               />

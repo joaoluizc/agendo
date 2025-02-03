@@ -6,6 +6,7 @@ import { mergeShiftsFromSling } from "../utils/mergeShiftsFromSling.js";
 import gCalendarService from "../services/gCalendarService.js";
 import userService from "../services/userService.js";
 import { userIsAdmin } from "../utils/userIsAdmin.js";
+import isISODate from "../utils/isISODate.js";
 
 function validateShift(shift) {
   const requiredFields = ["startTime", "endTime", "userId", "positionId"];
@@ -351,7 +352,7 @@ async function getShift(req, res) {
 }
 
 async function duplicateShiftsFromDay(req, res) {
-  const { sourceDate, targetDate, users } = req.query;
+  const { sourceDate, targetDate, users } = req.body;
   const { userId } = req.auth;
 
   if (!userId || !(await userIsAdmin(userId))) {
@@ -365,31 +366,97 @@ async function duplicateShiftsFromDay(req, res) {
     });
   }
 
+  if (!isISODate(sourceDate) || !isISODate(targetDate)) {
+    return res.status(400).json({
+      message: "sourceDate and targetDate must be valid ISO dates",
+    });
+  }
+
+  if (!Array.isArray(users)) {
+    return res.status(400).json({ message: "users must be an array" });
+  }
+
+  console.log(
+    `[${req.requestId}] - Duplicating shifts from ${sourceDate} to ${targetDate} for users ${users}`
+  );
+
   let shifts;
+  const sourceDateBegin = new Date(sourceDate);
+  console.log(
+    `[${req.requestId}] - DEBUG Source date begin: ${sourceDateBegin}`
+  );
+  const sourceDateEnd = new Date(sourceDate).setHours(23, 59, 59, 999);
+  console.log(`[${req.requestId}] - DEBUG Source date end: ${sourceDateEnd}`);
   try {
-    shifts = await shiftService.findShiftsByRange(sourceDate, sourceDate);
+    shifts = await shiftService.findShiftsByRange(
+      sourceDateBegin,
+      sourceDateEnd
+    );
+    console.log(
+      `[${req.requestId}] - Found shifts for sourceDate: ${JSON.stringify(
+        shifts
+      )}`
+    );
   } catch (err) {
-    console.error(err.message);
+    console.error(`[${req.requestId}] - Error finding shifts: ${err.message}`);
     return res
       .status(500)
       .json({ message: `caught error when finding shifts: ${err.message}` });
   }
 
-  const usersArr = users.split(",");
   const shiftsToDuplicate = shifts.filter((shift) =>
-    usersArr.includes(shift.userId)
+    users.includes(shift.userId)
+  );
+  console.log(
+    `[${req.requestId}] - Shifts to duplicate: ${JSON.stringify(
+      shiftsToDuplicate
+    )}`
   );
 
+  const targetDateObj = new Date(targetDate);
+  const targetDayNum = targetDateObj.getDate();
+  const targetMonthNum = targetDateObj.getMonth();
+  const targetYearNum = targetDateObj.getFullYear();
+
+  console.log(`[${req.requestId}] - DEBUG Target date number: ${targetDayNum}`);
+
   const duplicatedShifts = shiftsToDuplicate.map((shift) => {
-    const newShift = { ...shift };
+    const newShift = { ...shift.toObject() };
+
     const shiftStartTime = new Date(shift.startTime);
-    newShift.startTime = shiftStartTime.setDate(targetDate);
     const shiftEndTime = new Date(shift.endTime);
-    newShift.endTime = shiftEndTime.setDate(targetDate);
+
+    const startTimeNewDate = new Date(
+      targetYearNum,
+      targetMonthNum,
+      targetDayNum,
+      shiftStartTime.getHours(),
+      shiftStartTime.getMinutes()
+    );
+    const endTimeNewDate = new Date(
+      targetYearNum,
+      targetMonthNum,
+      targetDayNum,
+      shiftEndTime.getHours(),
+      shiftEndTime.getMinutes()
+    );
+
+    newShift.startTime = new Date(startTimeNewDate).toISOString();
+    newShift.endTime = new Date(endTimeNewDate).toISOString();
+
+    newShift.isSynced = false;
+    newShift.syncedEvent = null;
+    newShift.createdBy = userId;
     return newShift;
   });
 
-  duplicatedShifts.forEach(async (shift) => {
+  console.log(
+    `[${req.requestId}] - Duplicated shifts: ${JSON.stringify(
+      duplicatedShifts
+    )}`
+  );
+
+  for (const shift of duplicatedShifts) {
     try {
       const addedEvent = await gCalendarService.addEventForShift(
         shift.userId,
@@ -399,19 +466,28 @@ async function duplicateShiftsFromDay(req, res) {
       if (addedEvent) {
         shift.isSynced = true;
         shift.syncedEvent = addedEvent;
+        console.log(
+          `[${
+            req.requestId
+          }] - Shift synced with Google Calendar: ${JSON.stringify(addedEvent)}`
+        );
       }
     } catch (err) {
       console.error(
-        `[${req.requestId}] Caught error adding duplicated shift to google calendar: `,
-        err.message
+        `[${req.requestId}] - Error adding duplicated shift to Google Calendar: ${err.message}`
       );
       shift.isSynced = false;
     }
 
     try {
-      await shiftService.createShift(shift);
+      const addedShift = await shiftService.createShift(shift);
+      console.log(
+        `[${req.requestId}] - Shift created: ${JSON.stringify(addedShift)}`
+      );
     } catch (err) {
-      console.error(`[${req.requestId}]`, err.message);
+      console.error(
+        `[${req.requestId}] - Error creating shift: ${err.message}`
+      );
 
       if (shift.isSynced) {
         try {
@@ -422,9 +498,12 @@ async function duplicateShiftsFromDay(req, res) {
             req.requestId
           );
           shift.isSynced = false;
+          console.log(
+            `[${req.requestId}] - Deleted event from Google Calendar after failing to create shift`
+          );
         } catch (e) {
           console.log(
-            `[${req.requestId}] - Error deleting event from google calendar after failing to create shift: ${e.message}`
+            `[${req.requestId}] - Error deleting event from Google Calendar: ${e.message}`
           );
         }
       }
@@ -433,7 +512,8 @@ async function duplicateShiftsFromDay(req, res) {
         .status(500)
         .json({ message: `Caught error when creating shift: ${err.message}` });
     }
-  });
+  }
+  res.status(201).json({ message: "Shifts duplicated" });
 }
 
 export default {

@@ -28,20 +28,25 @@ import { useUserSettings } from "@/providers/useUserSettings";
 import AirDatepicker from "air-datepicker";
 import { todayButton } from "./calendar-components/today-button-datepicker";
 import { cn } from "@/lib/utils";
-
-const THIRTY_MINUTES = 1800000;
-const ONE_HOUR = 3600000;
+import { toast } from "sonner";
 
 type DuplicateShiftsProps = {
   selectedDate: Date;
+};
+
+const dateOptions: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
 };
 
 function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [sourceDate, setSourceDate] = useState("");
   const [targetDate, setTargetDate] = useState("");
-  const [userId, setUserId] = useState("");
+  // const [userId, setUserId] = useState("");
   const [userPopOpen, setUserPopOpen] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const startDatepickerRef = useRef<AirDatepicker | null>(null);
   const endDatepickerRef = useRef<AirDatepicker | null>(null);
   const sourceDateRef = useRef<HTMLInputElement>(null);
@@ -55,47 +60,43 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
     startDatepickerRef.current = new AirDatepicker(
       document.querySelector("#sourceDate") as HTMLInputElement,
       {
-        timepicker: true,
         onSelect: ({ date }) => {
-          setSourceDate((date as Date).toISOString());
+          setSourceDate(
+            (date as Date).toLocaleDateString("en-US", dateOptions)
+          );
         },
-        selectedDates: [
-          new Date(
-            Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) *
-              THIRTY_MINUTES +
-              THIRTY_MINUTES
-          ),
-        ],
+        selectedDates: [new Date(selectedDate.getTime())],
         locale: localeEn,
+        dateFormat: "MMMM d, yyyy",
         position: "bottom left",
         container: ".air-datepicker-global",
-        minutesStep: 30,
         buttons: [todayButton, "clear"],
+        autoClose: true,
+        toggleSelected: false,
       }
     );
 
     endDatepickerRef.current = new AirDatepicker(
       document.querySelector("#targetDate") as HTMLInputElement,
       {
-        timepicker: true,
         onSelect: ({ date }) => {
-          setTargetDate((date as Date).toISOString());
+          setTargetDate(
+            (date as Date).toLocaleDateString("en-US", dateOptions)
+          );
         },
-        selectedDates: [
-          new Date(
-            Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) *
-              THIRTY_MINUTES +
-              THIRTY_MINUTES +
-              ONE_HOUR
-          ),
-        ],
+        selectedDates: [new Date(selectedDate.getTime())],
         locale: localeEn,
+        dateFormat: "MMMM d, yyyy",
         position: "bottom left",
         container: ".air-datepicker-global",
-        minutesStep: 30,
         buttons: [todayButton, "clear"],
+        autoClose: true,
+        toggleSelected: false,
       }
     );
+
+    setSourceDate(selectedDate.toLocaleDateString("en-US", dateOptions));
+    setTargetDate(selectedDate.toLocaleDateString("en-US", dateOptions));
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -106,42 +107,47 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
     }
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    // const newShift: NewShift = {
-    //   sourceDate,
-    //   targetDate,
-    //   userId,
-    // };
+  const handleSubmit = async () => {
+    const sourceDateNormalized = new Date(sourceDate).setHours(0, 0, 0, 0);
 
-    // let data: { message: string } = { message: "" };
-    // try {
-    //   const response = await fetch("/api/shift/new", {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify(newShift),
-    //     credentials: "include", // Ensures that Clerk's authentication is included
-    //   });
+    const sourceDateISO = new Date(sourceDateNormalized).toISOString();
+    const targetDateISO = new Date(targetDate).toISOString();
 
-    //   if (!response.ok) throw new Error("Failed to create shift");
+    const duplicateObject = {
+      sourceDate: sourceDateISO,
+      targetDate: targetDateISO,
+      users: selectedUserIds,
+    };
 
-    //   data = await response.json();
-    //   console.log(data);
-    // } catch (error) {
-    //   console.error("Error creating shift:", error);
-    //   return toast.error("Failed to create shift");
-    // }
+    let data: { message: string } = { message: "" };
+    try {
+      const response = await fetch("/api/shift/duplicate-shifts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(duplicateObject),
+        credentials: "include", // Ensures that Clerk's authentication is included
+      });
 
-    // toast.success(data.message);
+      if (!response.ok) throw new Error("Failed to duplicate events");
+
+      data = await response.json();
+      console.log(data);
+    } catch (error) {
+      console.error("Error creating shift:", error);
+      return toast.error("Failed to duplicate events");
+    }
+
+    toast.success(data.message);
 
     setIsOpen(false); // Close the dialog
 
     // Reset form fields
     setSourceDate("");
     setTargetDate("");
-    setUserId("");
+    setSelectedUserIds([]);
+    // setUserId("");
   };
 
   return (
@@ -166,7 +172,7 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
             Duplicate shifts from one day to another
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} tabIndex={0}>
+        <form tabIndex={0}>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label
@@ -184,14 +190,16 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                 onChange={(e) => {
                   const parsedDate = chrono.parseDate(e.target.value);
                   if (parsedDate) {
-                    setSourceDate(parsedDate.toISOString());
+                    setSourceDate(
+                      parsedDate.toLocaleDateString("en-US", dateOptions)
+                    );
                   }
                 }}
                 onBlur={() => {
                   if (sourceDateRef.current) {
                     sourceDateRef.current.value = new Date(
                       sourceDate
-                    ).toLocaleString();
+                    ).toLocaleDateString("en-US", dateOptions);
                   }
                 }}
               />
@@ -207,14 +215,16 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                 onChange={(e) => {
                   const parsedDate = chrono.parseDate(e.target.value);
                   if (parsedDate) {
-                    setTargetDate(parsedDate.toISOString());
+                    setTargetDate(
+                      parsedDate.toLocaleDateString("en-US", dateOptions)
+                    );
                   }
                 }}
                 onBlur={() => {
                   if (targetDateRef.current) {
                     targetDateRef.current.value = new Date(
                       targetDate
-                    ).toLocaleString();
+                    ).toLocaleDateString("en-US", dateOptions);
                   }
                 }}
               />
@@ -235,9 +245,14 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                     role="combobox"
                     aria-expanded={userPopOpen}
                   >
-                    {userId
-                      ? users.find((user) => user.id === userId)?.firstName
-                      : "Select a user"}
+                    {selectedUserIds.length > 0
+                      ? selectedUserIds
+                          .map(
+                            (id) =>
+                              users.find((user) => user.id === id)?.firstName
+                          )
+                          .join(", ")
+                      : "Select users"}
                     <ChevronsUpDown className="opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -254,18 +269,21 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                           <CommandItem
                             key={user.firstName}
                             value={user.firstName}
-                            onSelect={(currentValue) => {
-                              setUserId(
-                                currentValue === user.id ? "" : user.id
+                            onSelect={() => {
+                              setSelectedUserIds((prev) =>
+                                prev.includes(user.id)
+                                  ? prev.filter((id) => id !== user.id)
+                                  : [...prev, user.id]
                               );
-                              setUserPopOpen(false);
                             }}
                           >
                             {user.firstName}
                             <Check
                               className="w-4 h-4 ml-auto"
                               style={{
-                                display: userId === user.id ? "block" : "none",
+                                display: selectedUserIds.includes(user.id)
+                                  ? "block"
+                                  : "none",
                               }}
                             />
                           </CommandItem>
@@ -280,7 +298,7 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
         </form>
         <DialogFooter>
           <Button>Cancel</Button>
-          <Button>Duplicate</Button>
+          <Button onClick={handleSubmit}>Duplicate</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
