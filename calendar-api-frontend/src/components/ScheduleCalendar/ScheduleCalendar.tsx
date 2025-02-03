@@ -139,6 +139,8 @@ const Schedule = () => {
         await fetchData(newDate);
       },
       locale: localeEn,
+      toggleSelected: false,
+      dateFormat: "E MMM d yyyy",
       buttons: [todayButton, "clear"],
     });
 
