@@ -247,7 +247,7 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                     aria-expanded={userPopOpen}
                     className="h-auto"
                   >
-                    <div className="flex flex-wrap">
+                    <div className="flex flex-wrap gap-y-1">
                       {selectedUserIds.length > 0
                         ? selectedUserIds.map((id) => (
                             <Badge
