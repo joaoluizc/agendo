@@ -29,6 +29,7 @@ import AirDatepicker from "air-datepicker";
 import { todayButton } from "./calendar-components/today-button-datepicker";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Badge } from "../ui/badge";
 
 type DuplicateShiftsProps = {
   selectedDate: Date;
@@ -244,15 +245,17 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
                     variant="outline"
                     role="combobox"
                     aria-expanded={userPopOpen}
+                    className="h-auto"
                   >
-                    {selectedUserIds.length > 0
-                      ? selectedUserIds
-                          .map(
-                            (id) =>
-                              users.find((user) => user.id === id)?.firstName
-                          )
-                          .join(", ")
-                      : "Select users"}
+                    <div className="flex flex-wrap">
+                      {selectedUserIds.length > 0
+                        ? selectedUserIds.map((id) => (
+                            <Badge variant="outline" className="mr-1" key={id}>
+                              {users.find((user) => user.id === id)?.firstName}
+                            </Badge>
+                          ))
+                        : "Select users"}
+                    </div>
                     <ChevronsUpDown className="opacity-50" />
                   </Button>
                 </PopoverTrigger>
