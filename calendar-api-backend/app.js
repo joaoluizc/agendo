@@ -47,18 +47,19 @@ app.use(
   })
 );
 app.use(cors(corsOptions));
+app.use(addRequestId);
 
 connectDB();
 
 // await seedPositions();
 
-app.use("/gcalendar", addRequestId, gCalendarRouter);
-app.use("/sling", addRequestId, requireAuth(), slingRouter);
-app.use("/position", addRequestId, requireAuth(), positionRouter);
+app.use("/gcalendar", gCalendarRouter);
+app.use("/sling", requireAuth(), slingRouter);
+app.use("/position", requireAuth(), positionRouter);
 // app.use("/position", addRequestId, positionRouter);
-app.use("/user", addRequestId, requireAuth(), userRouter);
+app.use("/user", requireAuth(), userRouter);
 // app.use("/shift", addRequestId, shiftRouter); // UNPROTECTED FOR DEV TESTING
-app.use("/shift", addRequestId, requireAuth(), shiftRouter);
+app.use("/shift", requireAuth(), shiftRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" })
