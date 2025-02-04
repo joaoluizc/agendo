@@ -32,19 +32,15 @@ import { useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils.ts";
 import EmptySlot from "./calendar-components/EmptySlot.tsx";
 import DuplicateShifts from "./DuplicateShifts.tsx";
-
-interface CalendarState {
-  shifts: SortedCalendar;
-  events: CalendarUser[];
-  isLoading: boolean;
-}
+import { useSchedule } from "@/providers/useSchedule.tsx";
 
 const calcUserRowHeight = (
   userId: string,
-  { events: gCalendarEvents, shifts }: CalendarState
+  events: CalendarUser[],
+  shifts: SortedCalendar
 ) => {
   let height = 0;
-  const calendarUser = gCalendarEvents.find(
+  const calendarUser = events.find(
     (calUser: CalendarUser) => calUser.userId === userId
   );
 
@@ -55,8 +51,6 @@ const calcUserRowHeight = (
   const userShifts = shifts[userId];
   height += calculateShiftOverlapAmount(userShifts) * 3;
 
-  console.log("Calculated height:", height);
-
   return `${height}rem`;
 };
 
@@ -64,37 +58,37 @@ const userHasGcal = (userId: string, gCalendarEvents: CalendarUser[]) => {
   const hasGcal = gCalendarEvents.some(
     (calUser: CalendarUser) => calUser.userId === userId
   );
-  console.log("User has Gcal:", hasGcal);
   return hasGcal;
 };
 
 const Schedule = () => {
-  const [calendarData, setCalendarData] = useState<CalendarState>({
-    shifts: {},
-    events: [],
-    isLoading: false,
-  });
+  const {
+    shifts,
+    events,
+    scheduleIsLoading,
+    setShifts,
+    setEvents,
+    setScheduleIsLoading,
+  } = useSchedule();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { type, allUsers } = useUserSettings();
   const { user } = useUser();
   const visitorId = user?.id;
 
   const fetchData = async (date: Date) => {
-    setCalendarData((prev) => ({ ...prev, isLoading: true }));
+    setScheduleIsLoading(true);
     try {
       const [shifts, events] = await Promise.all([
         getShifts(date),
         type === "admin" ? getGCalendarEvents(date) : Promise.resolve([]),
       ]);
 
-      setCalendarData({
-        shifts,
-        events,
-        isLoading: false,
-      });
+      setShifts(shifts);
+      setEvents(events);
+      setScheduleIsLoading(false);
     } catch (error) {
       console.error("Error fetching calendar data:", error);
-      setCalendarData((prev) => ({ ...prev, isLoading: false }));
+      setScheduleIsLoading(false);
     }
   };
 
@@ -103,7 +97,7 @@ const Schedule = () => {
       allUsers.map(({ id: userId }) => ({
         userId,
         events:
-          calendarData.events
+          events
             .find((calUser) => calUser.userId === userId)
             ?.events.map((event) => ({
               ...event,
@@ -118,7 +112,7 @@ const Schedule = () => {
               ),
             })) || [],
       })),
-    [calendarData.events, calendarData.shifts, selectedDate]
+    [events, selectedDate]
   );
 
   const todayButton = {
@@ -162,21 +156,16 @@ const Schedule = () => {
           />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2 h-5 w-5" />
         </Label>
-        <CreateShiftForm
-          reloadScheduleCalendar={() => fetchData(selectedDate)}
-          selectedDate={selectedDate}
-        />
+        <CreateShiftForm selectedDate={selectedDate} />
         <DuplicateShifts selectedDate={selectedDate} />
       </div>
-      {!calendarData.isLoading ? (
+      {!scheduleIsLoading ? (
         <div className="flex flex-col">
           <CalendarHeader />
           {/* User rows */}
           {allUsers
             ? allUsers.map((currUser, idx) => {
                 const userId = currUser.id;
-                console.log("calendar data: ", calendarData.shifts[userId]);
-                console.log("memoizedGCalEvents: ", memoizedGCalEvents);
                 return (
                   <div key={idx} className="flex">
                     <div
@@ -189,7 +178,7 @@ const Schedule = () => {
                       )}`}
                       style={{
                         width: "12%",
-                        height: calcUserRowHeight(userId, calendarData),
+                        height: calcUserRowHeight(userId, events, shifts),
                       }}
                     >
                       <Avatar>
@@ -219,7 +208,7 @@ const Schedule = () => {
                           )}
                           style={{
                             gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
-                            height: calcUserRowHeight(userId, calendarData),
+                            height: calcUserRowHeight(userId, events, shifts),
                           }}
                         >
                           {[...Array(24).keys()].map((value) => {
@@ -229,9 +218,6 @@ const Schedule = () => {
                                 visitorId={String(visitorId)}
                                 currentHour={value}
                                 selectedDate={selectedDate}
-                                reloadScheduleCalendar={() =>
-                                  fetchData(selectedDate)
-                                }
                                 key={`${userId}-${value}`}
                               />
                             );
@@ -245,8 +231,8 @@ const Schedule = () => {
                           gridTemplateColumns: "repeat(48, minmax(0, 1fr))",
                         }}
                       >
-                        {calendarData.shifts[userId] ? (
-                          calendarData.shifts[userId].map((shift, idx) => (
+                        {shifts[userId] ? (
+                          shifts[userId].map((shift, idx) => (
                             <Shift
                               shift={shift}
                               key={idx}
@@ -262,7 +248,7 @@ const Schedule = () => {
                           ></div>
                         )}
                       </div>
-                      {userHasGcal(userId, calendarData.events) ? (
+                      {userHasGcal(userId, events) ? (
                         <div
                           id="gcalendar-wrapper"
                           className="grid"

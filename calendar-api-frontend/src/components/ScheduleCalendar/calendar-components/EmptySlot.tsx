@@ -7,7 +7,6 @@ type EmptySlotProps = {
   visitorId: string;
   currentHour: number;
   selectedDate: Date;
-  reloadScheduleCalendar: () => void;
 };
 
 function EmptySlot(props: EmptySlotProps) {
@@ -18,11 +17,7 @@ function EmptySlot(props: EmptySlotProps) {
   date.setMinutes(0);
 
   return userType === "admin" ? (
-    <CreateShiftDialog
-      reloadScheduleCalendar={props.reloadScheduleCalendar}
-      selectedDate={date}
-      selectedUserId={userId}
-    >
+    <CreateShiftDialog selectedDate={date} selectedUserId={userId}>
       <div
         key={`key-${currentHour}`}
         className={cn(

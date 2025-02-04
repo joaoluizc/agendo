@@ -14,7 +14,7 @@ import { Check, ChevronsUpDown, LoaderCircle, SquarePen } from "lucide-react";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { NewShift } from "@/types/shiftTypes";
+import { NewShift, Shift } from "@/types/shiftTypes";
 import { cn } from "@/lib/utils";
 import { Input } from "../ui/input";
 import { useUserSettings } from "@/providers/useUserSettings";
@@ -31,30 +31,41 @@ import {
 import { CommandGroup } from "cmdk";
 import * as chrono from "chrono-node";
 import { todayButton } from "./calendar-components/today-button-datepicker";
+import { useSchedule } from "@/providers/useSchedule";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "../ui/hover-card";
+import { roundToNearestHours } from "date-fns";
 
 type NewShiftFormProps = {
-  reloadScheduleCalendar: () => void;
   selectedDate: Date;
 };
 
-const THIRTY_MINUTES = 1800000;
 const ONE_HOUR = 3600000;
 
-export default function NewShiftForm({
-  reloadScheduleCalendar,
-  selectedDate,
-}: NewShiftFormProps) {
+const localeStringOptions: { dateStyle: "short"; timeStyle: "short" } = {
+  dateStyle: "short",
+  timeStyle: "short",
+};
+
+export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
+  const startTimeInit = roundToNearestHours(new Date(selectedDate.getTime()), {
+    roundingMethod: "ceil",
+  });
+  const endTimeInit = roundToNearestHours(
+    new Date(selectedDate.getTime() + ONE_HOUR),
+    { roundingMethod: "ceil" }
+  );
+
+  const { events, shifts, setEvents, setShifts } = useSchedule();
   const [isOpen, setIsOpen] = useState(false);
   const [startTime, setStartTime] = useState<string>(
-    new Date(
-      Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) * THIRTY_MINUTES
-    ).toISOString()
+    new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
   );
   const [endTime, setEndTime] = useState<string>(
-    new Date(
-      Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) * THIRTY_MINUTES +
-        ONE_HOUR
-    ).toISOString()
+    new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
   );
   const [userId, setUserId] = useState<string>("");
   const [positionId, setPositionId] = useState<string>("");
@@ -72,6 +83,9 @@ export default function NewShiftForm({
   const startTimeRef = useRef<HTMLInputElement | null>(null);
   const endTimeRef = useRef<HTMLInputElement | null>(null);
 
+  const [startTimeHovercardOpen, setStartTimeHovercardOpen] = useState(false);
+  const [endTimeHovercardOpen, setEndTimeHovercardOpen] = useState(false);
+
   const initializeDatepickers = () => {
     if (startDatepickerRef.current) startDatepickerRef.current.destroy();
     if (endDatepickerRef.current) endDatepickerRef.current.destroy();
@@ -83,14 +97,10 @@ export default function NewShiftForm({
         onSelect: ({ date }) => {
           setStartTime((date as Date).toISOString());
         },
-        selectedDates: [
-          new Date(
-            Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) *
-              THIRTY_MINUTES +
-              THIRTY_MINUTES
-          ),
-        ],
+        selectedDates: [startTimeInit],
         locale: localeEn,
+        dateFormat: "M/d/yy,",
+        timeFormat: "h:mm AA",
         position: "bottom left",
         container: ".air-datepicker-global",
         minutesStep: 30,
@@ -105,21 +115,34 @@ export default function NewShiftForm({
         onSelect: ({ date }) => {
           setEndTime((date as Date).toISOString());
         },
-        selectedDates: [
-          new Date(
-            Math.ceil(selectedDate.getTime() / THIRTY_MINUTES) *
-              THIRTY_MINUTES +
-              THIRTY_MINUTES +
-              ONE_HOUR
-          ),
-        ],
+        selectedDates: [endTimeInit],
         locale: localeEn,
+        dateFormat: "M/d/yy,",
+        timeFormat: "h:mm AA",
         position: "bottom left",
         container: ".air-datepicker-global",
         minutesStep: 30,
         buttons: [todayButton, "clear"],
       }
     );
+  };
+
+  const handleStartTimeChange = (date: string) => {
+    const parsedDate = chrono.parseDate(date);
+    if (parsedDate) {
+      setStartTime(parsedDate.toLocaleString(undefined, localeStringOptions));
+    } else {
+      setStartTime("Invalid date");
+    }
+  };
+
+  const handleEndTimeChange = (date: string) => {
+    const parsedDate = chrono.parseDate(date);
+    if (parsedDate) {
+      setEndTime(parsedDate.toLocaleString(undefined, localeStringOptions));
+    } else {
+      setEndTime("Invalid date");
+    }
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -130,18 +153,48 @@ export default function NewShiftForm({
     }
   };
 
+  const handleStartHoverCardOpenChange = (open: boolean, elementId: string) => {
+    if (document.activeElement?.id !== elementId) {
+      setStartTimeHovercardOpen(open);
+    }
+  };
+
+  const handleEndHoverCardOpenChange = (open: boolean, elementId: string) => {
+    if (document.activeElement?.id !== elementId) {
+      setEndTimeHovercardOpen(open);
+    }
+  };
+
+  const renderParsedStartDate = () => {
+    const parsedDate = chrono.parseDate(startTime);
+    return parsedDate
+      ? parsedDate.toLocaleString(undefined, localeStringOptions)
+      : "Invalid date";
+  };
+
+  const renderParsedEndDate = () => {
+    const parsedDate = chrono.parseDate(endTime);
+    return parsedDate
+      ? parsedDate.toLocaleString(undefined, localeStringOptions)
+      : "Invalid date";
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
 
     const newShift: NewShift = {
-      startTime,
-      endTime,
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date(endTime).toISOString(),
       userId,
       positionId,
     };
 
-    let data: { message: string } = { message: "" };
+    let responseData: { message: string; details: string; data: Shift } = {
+      message: "",
+      details: "",
+      data: {} as Shift,
+    };
 
     try {
       const response = await fetch("/api/shift/new", {
@@ -155,16 +208,16 @@ export default function NewShiftForm({
 
       if (!response.ok) throw new Error("Failed to create shift");
 
-      data = await response.json();
+      responseData = await response.json();
       setLoading(false);
-      console.log(data);
+      console.log(responseData);
     } catch (error) {
       console.error("Error creating shift:", error);
       setLoading(false);
       return toast.error("Failed to create shift");
     }
 
-    toast.success(data.message);
+    toast.success(responseData.message);
 
     setIsOpen(false); // Close the dialog
 
@@ -173,7 +226,46 @@ export default function NewShiftForm({
     setEndTime("");
     setUserId("");
     setPositionId("");
-    reloadScheduleCalendar();
+
+    const shiftDate = new Date(responseData.data.startTime);
+    const scheduleDate = new Date(selectedDate);
+    if (
+      shiftDate.getDate() !== scheduleDate.getDate() ||
+      shiftDate.getMonth() !== scheduleDate.getMonth() ||
+      shiftDate.getFullYear() !== scheduleDate.getFullYear()
+    ) {
+      return;
+    }
+
+    const createdShift = responseData.data;
+
+    if (!shifts[createdShift.userId]) {
+      shifts[createdShift.userId] = [];
+    }
+
+    shifts[createdShift.userId].push(createdShift);
+
+    shifts[createdShift.userId].sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+
+    setShifts({ ...shifts });
+
+    if (createdShift.isSynced) {
+      events
+        .find((event) => event.userId === createdShift.userId)
+        ?.events.push(createdShift.syncedEvent);
+      events
+        .find((event) => event.userId === createdShift.userId)
+        ?.events.sort((a, b) => {
+          return (
+            new Date(a.start.dateTime).getTime() -
+            new Date(b.start.dateTime).getTime()
+          );
+        });
+      setEvents([...events]);
+    }
   };
 
   return (
@@ -208,48 +300,73 @@ export default function NewShiftForm({
               >
                 Start Time
               </Label>
-              <Input
-                id="startTime"
-                className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
-                ref={startTimeRef}
-                autoFocus={false}
-                onChange={(e) => {
-                  const parsedDate = chrono.parseDate(e.target.value);
-                  if (parsedDate) {
-                    setStartTime(parsedDate.toISOString());
-                  }
-                }}
-                onBlur={() => {
-                  if (startTimeRef.current) {
-                    startTimeRef.current.value = new Date(
-                      startTime
-                    ).toLocaleString();
-                  }
-                }}
-              />
+              <HoverCard
+                open={startTimeHovercardOpen}
+                onOpenChange={(o) =>
+                  handleStartHoverCardOpenChange(o, "startTime")
+                }
+              >
+                <HoverCardTrigger asChild>
+                  <Input
+                    id="startTime"
+                    className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
+                    ref={startTimeRef}
+                    onChange={(e) => {
+                      setStartTime(e.target.value);
+                    }}
+                    onFocus={() => {
+                      setStartTimeHovercardOpen(true);
+                    }}
+                    onBlur={() => {
+                      if (startTimeRef.current) {
+                        startTimeRef.current.value = new Date(
+                          startTime
+                        ).toLocaleString(undefined, localeStringOptions);
+                      }
+                      handleStartTimeChange(startTime);
+                      setStartTimeHovercardOpen(false);
+                    }}
+                    value={startTime}
+                  />
+                </HoverCardTrigger>
+                <HoverCardContent side="top">
+                  {renderParsedStartDate()}
+                </HoverCardContent>
+              </HoverCard>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="endTime" className="text-right">
                 End Time
               </Label>
-              <Input
-                id="endTime"
-                className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
-                ref={endTimeRef}
-                onChange={(e) => {
-                  const parsedDate = chrono.parseDate(e.target.value);
-                  if (parsedDate) {
-                    setEndTime(parsedDate.toISOString());
-                  }
-                }}
-                onBlur={() => {
-                  if (endTimeRef.current) {
-                    endTimeRef.current.value = new Date(
-                      endTime
-                    ).toLocaleString();
-                  }
-                }}
-              />
+              <HoverCard
+                open={endTimeHovercardOpen}
+                onOpenChange={(o) => handleEndHoverCardOpenChange(o, "endTime")}
+              >
+                <HoverCardTrigger asChild>
+                  <Input
+                    id="endTime"
+                    className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
+                    ref={endTimeRef}
+                    onChange={(e) => {
+                      setEndTime(e.target.value);
+                    }}
+                    onFocus={() => setEndTimeHovercardOpen(true)}
+                    onBlur={() => {
+                      if (endTimeRef.current) {
+                        endTimeRef.current.value = new Date(
+                          endTime
+                        ).toLocaleString(undefined, localeStringOptions);
+                      }
+                      handleEndTimeChange(endTime);
+                      setEndTimeHovercardOpen(false);
+                    }}
+                    value={endTime}
+                  />
+                </HoverCardTrigger>
+                <HoverCardContent side="top">
+                  {renderParsedEndDate()}
+                </HoverCardContent>
+              </HoverCard>
             </div>
 
             <div className="grid grid-cols-4 items-center gap-4 z-50">

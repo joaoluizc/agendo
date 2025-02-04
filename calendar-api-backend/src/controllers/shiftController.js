@@ -74,17 +74,21 @@ async function createShift(req, res) {
     `[${req.requestId}] Shift created: ${JSON.stringify(createdShift._id)}`
   );
   if (shift.isSynced) {
-    return res.status(201).json({ message: "Shift created" });
+    return res
+      .status(201)
+      .json({ message: "Shift created", data: createdShift });
   }
   if (errorAddingToCalendar) {
     return res.status(201).json({
       message: "Shift created",
       details: "Not synced. Error adding to google calendar.",
+      data: createdShift,
     });
   }
   return res.status(201).json({
     message: "Shift created",
     details: "Not synced by user's request.",
+    data: createdShift,
   });
 }
 

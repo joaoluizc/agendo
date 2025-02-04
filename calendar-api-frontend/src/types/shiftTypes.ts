@@ -1,3 +1,5 @@
+import { GCalendarEvent } from "./gCalendarTypes";
+
 export type Shift = {
   _id: string,
   userId: string,
@@ -6,15 +8,12 @@ export type Shift = {
   positionId: string,
   createdBy: string,
   isSynced: boolean,
+  syncedEvent: GCalendarEvent,
 };
 
 export type SortedCalendar = {
   [key: string]: Shift[];
 }
-
-// export type SortedCalendar = {
-//   [key: string]: Shift[] | NewShift[];
-// }
 
 export interface NewShift {
   startTime: string;
