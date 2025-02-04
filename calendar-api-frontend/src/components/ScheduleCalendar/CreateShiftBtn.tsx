@@ -95,7 +95,9 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       {
         timepicker: true,
         onSelect: ({ date }) => {
-          setStartTime((date as Date).toISOString());
+          setStartTime(
+            (date as Date).toLocaleString(undefined, localeStringOptions)
+          );
         },
         selectedDates: [startTimeInit],
         locale: localeEn,
@@ -105,6 +107,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
         container: ".air-datepicker-global",
         minutesStep: 30,
         buttons: [todayButton, "clear"],
+        toggleSelected: false,
       }
     );
 
@@ -113,7 +116,9 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       {
         timepicker: true,
         onSelect: ({ date }) => {
-          setEndTime((date as Date).toISOString());
+          setEndTime(
+            (date as Date).toLocaleString(undefined, localeStringOptions)
+          );
         },
         selectedDates: [endTimeInit],
         locale: localeEn,
@@ -123,6 +128,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
         container: ".air-datepicker-global",
         minutesStep: 30,
         buttons: [todayButton, "clear"],
+        toggleSelected: false,
       }
     );
   };

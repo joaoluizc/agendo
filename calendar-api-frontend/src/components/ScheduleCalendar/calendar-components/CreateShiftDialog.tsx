@@ -100,7 +100,9 @@ export default function CreateShiftDialog({
       {
         timepicker: true,
         onSelect: ({ date }) => {
-          handleStartTimeChange((date as Date).toISOString());
+          setStartTime(
+            (date as Date).toLocaleString(undefined, localeStringOptions)
+          );
         },
         selectedDates: [selectedDate],
         locale: localeEn,
@@ -110,6 +112,7 @@ export default function CreateShiftDialog({
         container: ".air-datepicker-global",
         minutesStep: 30,
         buttons: [todayButton, "clear"],
+        toggleSelected: false,
       }
     );
     setTimeout(() => {
@@ -121,7 +124,9 @@ export default function CreateShiftDialog({
       {
         timepicker: true,
         onSelect: ({ date }) => {
-          setEndTime((date as Date).toISOString());
+          setEndTime(
+            (date as Date).toLocaleString(undefined, localeStringOptions)
+          );
         },
         selectedDates: [new Date(selectedDate.getTime() + ONE_HOUR)],
         locale: localeEn,
@@ -131,6 +136,7 @@ export default function CreateShiftDialog({
         container: ".air-datepicker-global",
         minutesStep: 30,
         buttons: [todayButton, "clear"],
+        toggleSelected: false,
       }
     );
   };
