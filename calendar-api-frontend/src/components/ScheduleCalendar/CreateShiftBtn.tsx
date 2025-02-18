@@ -249,6 +249,11 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     };
 
     try {
+      console.log("startTime: ", startTime);
+      console.log("endTime: ", endTime);
+      console.log("startTime toISOString: ", new Date(startTime).toISOString());
+      console.log("endTime toISOString: ", new Date(endTime).toISOString());
+
       const newShift: NewShift = {
         startTime: new Date(startTime).toISOString(),
         endTime: new Date(endTime).toISOString(),
