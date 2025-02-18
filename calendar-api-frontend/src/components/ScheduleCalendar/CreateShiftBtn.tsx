@@ -251,8 +251,6 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     try {
       console.log("startTime: ", startTime);
       console.log("endTime: ", endTime);
-      console.log("startTime toISOString: ", new Date(startTime).toISOString());
-      console.log("endTime toISOString: ", new Date(endTime).toISOString());
       const startTimeParsed = chrono.parseDate(startTime) || new Date();
       const endTimeParsed = chrono.parseDate(endTime) || new Date();
       console.log(
@@ -265,8 +263,8 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       );
 
       const newShift: NewShift = {
-        startTime: new Date(startTime).toISOString(),
-        endTime: new Date(endTime).toISOString(),
+        startTime: new Date(startTimeParsed).toISOString(),
+        endTime: new Date(endTimeParsed).toISOString(),
         userId,
         positionId,
       };
