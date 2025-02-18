@@ -83,6 +83,13 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
   const startTimeRef = useRef<HTMLInputElement | null>(null);
   const endTimeRef = useRef<HTMLInputElement | null>(null);
 
+  const [fieldsValidation, setFieldsValidation] = useState({
+    startTime: false,
+    endTime: false,
+    userId: false,
+    positionId: false,
+  });
+
   const [startTimeHovercardOpen, setStartTimeHovercardOpen] = useState(false);
   const [endTimeHovercardOpen, setEndTimeHovercardOpen] = useState(false);
 
@@ -133,21 +140,27 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     );
   };
 
-  const handleStartTimeChange = (date: string) => {
-    const parsedDate = chrono.parseDate(date);
+  const handleStartTimeChange = () => {
+    const parsedDate = chrono.parseDate(startTime);
     if (parsedDate) {
       setStartTime(parsedDate.toLocaleString(undefined, localeStringOptions));
+      fieldsValidation.startTime = false;
     } else {
       setStartTime("Invalid date");
+      toast.error("Invalid start time");
+      fieldsValidation.startTime = true;
     }
   };
 
-  const handleEndTimeChange = (date: string) => {
-    const parsedDate = chrono.parseDate(date);
+  const handleEndTimeChange = () => {
+    const parsedDate = chrono.parseDate(endTime);
     if (parsedDate) {
       setEndTime(parsedDate.toLocaleString(undefined, localeStringOptions));
+      fieldsValidation.endTime = false;
     } else {
       setEndTime("Invalid date");
+      toast.error("Invalid end time");
+      fieldsValidation.endTime = true;
     }
   };
 
@@ -185,16 +198,49 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       : "Invalid date";
   };
 
+  const validateFields = () => {
+    const newFieldsValidation = { ...fieldsValidation };
+    let isValid = true;
+
+    if (!chrono.parseDate(startTime)) {
+      console.log("Invalid start time:", startTime);
+      newFieldsValidation.startTime = true;
+      isValid = false;
+    } else {
+      newFieldsValidation.startTime = false;
+    }
+
+    if (!chrono.parseDate(endTime)) {
+      console.log("Invalid end time:", endTime);
+      newFieldsValidation.endTime = true;
+      isValid = false;
+    } else {
+      newFieldsValidation.endTime = false;
+    }
+
+    if (!userId) {
+      newFieldsValidation.userId = true;
+      isValid = false;
+    } else {
+      newFieldsValidation.userId = false;
+    }
+
+    if (!positionId) {
+      newFieldsValidation.positionId = true;
+      isValid = false;
+    } else {
+      newFieldsValidation.positionId = false;
+    }
+
+    setFieldsValidation(newFieldsValidation);
+
+    return isValid;
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!validateFields()) return;
     setLoading(true);
-
-    const newShift: NewShift = {
-      startTime: new Date(startTime).toISOString(),
-      endTime: new Date(endTime).toISOString(),
-      userId,
-      positionId,
-    };
 
     let responseData: { message: string; details: string; data: Shift } = {
       message: "",
@@ -203,6 +249,13 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     };
 
     try {
+      const newShift: NewShift = {
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date(endTime).toISOString(),
+        userId,
+        positionId,
+      };
+
       const response = await fetch("/api/shift/new", {
         method: "POST",
         headers: {
@@ -212,18 +265,34 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
         credentials: "include", // Ensures that Clerk's authentication is included
       });
 
-      if (!response.ok) throw new Error("Failed to create shift");
-
       responseData = await response.json();
-      setLoading(false);
       console.log(responseData);
+
+      if (!response.ok) {
+        throw new Error("Failed to create shift");
+      }
+
+      setLoading(false);
     } catch (error) {
+      if (responseData.message && responseData.details) {
+        console.error(
+          "Error creating shift:",
+          responseData.message,
+          responseData.details
+        );
+        setLoading(false);
+        return toast.error(responseData.message, {
+          description: responseData.details,
+        });
+      }
       console.error("Error creating shift:", error);
       setLoading(false);
       return toast.error("Failed to create shift");
     }
 
-    toast.success(responseData.message);
+    toast.success(responseData.message, {
+      description: responseData.details,
+    });
 
     setIsOpen(false); // Close the dialog
 
@@ -298,7 +367,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} tabIndex={0}>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1">
               <Label
                 htmlFor="startTime"
                 className="text-right"
@@ -312,35 +381,40 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
                   handleStartHoverCardOpenChange(o, "startTime")
                 }
               >
-                <HoverCardTrigger asChild>
-                  <Input
-                    id="startTime"
-                    className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
-                    ref={startTimeRef}
-                    onChange={(e) => {
-                      setStartTime(e.target.value);
-                    }}
-                    onFocus={() => {
-                      setStartTimeHovercardOpen(true);
-                    }}
-                    onBlur={() => {
-                      if (startTimeRef.current) {
-                        startTimeRef.current.value = new Date(
-                          startTime
-                        ).toLocaleString(undefined, localeStringOptions);
-                      }
-                      handleStartTimeChange(startTime);
-                      setStartTimeHovercardOpen(false);
-                    }}
-                    value={startTime}
-                  />
+                <HoverCardTrigger className="col-span-3">
+                  <>
+                    <Input
+                      id="startTime"
+                      className={cn(
+                        "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
+                        fieldsValidation.startTime ? "border-red-500" : ""
+                      )}
+                      ref={startTimeRef}
+                      onChange={(e) => {
+                        setStartTime(e.target.value);
+                      }}
+                      onFocus={() => {
+                        setStartTimeHovercardOpen(true);
+                      }}
+                      onBlur={() => {
+                        handleStartTimeChange();
+                        setStartTimeHovercardOpen(false);
+                      }}
+                      value={startTime}
+                    />
+                    {fieldsValidation.startTime && (
+                      <span className="text-red-500 text-xs col-span-3 col-start-2">
+                        Please enter a valid date
+                      </span>
+                    )}
+                  </>
                 </HoverCardTrigger>
                 <HoverCardContent side="top">
                   {renderParsedStartDate()}
                 </HoverCardContent>
               </HoverCard>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1">
               <Label htmlFor="endTime" className="text-right">
                 End Time
               </Label>
@@ -348,26 +422,31 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
                 open={endTimeHovercardOpen}
                 onOpenChange={(o) => handleEndHoverCardOpenChange(o, "endTime")}
               >
-                <HoverCardTrigger asChild>
-                  <Input
-                    id="endTime"
-                    className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
-                    ref={endTimeRef}
-                    onChange={(e) => {
-                      setEndTime(e.target.value);
-                    }}
-                    onFocus={() => setEndTimeHovercardOpen(true)}
-                    onBlur={() => {
-                      if (endTimeRef.current) {
-                        endTimeRef.current.value = new Date(
-                          endTime
-                        ).toLocaleString(undefined, localeStringOptions);
-                      }
-                      handleEndTimeChange(endTime);
-                      setEndTimeHovercardOpen(false);
-                    }}
-                    value={endTime}
-                  />
+                <HoverCardTrigger className="col-span-3">
+                  <>
+                    <Input
+                      id="endTime"
+                      className={cn(
+                        "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
+                        fieldsValidation.endTime ? "border-red-500" : ""
+                      )}
+                      ref={endTimeRef}
+                      onChange={(e) => {
+                        setEndTime(e.target.value);
+                      }}
+                      onFocus={() => setEndTimeHovercardOpen(true)}
+                      onBlur={() => {
+                        handleEndTimeChange();
+                        setEndTimeHovercardOpen(false);
+                      }}
+                      value={endTime}
+                    />
+                    {fieldsValidation.endTime && (
+                      <span className="text-red-500 text-xs col-span-3 col-start-2">
+                        Please enter a valid date
+                      </span>
+                    )}
+                  </>
                 </HoverCardTrigger>
                 <HoverCardContent side="top">
                   {renderParsedEndDate()}
@@ -375,7 +454,10 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
               </HoverCard>
             </div>
 
-            <div className="grid grid-cols-4 items-center gap-4 z-50">
+            <div
+              id="user-select"
+              className="grid grid-cols-4 items-center gap-x-4 gap-y-1 z-50"
+            >
               <Label htmlFor="userId" className="text-right">
                 User
               </Label>
@@ -384,23 +466,35 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
                 onOpenChange={setUserPopOpen}
                 modal={false}
               >
-                <PopoverTrigger asChild className="col-span-3">
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={userPopOpen}
-                  >
-                    {userId
-                      ? users.find((user) => user.id === userId)?.firstName
-                      : "Select a user"}
-                    <ChevronsUpDown className="opacity-50" />
-                  </Button>
+                <PopoverTrigger className="col-span-3">
+                  <>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={userPopOpen}
+                      className={cn(
+                        "w-full",
+                        fieldsValidation.userId ? "border-red-500" : ""
+                      )}
+                      type="button"
+                    >
+                      {userId
+                        ? users.find((user) => user.id === userId)?.firstName
+                        : "Select a user"}
+                      <ChevronsUpDown className="opacity-50" />
+                    </Button>
+                    {fieldsValidation.userId && (
+                      <span className="text-red-500 text-xs col-span-3 col-start-2">
+                        Please select a user
+                      </span>
+                    )}
+                  </>
                 </PopoverTrigger>
                 <PopoverContent className="w-[274px]">
                   <Command>
                     <CommandInput
                       placeholder="Search user..."
-                      className="h-9"
+                      className={cn("h-9")}
                     />
                     <CommandList>
                       <CommandEmpty>No user found.</CommandEmpty>
@@ -431,7 +525,10 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div
+              id="position-select"
+              className="grid grid-cols-4 items-center gap-x-4 gap-y-1"
+            >
               <Label htmlFor="userId" className="text-right">
                 Position
               </Label>
@@ -440,19 +537,31 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
                 onOpenChange={setPositionPopOpen}
                 modal={false}
               >
-                <PopoverTrigger asChild className="col-span-3">
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={positionPopOpen}
-                  >
-                    {positionId
-                      ? positions.find(
-                          (position) => position._id === positionId
-                        )?.name
-                      : "Select a position"}
-                    <ChevronsUpDown className="opacity-50" />
-                  </Button>
+                <PopoverTrigger className="col-span-3">
+                  <div className="">
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={positionPopOpen}
+                      className={cn(
+                        "w-full",
+                        fieldsValidation.positionId ? "border-red-500" : ""
+                      )}
+                      type="button"
+                    >
+                      {positionId
+                        ? positions.find(
+                            (position) => position._id === positionId
+                          )?.name
+                        : "Select a position"}
+                      <ChevronsUpDown className="opacity-50" />
+                    </Button>
+                    {fieldsValidation.positionId && (
+                      <span className="text-red-500 text-xs col-span-3 col-start-2">
+                        Please select a position
+                      </span>
+                    )}
+                  </div>
                 </PopoverTrigger>
                 <PopoverContent asChild className="w-[274px]">
                   <Command>
@@ -494,16 +603,16 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
               </Popover>
             </div>
           </div>
-          <DialogFooter>
-            <Button disabled={loading} type="submit">
-              {loading ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                "Create Shift"
-              )}
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter>
+          <Button disabled={loading} onClick={handleSubmit}>
+            {loading ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin/g" />
+            ) : (
+              "Create Shift"
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

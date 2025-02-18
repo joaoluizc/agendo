@@ -197,19 +197,20 @@ export default function CreateShiftDialog({
     event.preventDefault();
     setLoading(true);
 
-    const newShift: NewShift = {
-      startTime: new Date(startTime).toISOString(),
-      endTime: new Date(endTime).toISOString(),
-      userId,
-      positionId,
-    };
-
     let responseData: { message: string; details: string; data: Shift } = {
       message: "",
       details: "",
       data: {} as Shift,
     };
+
     try {
+      const newShift: NewShift = {
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date(endTime).toISOString(),
+        userId,
+        positionId,
+      };
+
       const response = await fetch("/api/shift/new", {
         method: "POST",
         headers: {

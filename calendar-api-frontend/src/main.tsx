@@ -41,6 +41,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <div className="flex min-h-screen w-full flex-col font-sf">
       <RouterProvider router={router} />
     </div>
-    <Toaster visibleToasts={6} />
+    <Toaster visibleToasts={6} richColors />
   </React.StrictMode>
 );
