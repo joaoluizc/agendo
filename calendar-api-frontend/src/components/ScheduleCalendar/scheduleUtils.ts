@@ -62,8 +62,6 @@ export const getShifts = async (
   const data: SortedCalendar = await response.json();
   // const sortedData = sortShifts(data);
 
-  console.log('successfully fetched shifts');
-  console.log(data);
   return data;
 }
 
@@ -74,12 +72,9 @@ export const getShifts = async (
 */
 export const getGCalendarEvents = async (date: Date): Promise<CalendarUser[]> => {
   const { todayISO: selectedDate } = utils.getLocalTimeframeISO(date)
-  console.log('1. fetching google calendar events');
   const response = await fetch(`/api/gcalendar/all-events?date=${selectedDate}`);
   
   const data: GetCalEventsResponse = await response.json();
-
-  console.log('2. fetched google calendar events: ', data);
 
   if (response.status === 204 && 'message' in data) {
     toast.error(data.message);
@@ -117,8 +112,6 @@ export const getGCalendarEvents = async (date: Date): Promise<CalendarUser[]> =>
         };
       });
     }
-
-    console.log('3. filtered data: ', filteredData)
 
     data?.errors.forEach((user) => {
       toast.error(`Failed to fetch calendar events for ${user.firstName}`, {
@@ -211,13 +204,11 @@ export const prettyGCalTime = (start: string, end: string) => {
 //         // Create unique identifier for this overlap pair
 //         const overlapId = [event1.id, event2.id].sort().join('-');
 //         overlapSet.add(overlapId);
-//         console.log('Overlap detected:', overlapId, event1.summary, event2.summary);
 //       }
 //     }
 //   });
 
 //   // Return total number of unique overlaps
-//   console.log('Total unique overlaps:', overlapSet.size);
 //   return overlapSet.size + 1;
 // };
 
@@ -242,10 +233,7 @@ export const calculateOverlaps = (events: GCalendarEventList) => {
       const startLast = new Date(lastEvent.start.dateTime).getTime();
       const endLast = new Date(lastEvent.end.dateTime).getTime();
 
-      console.log('startCurr:', startCurr, 'endCurr:', endCurr, 'startLast:', startLast, 'endLast:', endLast);
-
       if (startLast < endCurr && startCurr < endLast) {
-        console.log('overlap detected: ', currEvent.summary, lastEvent.summary);
         if (eventRows[j + 1]) return true;
         currEvent.gridRowNumber = j + 2;
         eventRows[j + 1] = [currEvent];
@@ -261,8 +249,6 @@ export const calculateOverlaps = (events: GCalendarEventList) => {
   });
 
   // Return total number of unique overlaps
-  console.log('Total unique overlaps:', eventRows.length);
-  console.log('Events organized:', eventsWithGridNo);
   return { numberOfEventOverlaps: eventRows.length, eventsOrganized: eventsWithGridNo }
 };
 
@@ -286,11 +272,9 @@ export const calculateShiftOverlapAmount = (shifts: Shift[]) => {
         // Create unique identifier for this overlap pair
         const overlapId = [shift1._id, shift2._id].sort().join('-');
         overlapSet.add(overlapId);
-        console.log('Shift overlap detected:', overlapId);
       }
     }
   });
 
-  console.log('Total shift overlaps:', overlapSet.size);
   return overlapSet.size + 1; // Add 1 for base height
 };

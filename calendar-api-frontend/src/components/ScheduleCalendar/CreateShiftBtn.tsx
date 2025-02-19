@@ -202,18 +202,34 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     const newFieldsValidation = { ...fieldsValidation };
     let isValid = true;
 
-    if (!chrono.parseDate(startTime)) {
+    const startTimeParsed = chrono.parseDate(startTime);
+    const endTimeParsed = chrono.parseDate(endTime);
+
+    if (!startTimeParsed) {
       console.log("Invalid start time:", startTime);
       newFieldsValidation.startTime = true;
       isValid = false;
+      toast.error("Invalid start time");
     } else {
       newFieldsValidation.startTime = false;
     }
 
-    if (!chrono.parseDate(endTime)) {
+    if (!endTimeParsed) {
       console.log("Invalid end time:", endTime);
       newFieldsValidation.endTime = true;
       isValid = false;
+      toast.error("Invalid end time");
+    } else {
+      newFieldsValidation.endTime = false;
+    }
+
+    if (
+      new Date(startTimeParsed!).getTime() >= new Date(endTimeParsed!).getTime()
+    ) {
+      console.log("End time is before start time");
+      newFieldsValidation.endTime = true;
+      isValid = false;
+      toast.error("End time is before start time");
     } else {
       newFieldsValidation.endTime = false;
     }
@@ -221,6 +237,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     if (!userId) {
       newFieldsValidation.userId = true;
       isValid = false;
+      toast.error("Please select a user");
     } else {
       newFieldsValidation.userId = false;
     }
@@ -228,18 +245,29 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     if (!positionId) {
       newFieldsValidation.positionId = true;
       isValid = false;
+      toast.error("Please select a position");
     } else {
       newFieldsValidation.positionId = false;
     }
 
     setFieldsValidation(newFieldsValidation);
 
-    return isValid;
+    if (isValid) {
+      return {
+        startTime: new Date(startTimeParsed!).toISOString(),
+        endTime: new Date(endTimeParsed!).toISOString(),
+        userId,
+        positionId,
+      };
+    } else {
+      return null;
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!validateFields()) return;
+    const newShift = validateFields();
+    if (!newShift) return;
     setLoading(true);
 
     let responseData: { message: string; details: string; data: Shift } = {
@@ -249,26 +277,6 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     };
 
     try {
-      console.log("startTime: ", startTime);
-      console.log("endTime: ", endTime);
-      const startTimeParsed = chrono.parseDate(startTime) || new Date();
-      const endTimeParsed = chrono.parseDate(endTime) || new Date();
-      console.log(
-        "startTime post-chrono: ",
-        new Date(startTimeParsed).toISOString()
-      );
-      console.log(
-        "endTime post-chrono: ",
-        new Date(endTimeParsed).toISOString()
-      );
-
-      const newShift: NewShift = {
-        startTime: new Date(startTimeParsed).toISOString(),
-        endTime: new Date(endTimeParsed).toISOString(),
-        userId,
-        positionId,
-      };
-
       const response = await fetch("/api/shift/new", {
         method: "POST",
         headers: {
