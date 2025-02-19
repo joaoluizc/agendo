@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +14,7 @@ import { Check, ChevronsUpDown, LoaderCircle, SquarePen } from "lucide-react";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { NewShift, Shift } from "@/types/shiftTypes";
+import { Shift } from "@/types/shiftTypes";
 import { cn } from "@/lib/utils";
 import { Input } from "../ui/input";
 import { useUserSettings } from "@/providers/useUserSettings";
@@ -37,7 +37,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "../ui/hover-card";
-import { roundToNearestHours } from "date-fns";
+import { roundToNearestHours, setHours, getHours } from "date-fns";
 
 type NewShiftFormProps = {
   selectedDate: Date;
@@ -50,27 +50,42 @@ const localeStringOptions: { dateStyle: "short"; timeStyle: "short" } = {
   timeStyle: "short",
 };
 
-export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
-  const startTimeInit = roundToNearestHours(new Date(selectedDate.getTime()), {
-    roundingMethod: "ceil",
-  });
-  const endTimeInit = roundToNearestHours(
-    new Date(selectedDate.getTime() + ONE_HOUR),
-    { roundingMethod: "ceil" }
-  );
+const useInitialTimes = (selectedDate: Date) => {
+  console.log("Calculating initial times for:", selectedDate);
+  return useMemo(() => {
+    const newDate = new Date(selectedDate);
+    const dateRounded = roundToNearestHours(newDate, {
+      roundingMethod: "floor",
+    });
+    const dateWithTime = setHours(dateRounded, getHours(new Date()) + 1);
 
-  const { events, shifts, setEvents, setShifts } = useSchedule();
-  const [isOpen, setIsOpen] = useState(false);
+    const start = roundToNearestHours(new Date(dateWithTime.getTime()), {
+      roundingMethod: "ceil",
+    });
+    const end = roundToNearestHours(
+      new Date(dateWithTime.getTime() + ONE_HOUR),
+      { roundingMethod: "ceil" }
+    );
+    return { startTimeInit: start, endTimeInit: end };
+  }, [selectedDate]);
+};
+
+export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
+  const { startTimeInit, endTimeInit } = useInitialTimes(selectedDate);
   const [startTime, setStartTime] = useState<string>(
     new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
   );
   const [endTime, setEndTime] = useState<string>(
     new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
   );
+
+  const { events, shifts, setEvents, setShifts } = useSchedule();
+  const [isOpen, setIsOpen] = useState(false);
   const [userId, setUserId] = useState<string>("");
   const [positionId, setPositionId] = useState<string>("");
   const [userPopOpen, setUserPopOpen] = useState(false);
   const [positionPopOpen, setPositionPopOpen] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const {
     type: userType,
@@ -92,6 +107,16 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
 
   const [startTimeHovercardOpen, setStartTimeHovercardOpen] = useState(false);
   const [endTimeHovercardOpen, setEndTimeHovercardOpen] = useState(false);
+
+  useEffect(() => {
+    console.log("Updating startTime and endTime for:", selectedDate);
+    setStartTime(
+      new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
+    );
+    setEndTime(
+      new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
+    );
+  }, [selectedDate]);
 
   const initializeDatepickers = () => {
     if (startDatepickerRef.current) startDatepickerRef.current.destroy();
@@ -318,8 +343,12 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     setIsOpen(false); // Close the dialog
 
     // Reset form fields
-    setStartTime("");
-    setEndTime("");
+    setStartTime(
+      new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
+    );
+    setEndTime(
+      new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
+    );
     setUserId("");
     setPositionId("");
 
