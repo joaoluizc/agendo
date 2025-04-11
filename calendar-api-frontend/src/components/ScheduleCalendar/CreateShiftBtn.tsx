@@ -51,7 +51,6 @@ const localeStringOptions: { dateStyle: "short"; timeStyle: "short" } = {
 };
 
 const useInitialTimes = (selectedDate: Date) => {
-  console.log("Calculating initial times for:", selectedDate);
   return useMemo(() => {
     const newDate = new Date(selectedDate);
     const dateRounded = roundToNearestHours(newDate, {
@@ -109,7 +108,6 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
   const [endTimeHovercardOpen, setEndTimeHovercardOpen] = useState(false);
 
   useEffect(() => {
-    console.log("Updating startTime and endTime for:", selectedDate);
     setStartTime(
       new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
     );

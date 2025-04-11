@@ -16,8 +16,14 @@ export type SortedCalendar = {
 }
 
 export interface NewShift {
+  _id?: string;
   startTime: string;
   endTime: string;
   userId: string;
   positionId: string;
+}
+
+export interface ShiftInDrag {
+  isBeingDragged: boolean;
+  data: Shift | null;
 }

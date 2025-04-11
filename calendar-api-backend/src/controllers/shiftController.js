@@ -264,9 +264,10 @@ async function updateShift(req, res) {
     shift.isSynced = false;
   }
 
+  let updatedShift;
   try {
-    await shiftService.updateShift(shiftId, shift);
-    res.status(200).json({ message: "Shift updated" });
+    updatedShift = await shiftService.updateShift(shiftId, shift);
+    res.status(200).json({ message: "Shift updated", data: updatedShift });
   } catch (err) {
     console.error(err.message);
     res
@@ -274,7 +275,7 @@ async function updateShift(req, res) {
       .json({ message: `caught error when updating shift: ${err.message}` });
   }
 
-  return shift;
+  return updatedShift;
 }
 
 async function deleteShift(req, res) {

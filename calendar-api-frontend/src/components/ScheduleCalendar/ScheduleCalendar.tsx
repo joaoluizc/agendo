@@ -160,7 +160,7 @@ const Schedule = () => {
         <DuplicateShifts selectedDate={selectedDate} />
       </div>
       {!scheduleIsLoading ? (
-        <div className="flex flex-col">
+        <div id="schedule-wrapper" className="flex flex-col">
           <CalendarHeader />
           {/* User rows */}
           {allUsers
