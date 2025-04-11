@@ -18,7 +18,7 @@ type ShiftProps = {
 
 export function Shift(props: ShiftProps) {
   const { shift, selectedDate, reloadScheduleCalendar } = props;
-  const { shiftInDrag, setShiftInDrag } = useSchedule();
+  const { setShiftInDrag } = useSchedule();
   const { allPositions, type: userType } = useUserSettings();
   const [isOpen, setIsOpen] = useState(false);
   const [handleOpenChange, setHandleOpenChange] = useState<
