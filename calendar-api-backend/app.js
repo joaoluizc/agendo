@@ -57,7 +57,7 @@ app.use("/gcalendar", gCalendarRouter);
 app.use("/sling", requireAuth(), slingRouter);
 app.use("/position", requireAuth(), positionRouter);
 // app.use("/position", addRequestId, positionRouter);
-app.use("/user", requireAuth(), userRouter);
+app.use("/user", userRouter);
 // app.use("/shift", addRequestId, shiftRouter); // UNPROTECTED FOR DEV TESTING
 app.use("/shift", requireAuth(), shiftRouter);
 
