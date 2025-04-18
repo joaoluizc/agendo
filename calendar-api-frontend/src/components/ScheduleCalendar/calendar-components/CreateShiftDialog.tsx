@@ -44,7 +44,8 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { todayButton } from "./today-button-datepicker";
-import { useSchedule } from "@/providers/useSchedule";
+import useAddShiftToSchedule from "@/hooks/useAddShiftToSchedule";
+import { Badge } from "@/components/ui/badge";
 
 type NewShiftFormProps = {
   selectedDate: Date;
@@ -64,7 +65,7 @@ export default function CreateShiftDialog({
   selectedUserId,
   children,
 }: NewShiftFormProps) {
-  const { events, shifts, setEvents, setShifts } = useSchedule();
+  const addShiftsToSchedule = useAddShiftToSchedule();
   const [isOpen, setIsOpen] = useState(false);
   const [startTime, setStartTime] = useState<string>(
     selectedDate.toLocaleString(undefined, localeStringOptions)
@@ -76,7 +77,9 @@ export default function CreateShiftDialog({
     )
   );
 
-  const [userId, setUserId] = useState<string>(selectedUserId);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([
+    selectedUserId,
+  ]);
   const [positionId, setPositionId] = useState<string>("");
   const [userPopOpen, setUserPopOpen] = useState(false);
   const [positionPopOpen, setPositionPopOpen] = useState(false);
@@ -91,7 +94,7 @@ export default function CreateShiftDialog({
   const [fieldsValidation, setFieldsValidation] = useState({
     startTime: false,
     endTime: false,
-    userId: false,
+    userIds: false,
     positionId: false,
   });
 
@@ -236,12 +239,12 @@ export default function CreateShiftDialog({
       newFieldsValidation.endTime = false;
     }
 
-    if (!userId) {
-      newFieldsValidation.userId = true;
+    if (selectedUserIds.length === 0) {
+      newFieldsValidation.userIds = true;
       isValid = false;
       toast.error("Please select a user");
     } else {
-      newFieldsValidation.userId = false;
+      newFieldsValidation.userIds = false;
     }
 
     if (!positionId) {
@@ -258,7 +261,7 @@ export default function CreateShiftDialog({
       return {
         startTime: new Date(startTimeParsed!).toISOString(),
         endTime: new Date(endTimeParsed!).toISOString(),
-        userId,
+        userIds: selectedUserIds,
         positionId,
       };
     } else {
@@ -272,10 +275,10 @@ export default function CreateShiftDialog({
     if (!newShift) return;
     setLoading(true);
 
-    let responseData: { message: string; details: string; data: Shift } = {
+    let responseData: { message: string; details: string; data: Shift[] } = {
       message: "",
       details: "",
-      data: {} as Shift,
+      data: [{}] as Shift[],
     };
 
     try {
@@ -327,10 +330,11 @@ export default function CreateShiftDialog({
         localeStringOptions
       )
     );
-    setUserId(selectedUserId);
+    setSelectedUserIds([selectedUserId]);
     setPositionId("");
 
-    const shiftDate = new Date(responseData.data.startTime);
+    // Check if the created shift's date matches the selected date on the rendered schedule
+    const shiftDate = new Date(responseData.data[0].startTime);
     const scheduleDate = new Date(selectedDate);
     if (
       shiftDate.getDate() !== scheduleDate.getDate() ||
@@ -340,34 +344,10 @@ export default function CreateShiftDialog({
       return;
     }
 
-    const createdShift = responseData.data;
+    const createdShifts = responseData.data;
 
-    if (!shifts[createdShift.userId]) {
-      shifts[createdShift.userId] = [];
-    }
-
-    shifts[createdShift.userId].push(createdShift);
-
-    shifts[createdShift.userId].sort(
-      (a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
-
-    setShifts({ ...shifts });
-
-    if (createdShift.isSynced) {
-      events
-        .find((event) => event.userId === createdShift.userId)
-        ?.events.push(createdShift.syncedEvent);
-      events
-        .find((event) => event.userId === createdShift.userId)
-        ?.events.sort((a, b) => {
-          return (
-            new Date(a.start.dateTime).getTime() -
-            new Date(b.start.dateTime).getTime()
-          );
-        });
-      setEvents([...events]);
+    for (const shift of createdShifts) {
+      addShiftsToSchedule(shift);
     }
   };
 
@@ -472,47 +452,43 @@ export default function CreateShiftDialog({
               </HoverCard>
             </div>
 
-            <div
-              id="user-select"
-              className="grid grid-cols-4 items-center gap-x-4 gap-y-1 z-50"
-            >
+            <div className="grid grid-cols-4 items-center gap-4 z-50">
               <Label htmlFor="userId" className="text-right">
-                User
+                Users
               </Label>
               <Popover
                 open={userPopOpen}
                 onOpenChange={setUserPopOpen}
                 modal={false}
               >
-                <PopoverTrigger className="col-span-3">
-                  <>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={userPopOpen}
-                      className={cn(
-                        "w-full",
-                        fieldsValidation.userId ? "border-red-500" : ""
-                      )}
-                      type="button"
-                    >
-                      {userId
-                        ? users.find((user) => user.id === userId)?.firstName
-                        : "Select a user"}
-                      <ChevronsUpDown className="opacity-50" />
-                    </Button>
-                    {fieldsValidation.userId && (
-                      <span className="text-red-500 text-xs col-span-3 col-start-2">
-                        Please select a user
-                      </span>
-                    )}
-                  </>
+                <PopoverTrigger asChild className="col-span-3">
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={userPopOpen}
+                    className="h-auto"
+                  >
+                    <div className="flex flex-wrap gap-y-1">
+                      {selectedUserIds.length > 0
+                        ? selectedUserIds.map((id) => (
+                            <Badge
+                              variant="secondary"
+                              className="mr-1"
+                              key={id}
+                            >
+                              {users.find((user) => user.id === id)?.firstName}
+                            </Badge>
+                          ))
+                        : "Select users"}
+                    </div>
+                    <ChevronsUpDown className="opacity-50" />
+                  </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[274px]">
                   <Command>
                     <CommandInput
                       placeholder="Search user..."
-                      className={cn("h-9")}
+                      className="h-9"
                     />
                     <CommandList>
                       <CommandEmpty>No user found.</CommandEmpty>
@@ -521,18 +497,21 @@ export default function CreateShiftDialog({
                           <CommandItem
                             key={user.firstName}
                             value={user.firstName}
-                            onSelect={(currentValue) => {
-                              setUserId(
-                                currentValue === user.id ? "" : user.id
+                            onSelect={() => {
+                              setSelectedUserIds((prev) =>
+                                prev.includes(user.id)
+                                  ? prev.filter((id) => id !== user.id)
+                                  : [...prev, user.id]
                               );
-                              setUserPopOpen(false);
                             }}
                           >
                             {user.firstName}
                             <Check
                               className="w-4 h-4 ml-auto"
                               style={{
-                                display: userId === user.id ? "block" : "none",
+                                display: selectedUserIds.includes(user.id)
+                                  ? "block"
+                                  : "none",
                               }}
                             />
                           </CommandItem>
@@ -547,7 +526,7 @@ export default function CreateShiftDialog({
               id="position-select"
               className="grid grid-cols-4 items-center gap-x-4 gap-y-1"
             >
-              <Label htmlFor="userId" className="text-right">
+              <Label htmlFor="position-select" className="text-right">
                 Position
               </Label>
               <Popover

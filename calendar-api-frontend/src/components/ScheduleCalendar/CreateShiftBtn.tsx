@@ -31,13 +31,14 @@ import {
 import { CommandGroup } from "cmdk";
 import * as chrono from "chrono-node";
 import { todayButton } from "./calendar-components/today-button-datepicker";
-import { useSchedule } from "@/providers/useSchedule";
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "../ui/hover-card";
 import { roundToNearestHours, setHours, getHours } from "date-fns";
+import { Badge } from "../ui/badge";
+import useAddShiftToSchedule from "@/hooks/useAddShiftToSchedule";
 
 type NewShiftFormProps = {
   selectedDate: Date;
@@ -78,9 +79,9 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
   );
 
-  const { events, shifts, setEvents, setShifts } = useSchedule();
+  const addShiftsToSchedule = useAddShiftToSchedule();
   const [isOpen, setIsOpen] = useState(false);
-  const [userId, setUserId] = useState<string>("");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [positionId, setPositionId] = useState<string>("");
   const [userPopOpen, setUserPopOpen] = useState(false);
   const [positionPopOpen, setPositionPopOpen] = useState(false);
@@ -100,7 +101,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
   const [fieldsValidation, setFieldsValidation] = useState({
     startTime: false,
     endTime: false,
-    userId: false,
+    userIds: false,
     positionId: false,
   });
 
@@ -257,12 +258,12 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       newFieldsValidation.endTime = false;
     }
 
-    if (!userId) {
-      newFieldsValidation.userId = true;
+    if (selectedUserIds.length === 0) {
+      newFieldsValidation.userIds = true;
       isValid = false;
-      toast.error("Please select a user");
+      toast.error("Please select at least one user");
     } else {
-      newFieldsValidation.userId = false;
+      newFieldsValidation.userIds = false;
     }
 
     if (!positionId) {
@@ -279,7 +280,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       return {
         startTime: new Date(startTimeParsed!).toISOString(),
         endTime: new Date(endTimeParsed!).toISOString(),
-        userId,
+        userIds: selectedUserIds,
         positionId,
       };
     } else {
@@ -287,16 +288,28 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     }
   };
 
+  const resetFormFields = () => {
+    setStartTime(
+      new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
+    );
+    setEndTime(
+      new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
+    );
+    setSelectedUserIds([]);
+    setPositionId("");
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const newShift = validateFields();
     if (!newShift) return;
+    console.log("New Shift:", newShift);
     setLoading(true);
 
-    let responseData: { message: string; details: string; data: Shift } = {
+    let responseData: { message: string; details: string; data: Shift[] } = {
       message: "",
       details: "",
-      data: {} as Shift,
+      data: [{}] as Shift[],
     };
 
     try {
@@ -339,18 +352,10 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     });
 
     setIsOpen(false); // Close the dialog
+    resetFormFields();
 
-    // Reset form fields
-    setStartTime(
-      new Date(startTimeInit).toLocaleString(undefined, localeStringOptions)
-    );
-    setEndTime(
-      new Date(endTimeInit).toLocaleString(undefined, localeStringOptions)
-    );
-    setUserId("");
-    setPositionId("");
-
-    const shiftDate = new Date(responseData.data.startTime);
+    // Check if the created shift's date matches the selected date on the rendered schedule
+    const shiftDate = new Date(responseData.data[0].startTime);
     const scheduleDate = new Date(selectedDate);
     if (
       shiftDate.getDate() !== scheduleDate.getDate() ||
@@ -360,34 +365,10 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
       return;
     }
 
-    const createdShift = responseData.data;
+    const createdShifts = responseData.data;
 
-    if (!shifts[createdShift.userId]) {
-      shifts[createdShift.userId] = [];
-    }
-
-    shifts[createdShift.userId].push(createdShift);
-
-    shifts[createdShift.userId].sort(
-      (a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
-
-    setShifts({ ...shifts });
-
-    if (createdShift.isSynced) {
-      events
-        .find((event) => event.userId === createdShift.userId)
-        ?.events.push(createdShift.syncedEvent);
-      events
-        .find((event) => event.userId === createdShift.userId)
-        ?.events.sort((a, b) => {
-          return (
-            new Date(a.start.dateTime).getTime() -
-            new Date(b.start.dateTime).getTime()
-          );
-        });
-      setEvents([...events]);
+    for (const shift of createdShifts) {
+      addShiftsToSchedule(shift);
     }
   };
 
@@ -502,47 +483,43 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
               </HoverCard>
             </div>
 
-            <div
-              id="user-select"
-              className="grid grid-cols-4 items-center gap-x-4 gap-y-1 z-50"
-            >
+            <div className="grid grid-cols-4 items-center gap-4 z-50">
               <Label htmlFor="userId" className="text-right">
-                User
+                Users
               </Label>
               <Popover
                 open={userPopOpen}
                 onOpenChange={setUserPopOpen}
                 modal={false}
               >
-                <PopoverTrigger className="col-span-3">
-                  <>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={userPopOpen}
-                      className={cn(
-                        "w-full",
-                        fieldsValidation.userId ? "border-red-500" : ""
-                      )}
-                      type="button"
-                    >
-                      {userId
-                        ? users.find((user) => user.id === userId)?.firstName
-                        : "Select a user"}
-                      <ChevronsUpDown className="opacity-50" />
-                    </Button>
-                    {fieldsValidation.userId && (
-                      <span className="text-red-500 text-xs col-span-3 col-start-2">
-                        Please select a user
-                      </span>
-                    )}
-                  </>
+                <PopoverTrigger asChild className="col-span-3">
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={userPopOpen}
+                    className="h-auto"
+                  >
+                    <div className="flex flex-wrap gap-y-1">
+                      {selectedUserIds.length > 0
+                        ? selectedUserIds.map((id) => (
+                            <Badge
+                              variant="secondary"
+                              className="mr-1"
+                              key={id}
+                            >
+                              {users.find((user) => user.id === id)?.firstName}
+                            </Badge>
+                          ))
+                        : "Select users"}
+                    </div>
+                    <ChevronsUpDown className="opacity-50" />
+                  </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[274px]">
                   <Command>
                     <CommandInput
                       placeholder="Search user..."
-                      className={cn("h-9")}
+                      className="h-9"
                     />
                     <CommandList>
                       <CommandEmpty>No user found.</CommandEmpty>
@@ -551,18 +528,21 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
                           <CommandItem
                             key={user.firstName}
                             value={user.firstName}
-                            onSelect={(currentValue) => {
-                              setUserId(
-                                currentValue === user.id ? "" : user.id
+                            onSelect={() => {
+                              setSelectedUserIds((prev) =>
+                                prev.includes(user.id)
+                                  ? prev.filter((id) => id !== user.id)
+                                  : [...prev, user.id]
                               );
-                              setUserPopOpen(false);
                             }}
                           >
                             {user.firstName}
                             <Check
                               className="w-4 h-4 ml-auto"
                               style={{
-                                display: userId === user.id ? "block" : "none",
+                                display: selectedUserIds.includes(user.id)
+                                  ? "block"
+                                  : "none",
                               }}
                             />
                           </CommandItem>
@@ -577,7 +557,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
               id="position-select"
               className="grid grid-cols-4 items-center gap-x-4 gap-y-1"
             >
-              <Label htmlFor="userId" className="text-right">
+              <Label htmlFor="position" className="text-right">
                 Position
               </Label>
               <Popover

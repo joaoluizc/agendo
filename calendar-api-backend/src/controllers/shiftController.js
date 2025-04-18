@@ -9,18 +9,18 @@ import { userIsAdmin } from "../utils/userIsAdmin.js";
 import isISODate from "../utils/isISODate.js";
 
 function validateShift(shift) {
-  const requiredFields = ["startTime", "endTime", "userId", "positionId"];
+  const requiredFields = ["startTime", "endTime", "userIds", "positionId"];
 
-  const shiftFieldsExist = validateObjFields(shift, requiredFields);
+  const shiftValidated = validateObjFields(shift, requiredFields);
 
-  shiftFieldsExist.startTime = new Date(shiftFieldsExist.startTime);
-  shiftFieldsExist.endTime = new Date(shiftFieldsExist.endTime);
+  shiftValidated.startTime = new Date(shiftValidated.startTime);
+  shiftValidated.endTime = new Date(shiftValidated.endTime);
 
-  if (shiftFieldsExist.startTime > shiftFieldsExist.endTime) {
+  if (shiftValidated.startTime > shiftValidated.endTime) {
     throw new Error("startTime cannot be after endTime");
   }
 
-  return shiftFieldsExist;
+  return shiftValidated;
 }
 
 async function createShift(req, res) {
@@ -37,58 +37,69 @@ async function createShift(req, res) {
     return res.status(400).json({ message: err.message });
   }
 
-  const shiftUserId = shift.userId;
+  // Check if `userId` is an array
+  const shiftUserIds = Array.isArray(shift.userIds)
+    ? shift.userIds
+    : [shift.userIds];
 
-  let errorAddingToCalendar = false;
-  try {
-    const addedEvent = await gCalendarService.addEventForShift(
-      shiftUserId,
-      shift,
-      req.requestId
-    );
-    if (addedEvent) {
-      shift.isSynced = true;
-      shift.syncedEvent = addedEvent;
-      console.log(`[${req.requestId}] - shift synced with google calendar`);
+  const createdShifts = [];
+  const errors = [];
+
+  for (const shiftUserId of shiftUserIds) {
+    const shiftCopy = { ...shift, userId: shiftUserId };
+
+    try {
+      const addedEvent = await gCalendarService.addEventForShift(
+        shiftUserId,
+        shiftCopy,
+        req.requestId
+      );
+      if (addedEvent) {
+        shiftCopy.isSynced = true;
+        shiftCopy.syncedEvent = addedEvent;
+        console.log(`[${req.requestId}] - shift synced with google calendar`);
+      }
+    } catch (err) {
+      console.error(
+        `[${req.requestId}] Caught error adding created shift to google calendar: `,
+        err.message
+      );
+      shiftCopy.isSynced = false;
     }
-  } catch (err) {
-    console.error(
-      `[${req.requestId}] Caught error adding created shift to google calendar: `,
-      err.message
+
+    let createdShift;
+    try {
+      createdShift = await shiftService.createShift(shiftCopy);
+      createdShifts.push(createdShift);
+    } catch (err) {
+      console.error(`[${req.requestId}]`, err.message);
+      errors.push({
+        userId: shiftUserId,
+        message: `Caught error when creating shift: ${err.message}`,
+      });
+      continue;
+    }
+
+    console.log(
+      `[${
+        req.requestId
+      }] Shift created for user ${shiftUserId}: ${JSON.stringify(
+        createdShift._id
+      )}`
     );
-    shift.isSynced = false;
-    errorAddingToCalendar = true;
   }
 
-  let createdShift;
-  try {
-    createdShift = await shiftService.createShift(shift);
-  } catch (err) {
-    console.error(`[${req.requestId}]`, err.message);
-    return res
-      .status(500)
-      .json({ message: `Caught error when creating shift: ${err.message}` });
-  }
-
-  console.log(
-    `[${req.requestId}] Shift created: ${JSON.stringify(createdShift._id)}`
-  );
-  if (shift.isSynced) {
-    return res
-      .status(201)
-      .json({ message: "Shift created", data: createdShift });
-  }
-  if (errorAddingToCalendar) {
-    return res.status(201).json({
-      message: "Shift created",
-      details: "Not synced. Error adding to google calendar.",
-      data: createdShift,
+  if (errors.length > 0) {
+    return res.status(207).json({
+      message: "Some shifts were created, but there were errors.",
+      createdShifts,
+      errors,
     });
   }
+
   return res.status(201).json({
-    message: "Shift created",
-    details: "Not synced by user's request.",
-    data: createdShift,
+    message: "Shifts created successfully",
+    data: createdShifts,
   });
 }
 
