@@ -22,7 +22,7 @@ import {
   navigationMenuTriggerStyle,
 } from "../ui/navigation-menu";
 import { NavigationMenuItem } from "@radix-ui/react-navigation-menu";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const Header = () => {
@@ -43,9 +43,8 @@ const Header = () => {
   const runLogoClick = () => {
     setNrOfLogoClicks((prevClicks) => {
       const newClicks = prevClicks + 1;
-      console.log(newClicks);
       if (newClicks >= 5) {
-        console.log("got 5!!!");
+        console.log(nrOfLogoClicks);
         const agendoLogoElement = document.getElementById("agendo-logo");
         if (agendoLogoElement) {
           agendoLogoElement.style.transition = "transform 0.5s ease-in-out";
