@@ -15,26 +15,31 @@ function BulkDeselectBtn() {
     useSchedule();
 
   const handleBulkDeselect = () => {
-    if (bulkSelectedShifts.length === 0) return;
-    setBulkSelectedShifts([]);
+    if (bulkSelectedShifts.length === 0) return; // Ensure there are selected shifts
+    setBulkSelectedShifts([]); // Clear the selection
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && isBulkSelectorActive) {
+      event.preventDefault();
+
+      if (bulkSelectedShifts.length === 0) {
+        // Do nothing if no shifts are selected
+        return;
+      }
+
+      toast("Shifts deselected");
+      handleBulkDeselect();
+    }
   };
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isBulkSelectorActive) {
-        event.preventDefault();
-        if (bulkSelectedShifts.length === 0) return;
-        toast("Shifts deselected");
-        handleBulkDeselect();
-      }
-    };
-
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isBulkSelectorActive]);
+  }, [isBulkSelectorActive, bulkSelectedShifts]);
 
   return (
     <TooltipProvider delayDuration={100}>

@@ -88,30 +88,31 @@ function BulkDeleteBtn() {
   };
 
   const handleTriggerClick = (state: boolean) => {
-    if (!isBulkSelectorActive) return;
-    if (bulkSelectedShifts.length === 0) {
-      toast.error("Select at least one shift before deleting.");
-      setConfirmationDialogOpen(false);
-      return;
-    }
     setConfirmationDialogOpen(state);
   };
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Delete" && isBulkSelectorActive) {
-        event.preventDefault(); // Prevent default delete action
-        console.log("Delete key pressed");
-        handleTriggerClick(true);
-      }
-    };
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Delete" && isBulkSelectorActive) {
+      event.preventDefault(); // Prevent default delete action
 
+      if (bulkSelectedShifts.length === 0) {
+        // Show toast if no shifts are selected
+        toast.error("Select at least one shift before deleting.");
+        return;
+      }
+
+      console.log("Delete key pressed");
+      setConfirmationDialogOpen(true); // Open the confirmation dialog directly
+    }
+  };
+
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isBulkSelectorActive]);
+  }, [isBulkSelectorActive, bulkSelectedShifts]);
 
   return (
     <AlertDialog
