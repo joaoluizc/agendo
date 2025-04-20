@@ -3,7 +3,7 @@ import { Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
 import agendoLogoLight from "../../resources/agendo-logo.svg";
 import agendoLogoDark from "../../resources/agendo-logo-dark.svg";
-
+import agendoAudio from "../../resources/agendo.mp3";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,11 +22,13 @@ import {
   navigationMenuTriggerStyle,
 } from "../ui/navigation-menu";
 import { NavigationMenuItem } from "@radix-ui/react-navigation-menu";
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const Header = () => {
   const { setTheme, theme } = useTheme();
+  const logoRef = useRef(null);
+  const [nrOfLogoClicks, setNrOfLogoClicks] = useState<number>(0);
 
   const setSiteTheme = (theme: string) => {
     if (theme === "light") {
@@ -38,25 +40,58 @@ const Header = () => {
     }
   };
 
+  const runLogoClick = () => {
+    setNrOfLogoClicks((prevClicks) => {
+      const newClicks = prevClicks + 1;
+      console.log(newClicks);
+      if (newClicks >= 5) {
+        console.log("got 5!!!");
+        const agendoLogoElement = document.getElementById("agendo-logo");
+        if (agendoLogoElement) {
+          agendoLogoElement.style.transition = "transform 0.5s ease-in-out";
+          agendoLogoElement.style.transform = "rotate(360deg)";
+          setTimeout(() => {
+            agendoLogoElement.style.transform = "rotate(0deg)";
+          }, 500);
+        }
+        const audio = new Audio(agendoAudio);
+        audio.play();
+        return 0;
+      }
+      return newClicks;
+    });
+    setTimeout(() => {
+      setNrOfLogoClicks(0);
+    }, 5000);
+  };
+
+  useEffect(() => {
+    if (logoRef.current) {
+      const agendoLogoElement = document.getElementById("agendo-logo");
+      agendoLogoElement?.addEventListener("click", runLogoClick);
+    }
+  }, []);
+
   return (
     <>
       <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50">
         <NavigationMenu className="hidden md:flex gap-4 items-center flex-1">
           <NavigationMenuList>
             <NavigationMenuItem>
-              <NavLink
-                to="/"
+              <div
                 className="flex items-center gap-2 text-lg font-semibold md:text-base h-6 w-6 mr-3"
+                ref={logoRef}
+                id="agendo-logo"
               >
-                <NavigationMenuLink
+                <div
                   className={`group inline-flex h-6 w-6 items-center justify-center rounded-md bg-background px-0.5 py-0.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-accent/50 data-[state=open]:bg-accent/50`}
                 >
                   <img
                     src={theme === "light" ? agendoLogoDark : agendoLogoLight}
                   />
                   <span className="sr-only">Agendo</span>
-                </NavigationMenuLink>
-              </NavLink>
+                </div>
+              </div>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavLink

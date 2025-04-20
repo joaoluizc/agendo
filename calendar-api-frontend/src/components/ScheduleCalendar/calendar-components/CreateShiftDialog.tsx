@@ -11,14 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
-// import {
-//   Select,
-//   SelectContent,
-//   SelectGroup,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
@@ -38,11 +30,6 @@ import {
 } from "../../ui/command";
 import { CommandGroup } from "cmdk";
 import * as chrono from "chrono-node";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 import { todayButton } from "./today-button-datepicker";
 import useAddShiftToSchedule from "@/hooks/useAddShiftToSchedule";
 import { Badge } from "@/components/ui/badge";
@@ -98,9 +85,6 @@ export default function CreateShiftDialog({
     positionId: false,
   });
 
-  const [startTimeHovercardOpen, setStartTimeHovercardOpen] = useState(false);
-  const [endTimeHovercardOpen, setEndTimeHovercardOpen] = useState(false);
-
   const initializeDatepickers = () => {
     if (startDatepickerRef.current) startDatepickerRef.current.destroy();
     if (endDatepickerRef.current) endDatepickerRef.current.destroy();
@@ -123,6 +107,7 @@ export default function CreateShiftDialog({
         minutesStep: 30,
         buttons: [todayButton, "clear"],
         toggleSelected: false,
+        keyboardNav: false,
       }
     );
     setTimeout(() => {
@@ -147,6 +132,7 @@ export default function CreateShiftDialog({
         minutesStep: 30,
         buttons: [todayButton, "clear"],
         toggleSelected: false,
+        keyboardNav: false,
       }
     );
   };
@@ -175,32 +161,6 @@ export default function CreateShiftDialog({
       // Initialize datepickers when dialog opens
       setTimeout(initializeDatepickers, 0);
     }
-  };
-
-  const handleStartHoverCardOpenChange = (open: boolean, elementId: string) => {
-    if (document.activeElement?.id !== elementId) {
-      setStartTimeHovercardOpen(open);
-    }
-  };
-
-  const handleEndHoverCardOpenChange = (open: boolean, elementId: string) => {
-    if (document.activeElement?.id !== elementId) {
-      setEndTimeHovercardOpen(open);
-    }
-  };
-
-  const renderParsedStartDate = () => {
-    const parsedDate = chrono.parseDate(startTime);
-    return parsedDate
-      ? parsedDate.toLocaleString(undefined, localeStringOptions)
-      : "Invalid date";
-  };
-
-  const renderParsedEndDate = () => {
-    const parsedDate = chrono.parseDate(endTime);
-    return parsedDate
-      ? parsedDate.toLocaleString(undefined, localeStringOptions)
-      : "Invalid date";
   };
 
   const validateFields = () => {
@@ -352,10 +312,14 @@ export default function CreateShiftDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent
-        className={cn("sm:max-w-[425px]", "air-datepicker-global")}
+        className={cn(
+          "sm:max-w-[425px]",
+          "air-datepicker-global",
+          "pointer-events-auto"
+        )}
       >
         <DialogHeader>
           <DialogTitle>Create New Shift</DialogTitle>
@@ -373,86 +337,59 @@ export default function CreateShiftDialog({
               >
                 Start Time
               </Label>
-              <HoverCard
-                open={startTimeHovercardOpen}
-                onOpenChange={(o) =>
-                  handleStartHoverCardOpenChange(o, "startTime")
-                }
-              >
-                <HoverCardTrigger className="col-span-3">
-                  <>
-                    <Input
-                      id="startTime"
-                      className={cn(
-                        "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
-                        fieldsValidation.startTime ? "border-red-500" : ""
-                      )}
-                      ref={startTimeRef}
-                      onChange={(e) => {
-                        setStartTime(e.target.value);
-                      }}
-                      onFocus={() => {
-                        setStartTimeHovercardOpen(true);
-                      }}
-                      onBlur={() => {
-                        handleStartTimeChange();
-                        setStartTimeHovercardOpen(false);
-                      }}
-                      value={startTime}
-                    />
-                    {fieldsValidation.startTime && (
-                      <span className="text-red-500 text-xs col-span-3 col-start-2">
-                        Please enter a valid date
-                      </span>
-                    )}
-                  </>
-                </HoverCardTrigger>
-                <HoverCardContent side="top">
-                  {renderParsedStartDate()}
-                </HoverCardContent>
-              </HoverCard>
+              <>
+                <Input
+                  id="startTime"
+                  className={cn(
+                    "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
+                    fieldsValidation.startTime ? "border-red-500" : ""
+                  )}
+                  ref={startTimeRef}
+                  onChange={(e) => {
+                    setStartTime(e.target.value);
+                  }}
+                  onFocus={() => {}}
+                  onBlur={() => {
+                    handleStartTimeChange();
+                  }}
+                  value={startTime}
+                />
+                {fieldsValidation.startTime && (
+                  <span className="text-red-500 text-xs col-span-3 col-start-2">
+                    Please enter a valid date
+                  </span>
+                )}
+              </>
             </div>
             <div className="grid grid-cols-4 items-center gap-x-4 gap-y-1">
               <Label htmlFor="endTime" className="text-right">
                 End Time
               </Label>
-              <HoverCard
-                open={endTimeHovercardOpen}
-                onOpenChange={(o) => handleEndHoverCardOpenChange(o, "endTime")}
-              >
-                <HoverCardTrigger className="col-span-3">
-                  <>
-                    <Input
-                      id="endTime"
-                      className={cn(
-                        "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
-                        fieldsValidation.endTime ? "border-red-500" : ""
-                      )}
-                      ref={endTimeRef}
-                      onChange={(e) => {
-                        setEndTime(e.target.value);
-                      }}
-                      onFocus={() => setEndTimeHovercardOpen(true)}
-                      onBlur={() => {
-                        handleEndTimeChange();
-                        setEndTimeHovercardOpen(false);
-                      }}
-                      value={endTime}
-                    />
-                    {fieldsValidation.endTime && (
-                      <span className="text-red-500 text-xs col-span-3 col-start-2">
-                        Please enter a valid date
-                      </span>
-                    )}
-                  </>
-                </HoverCardTrigger>
-                <HoverCardContent side="top">
-                  {renderParsedEndDate()}
-                </HoverCardContent>
-              </HoverCard>
+              <>
+                <Input
+                  id="endTime"
+                  className={cn(
+                    "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
+                    fieldsValidation.endTime ? "border-red-500" : ""
+                  )}
+                  ref={endTimeRef}
+                  onChange={(e) => {
+                    setEndTime(e.target.value);
+                  }}
+                  onBlur={() => {
+                    handleEndTimeChange();
+                  }}
+                  value={endTime}
+                />
+                {fieldsValidation.endTime && (
+                  <span className="text-red-500 text-xs col-span-3 col-start-2">
+                    Please enter a valid date
+                  </span>
+                )}
+              </>
             </div>
 
-            <div className="grid grid-cols-4 items-center gap-4 z-50">
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="userId" className="text-right">
                 Users
               </Label>
@@ -484,11 +421,11 @@ export default function CreateShiftDialog({
                     <ChevronsUpDown className="opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[274px]">
-                  <Command>
+                <PopoverContent className="w-[274px] pointer-events-auto">
+                  <Command className="pointer-events-auto">
                     <CommandInput
                       placeholder="Search user..."
-                      className="h-9"
+                      className="h-9 pointer-events-auto"
                     />
                     <CommandList>
                       <CommandEmpty>No user found.</CommandEmpty>
@@ -497,6 +434,7 @@ export default function CreateShiftDialog({
                           <CommandItem
                             key={user.firstName}
                             value={user.firstName}
+                            className="pointer-events-auto"
                             onSelect={() => {
                               setSelectedUserIds((prev) =>
                                 prev.includes(user.id)

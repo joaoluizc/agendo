@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils.ts";
 import EmptySlot from "./calendar-components/EmptySlot.tsx";
 import DuplicateShifts from "./DuplicateShifts.tsx";
 import { useSchedule } from "@/providers/useSchedule.tsx";
+import ToggleBulkSelector from "./calendar-components/ToggleBulkSelector.tsx";
 
 const calcUserRowHeight = (
   userId: string,
@@ -158,6 +159,7 @@ const Schedule = () => {
         </Label>
         <CreateShiftForm selectedDate={selectedDate} />
         <DuplicateShifts selectedDate={selectedDate} />
+        <ToggleBulkSelector />
       </div>
       {!scheduleIsLoading ? (
         <div id="schedule-wrapper" className="flex flex-col">
@@ -235,7 +237,7 @@ const Schedule = () => {
                           shifts[userId].map((shift, idx) => (
                             <Shift
                               shift={shift}
-                              key={idx}
+                              key={`${idx}-${shift._id}`}
                               selectedDate={selectedDate}
                               reloadScheduleCalendar={() =>
                                 fetchData(selectedDate)

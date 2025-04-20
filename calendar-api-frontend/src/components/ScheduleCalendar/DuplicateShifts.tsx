@@ -75,6 +75,7 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
         buttons: [todayButton, "clear"],
         autoClose: true,
         toggleSelected: false,
+        keyboardNav: false,
       }
     );
 
@@ -94,6 +95,7 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
         buttons: [todayButton, "clear"],
         autoClose: true,
         toggleSelected: false,
+        keyboardNav: false,
       }
     );
 
@@ -164,7 +166,7 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
       <DialogTrigger asChild>
         <Button
           variant="outline"

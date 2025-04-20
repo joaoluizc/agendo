@@ -16,95 +16,37 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Label } from "../ui/label";
-import { useEffect, useRef, useState } from "react";
-import localeEn from "air-datepicker/locale/en";
-import AirDatepicker from "air-datepicker";
+import { useState } from "react";
 import { NewShift, Shift } from "@/types/shiftTypes";
-import { Input } from "../ui/input";
 import { toast } from "sonner";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { LoaderCircle } from "lucide-react";
-import * as chrono from "chrono-node";
+import StartTimeInput from "./calendar-components/StartTimeInput";
+import EndTimeInput from "./calendar-components/EndTimeInput";
 
 type EditShiftDialogProps = {
   shift: Shift;
   setIsOpen: (isOpen: boolean) => void;
-  handleFunctionCreated?: (fn: (open: boolean) => void) => void;
   reloadScheduleCalendar: () => void;
 };
 
+const localeStringOptions: { dateStyle: "short"; timeStyle: "short" } = {
+  dateStyle: "short",
+  timeStyle: "short",
+};
+
 export function EditShiftDialog(props: EditShiftDialogProps) {
-  const { setIsOpen, handleFunctionCreated, shift, reloadScheduleCalendar } =
-    props;
-  const [startTime, setStartTime] = useState<string>(shift.startTime);
-  const [endTime, setEndTime] = useState<string>(shift.endTime);
+  const { setIsOpen, shift, reloadScheduleCalendar } = props;
+  const [startTime, setStartTime] = useState<string>(
+    new Date(shift.startTime).toLocaleString(undefined, localeStringOptions)
+  );
+  const [endTime, setEndTime] = useState<string>(
+    new Date(shift.endTime).toLocaleString(undefined, localeStringOptions)
+  );
   const [userId, setUserId] = useState<string>(shift.userId);
   const [positionId, setPositionId] = useState<string>(shift.positionId);
   const [loading, setLoading] = useState(false);
   const { allPositions: positions, allUsers: users } = useUserSettings();
-
-  const startDatepickerRef = useRef<AirDatepicker | null>(null);
-  const endDatepickerRef = useRef<AirDatepicker | null>(null);
-  const startTimeRef = useRef<HTMLInputElement | null>(null);
-  const endTimeRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    // Blur the input field after rendering to avoid pre-focusing
-    if (startTimeRef.current) {
-      startTimeRef.current.blur();
-    }
-  }, []);
-
-  useEffect(() => {
-    if (handleFunctionCreated) {
-      handleFunctionCreated(handleOpenChange);
-    }
-  }, [handleFunctionCreated]);
-
-  const initializeDatepickers = () => {
-    if (startDatepickerRef.current) startDatepickerRef.current.destroy();
-    if (endDatepickerRef.current) endDatepickerRef.current.destroy();
-
-    startDatepickerRef.current = new AirDatepicker(
-      document.querySelector("#startTime") as HTMLInputElement,
-      {
-        timepicker: true,
-        onSelect: ({ date }) => {
-          setStartTime((date as Date).toISOString());
-        },
-        selectedDates: [new Date(startTime)],
-        locale: localeEn,
-        position: "bottom left",
-        container: ".air-datepicker-global",
-        minutesStep: 30,
-        buttons: ["today", "clear"],
-      }
-    );
-
-    endDatepickerRef.current = new AirDatepicker(
-      document.querySelector("#endTime") as HTMLInputElement,
-      {
-        timepicker: true,
-        onSelect: ({ date }) => {
-          setEndTime((date as Date).toISOString());
-        },
-        selectedDates: [new Date(endTime)],
-        locale: localeEn,
-        position: "bottom left",
-        container: ".air-datepicker-global",
-        minutesStep: 30,
-        buttons: ["today", "clear"],
-      }
-    );
-  };
-
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
-    if (open) {
-      // Initialize datepickers when dialog opens
-      setTimeout(initializeDatepickers, 0);
-    }
-  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -178,50 +120,8 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
       <form onSubmit={handleSubmit} tabIndex={0}>
         <div className="grid gap-4 py-4" autoFocus={false}>
           <input type="hidden" autoFocus={true} />
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="startTime" className="text-right">
-              Start Time
-            </Label>
-            <Input
-              id="startTime"
-              className="col-span-3 p-2 border rounded cursor-pointer hover:bg-secondary/80"
-              ref={startTimeRef}
-              onChange={(e) => {
-                const parsedDate = chrono.parseDate(e.target.value);
-                if (parsedDate) {
-                  setStartTime(parsedDate.toISOString());
-                }
-              }}
-              onBlur={() => {
-                if (startTimeRef.current) {
-                  startTimeRef.current.value = new Date(
-                    startTime
-                  ).toLocaleString();
-                }
-              }}
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="endTime" className="text-right">
-              End Time
-            </Label>
-            <Input
-              id="endTime"
-              className="col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer"
-              ref={endTimeRef}
-              onChange={(e) => {
-                const parsedDate = chrono.parseDate(e.target.value);
-                if (parsedDate) {
-                  setEndTime(parsedDate.toISOString());
-                }
-              }}
-              onBlur={() => {
-                if (endTimeRef.current) {
-                  endTimeRef.current.value = new Date(endTime).toLocaleString();
-                }
-              }}
-            />
-          </div>
+          <StartTimeInput startTime={startTime} setStartTime={setStartTime} />
+          <EndTimeInput endTime={endTime} setEndTime={setEndTime} />
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="userId" className="text-right">
               User
@@ -232,14 +132,18 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
               </SelectTrigger>
               <SelectContent>
                 {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
+                  <SelectItem
+                    key={user.id}
+                    value={user.id}
+                    className="hover:bg-accent focus:text-accent-foreground"
+                  >
                     {user.firstName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-4 items-center gap-4 pointer-events-auto">
             <Label htmlFor="positionId" className="text-right">
               Position
             </Label>
@@ -250,7 +154,11 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
               <SelectContent>
                 <SelectGroup>
                   {positions.map((position) => (
-                    <SelectItem key={position._id} value={position._id}>
+                    <SelectItem
+                      key={position._id}
+                      value={position._id}
+                      className="hover:bg-accent focus:text-accent-foreground"
+                    >
                       {position.name}
                     </SelectItem>
                   ))}
@@ -273,8 +181,12 @@ export function EditShiftDialog(props: EditShiftDialogProps) {
         <DialogFooter
           style={{ justifyContent: "space-between", paddingTop: "1rem" }}
         >
-          <Button disabled={loading} variant="destructive" onClick={(e) => deleteShift(e)}>
-          {loading ? (
+          <Button
+            disabled={loading}
+            variant="destructive"
+            onClick={(e) => deleteShift(e)}
+          >
+            {loading ? (
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               "Delete"

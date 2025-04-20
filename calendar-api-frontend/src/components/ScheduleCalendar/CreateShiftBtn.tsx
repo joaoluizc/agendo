@@ -139,6 +139,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
         minutesStep: 30,
         buttons: [todayButton, "clear"],
         toggleSelected: false,
+        keyboardNav: false,
       }
     );
 
@@ -160,6 +161,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
         minutesStep: 30,
         buttons: [todayButton, "clear"],
         toggleSelected: false,
+        keyboardNav: false,
       }
     );
   };
@@ -373,7 +375,7 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
