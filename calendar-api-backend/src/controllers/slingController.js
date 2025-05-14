@@ -1,12 +1,12 @@
 import SlingService from '../services/slingService.js';
-import isISODate from '../utils/isISODate.js';
+import isISORange from '../utils/isISODate.js';
 import utils from "../utils/utils.js";
 
 const slingService = new SlingService();
 slingService.init();
 
 const getCalendar = async (date) => {
-    const selectedDate = isISODate(date) ? date : utils.todayISO(new Date());
+    const selectedDate = isISORange(date) ? date : utils.todayISO(new Date());
     console.log('fetching calendar for ', selectedDate);
     const calendar = await slingService.fetchTodaysCalendar(selectedDate);
     const sortedCalendar = slingService.sortCalendarByUser(calendar);
