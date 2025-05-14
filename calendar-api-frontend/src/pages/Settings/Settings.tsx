@@ -4,6 +4,7 @@ import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useEffect } from "react";
 import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges.tsx";
+import GenerateAPIToken from "./GenerateAPIToken/GenerateAPIToken.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
@@ -79,6 +80,7 @@ export default function Settings() {
           <div className="grid gap-6" id="settings-wrapper">
             {/* <GoogleIntegration></GoogleIntegration> */}
             <ShiftsToAddToCal></ShiftsToAddToCal>
+            <GenerateAPIToken />
           </div>
         </div>
       </main>
