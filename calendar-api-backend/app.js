@@ -12,6 +12,7 @@ import slingRouter from "./src/routers/slingRouter.js";
 import positionRouter from "./src/routers/positionRouters.js";
 import shiftRouter from "./src/routers/shiftRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
+import { mountSwagger } from "./src/swagger/swagger.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
 
 const port = process.env.PORT || 3001;
@@ -48,6 +49,7 @@ app.use(
 );
 app.use(cors(corsOptions));
 app.use(addRequestId);
+mountSwagger(app);
 
 connectDB();
 
