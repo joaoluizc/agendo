@@ -210,6 +210,58 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
   );
 });
 
+
+/**
+ * @openapi
+ * /gcalendar/all-events:
+ *   get:
+ *     summary: Get all Google Calendar events for all users on a specific date (admin only)
+ *     tags:
+ *       - Google Calendar
+ *     security:
+ *       - clerkAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "2024-06-01"
+ *         description: Date to fetch events for (format: YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: List of events and users with errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 events:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       204:
+ *         description: No eligible events found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Failed to fetch events
+ */
 gCalendarRouter.get(
   "/all-events",
   requireAuth(),
