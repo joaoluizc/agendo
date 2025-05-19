@@ -217,7 +217,7 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
  *   get:
  *     summary: Get all Google Calendar events for all users on a specific date (admin only)
  *     tags:
- *       - Google Calendar
+ *       - From google calendar
  *     security:
  *       - clerkAuth: []
  *     parameters:
@@ -227,7 +227,7 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
  *         schema:
  *           type: string
  *           example: "2024-06-01"
- *         description: Date to fetch events for (format: YYYY-MM-DD)
+ *         description: "The date for which to retrieve calendar data using ISO 8601 format. If date is invalid, the current date will be used."
  *     responses:
  *       200:
  *         description: List of events and users with errors

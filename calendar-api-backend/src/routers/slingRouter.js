@@ -8,6 +8,8 @@ const slingRouter = express.Router();
  * /sling/positions:
  *   get:
  *     summary: Retrieve a list of positions.
+ *     tags:
+ *       - From sling
  *     responses:
  *       200:
  *         description: A list of positions.
@@ -31,6 +33,8 @@ slingRouter.get("/positions", async (req, res) => {
  * /sling/users:
  *   get:
  *     summary: Retrieve a list of users.
+ *     tags:
+ *       - From sling
  *     responses:
  *       200:
  *         description: A list of users.
@@ -54,6 +58,8 @@ slingRouter.get("/users", async (req, res) => {
  * /sling/calendar:
  *   get:
  *     summary: Retrieve calendar data from sling for a specific date.
+ *     tags:
+ *       - From sling
  *     parameters:
  *       - in: query
  *         name: date
