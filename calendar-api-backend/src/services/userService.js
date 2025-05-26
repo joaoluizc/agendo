@@ -3,15 +3,14 @@ import { User } from "../models/UserModel.js";
 import { initialPositions } from "../database/seeds/initialPositions.js";
 import utils from "../utils/utils.js";
 
-// no longer used
 const createUser = async (userData) => {
   // const { firstName, lastName, email, password } = userData;
-  const { firstName, lastName, email, slingId } = userData;
+  const { firstName, lastName, email, slingId, clerkId } = userData;
 
   let user = await User.findOne({ email });
 
   if (user) {
-    throw new Error("User already exists");
+    return user;
   }
 
   user = new User({
@@ -19,6 +18,7 @@ const createUser = async (userData) => {
     lastName,
     email,
     slingId,
+    clerkId,
   });
 
   // const salt = await bcrypt.genSalt(10);
@@ -158,37 +158,37 @@ const getGapiToken = async (email) => {
   return user.gapitoken;
 };
 
-async function addPositionsToSyncNewUser(userId) {
-  console.log("Adding default positions to sync to new user. userId: ", userId);
-  try {
-    await clerkClient.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        positionsToSync: initialPositions,
-      },
-    });
-  } catch (err) {
-    console.error(
-      "Error syncinc initial positions to sync to new user: ",
-      err.message
-    );
-  }
-}
+// async function addPositionsToSyncNewUser(userId) {
+//   console.log("Adding default positions to sync to new user. userId: ", userId);
+//   try {
+//     await clerkClient.users.updateUserMetadata(userId, {
+//       publicMetadata: {
+//         positionsToSync: initialPositions,
+//       },
+//     });
+//   } catch (err) {
+//     console.error(
+//       "Error syncinc initial positions to sync to new user: ",
+//       err.message
+//     );
+//   }
+// }
 
-async function addBasicPropertiesToNewUser(userId, userEmail) {
-  console.log("Adding slingId to new user. userId: ", userId);
-  const slingId = utils.getSlingIdByEmail(userEmail);
-  try {
-    await clerkClient.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        slingId,
-        type: "normal",
-        timeZone: 0,
-      },
-    });
-  } catch (err) {
-    console.error("Error adding slingId to new user: ", err.message);
-  }
-}
+// async function addBasicPropertiesToNewUser(userId, userEmail) {
+//   console.log("Adding slingId to new user. userId: ", userId);
+//   const slingId = utils.getSlingIdByEmail(userEmail);
+//   try {
+//     await clerkClient.users.updateUserMetadata(userId, {
+//       publicMetadata: {
+//         slingId,
+//         type: "normal",
+//         timeZone: 0,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Error adding slingId to new user: ", err.message);
+//   }
+// }
 
 const addClerkIdToAllUsers = async (_req, res) => {
   try {

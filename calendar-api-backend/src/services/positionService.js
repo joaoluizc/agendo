@@ -1,6 +1,7 @@
 // services/positionService.js
 import Position from '../models/PositionModel.js';
 import { User } from '../models/UserModel.js';
+import userService from './userService.js';
 
 const createPosition = async (data) => {
   const { name, color } = data;
@@ -38,7 +39,7 @@ const deletePosition = async (id) => {
 };
 
 const getUserPositionsToSync = async (userId) => {
-    const user = await User.findById(userId);
+    const user = await userService.findUserByClerkId(userId);
     if (!user) {
         throw new Error('User not found');
     }
@@ -46,7 +47,7 @@ const getUserPositionsToSync = async (userId) => {
 }
 
 const setUserPositionsToSync = async (userId, positions) => {
-    const user = await User.findById(userId);
+    const user = await userService.findUserByClerkId(userId);
     if (!user) {
         throw new Error('User not found');
     }

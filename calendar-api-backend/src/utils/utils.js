@@ -34,9 +34,9 @@ const shiftToEvent = (shift) => {
   return event;
 };
 
-const getSlingIdByEmail = (email) => {
+const getSlingIdByEmail = async (email) => {
   const slingService = new SlingService();
-  slingService.init();
+  await slingService.init();
   const slingUsers = slingService.users;
 
   if (!slingUsers) {

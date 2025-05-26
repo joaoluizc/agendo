@@ -9,8 +9,8 @@ positionRouter.post("/new", positionController.createPosition);
 
 positionRouter.get("/", positionController.getPosition);
 
-positionRouter.get("/sync", positionController.getUserPositionsToSync_cl);
+positionRouter.get("/sync", positionController.getUserPositionsToSync);
 
-positionRouter.put("/sync", positionController.setUserPositionsToSync_cl);
+positionRouter.put("/sync", positionController.setUserPositionsToSync);
 
 export default positionRouter;

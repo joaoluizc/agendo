@@ -1,6 +1,7 @@
 import process from "process";
 import { Webhook } from "svix";
 import userService from "../services/userService.js";
+import utils from "../utils/utils.js";
 
 const userInfo = async (req, res) => {
   const userId = req.auth.userId;
@@ -72,16 +73,25 @@ const newClerkUser = async (req, res) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
+  const { first_name: firstName, last_name: lastName } = msg;
   const userEmail = msg.email_addresses[0].email_address;
+  const clerkId = msg.id;
   const userId = msg.id;
+  const slingId = utils.getSlingIdByEmail(userEmail);
 
   console.log(
-    "Message received from clerk via webhook. New user created: ",
-    userEmail
+    `[${req.requestId}]: newClerkUser called for user: ${userEmail}, clerkId: ${clerkId}, slingId: ${slingId}`
   );
 
-  await userService.addPositionsToSyncNewUser(userId);
-  await userService.addBasicPropertiesToNewUser(userId, userEmail);
+  await userService.createUser({
+    firstName,
+    lastName,
+    email: userEmail,
+    slingId,
+    clerkId,
+  });
+  // await userService.addPositionsToSyncNewUser(userId);
+  // await userService.addBasicPropertiesToNewUser(userId, userEmail);
 
   res.json();
 };
