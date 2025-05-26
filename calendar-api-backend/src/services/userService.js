@@ -223,6 +223,40 @@ const addClerkIdToAllUsers = async () => {
   }
 };
 
+async function addNewClerkUsersToMongo() {
+  try {
+    const mongoUsers = await findAllUsers();
+    const clerkUsers = await getAllUsersSafeInfo_cl();
+
+    const newClerkUsers = clerkUsers
+      .filter(
+        (clerkUser) =>
+          !mongoUsers.some((mongoUser) => mongoUser.email === clerkUser.email)
+      )
+      .map((clerkUser) => ({
+        firstName: clerkUser.firstName || "",
+        lastName: clerkUser.lastName || "",
+        email: clerkUser.email,
+        slingId: clerkUser.publicMetadata?.slingId || "",
+        positionsToSync: clerkUser.publicMetadata?.positionsToSync || initialPositions,
+        type: clerkUser.publicMetadata?.type || "normal",
+        clerkId: clerkUser.id,
+      }));
+
+    if (newClerkUsers.length === 0) {
+      console.log("No new Clerk users to add to MongoDB.");
+      return;
+    } 
+
+    await User.insertMany(newClerkUsers);
+    console.log("New Clerk users added to MongoDB:", newClerkUsers.map(u => u.email));
+
+  } catch(err) {
+    console.error("Error adding new Clerk users to MongoDB:", err.message);
+    throw err;
+  }
+}
+
 export default {
   createUser,
   findUser: findUserByEmail,
@@ -237,4 +271,5 @@ export default {
   addPositionsToSyncNewUser,
   addBasicPropertiesToNewUser,
   addClerkIdToAllUsers,
+  addNewClerkUsersToMongo,
 };
