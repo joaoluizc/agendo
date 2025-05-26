@@ -189,7 +189,7 @@ async function addBasicPropertiesToNewUser(userId, userEmail) {
   }
 }
 
-const addClerkIdToAllUsers = async () => {
+const addClerkIdToAllUsers = async (_req, res) => {
   try {
     const mongoUsers = await findAllUsers();
     const clerkUsers = await getAllUsersSafeInfo_cl();
@@ -198,32 +198,26 @@ const addClerkIdToAllUsers = async () => {
     );
 
     for (const user of mongoUsers) {
-      if (!user.clerkId) {
-        user.clerkId = clerkUsersMap.get(user.email) || null;
+      if (!user.clerkId && clerkUsersMap.has(user.email)) {
+        const result = await User.updateOne(
+          { email: user.email },
+          { $set: { clerkId: clerkUsersMap.get(user.email) } }
+        );
+        console.log(`Mongo update result for ${user.email}:`, result);
+        console.log(`Added Clerk ID for user: ${user.email} - ${clerkUsersMap.get(user.email)}`);
       }
-      console.log(
-        `User: ${user.email}, Clerk ID: ${user.clerkId || "not found"}`
-      );
     }
-
-    await User.bulkWrite(
-      mongoUsers
-      .filter((user) => user.clerkId && clerkUsersMap.has(user.email))
-      .map((user) => ({
-        updateOne: {
-          filter: { email: user.email },
-          update: { $set: { clerkId: user.clerkId } }, // <-- use $set
-        },
-      }))
-    );
     console.log("Clerk IDs added to all users");
   } catch (err) {
     console.error("Error adding Clerk IDs to users:", err.message);
     throw err;
   }
+  return res.status(200).json({
+    message: "Clerk IDs added to all users successfully",
+  });
 };
 
-async function addNewClerkUsersToMongo() {
+async function addNewClerkUsersToMongo(_req, res) {
   try {
     const mongoUsers = await findAllUsers();
     const clerkUsers = await getAllUsersSafeInfo_cl();
@@ -255,6 +249,9 @@ async function addNewClerkUsersToMongo() {
     console.error("Error adding new Clerk users to MongoDB:", err.message);
     throw err;
   }
+  return res.status(200).json({
+    message: "New Clerk users added to MongoDB successfully",
+  });
 }
 
 export default {

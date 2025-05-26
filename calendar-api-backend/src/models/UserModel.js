@@ -53,10 +53,6 @@ const UserSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  password: {
-    type: String,
-    required: false,
-  },
   type: {
     type: String,
     enum: ['normal', 'admin'],
@@ -67,16 +63,16 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  gapitoken: {
-    type: GapiTokenSchema,
-    required: false,
-  },
   positionsToSync: {
     type: [PositionToSyncSchema],
     required: false,
     default: initialPositions,
   },
   slingId: {
+    type: String,
+    required: false,
+  },
+  clerkId: {
     type: String,
     required: false,
   },

@@ -14,5 +14,6 @@ userRouter.get("/info", requireAuth(), userController.userInfo_cl);
 userRouter.get("/all", requireAuth(), userController.getAllUsers_cl);
 userRouter.post("/clerk/new", userController.newClerkUser);
 userRouter.post("/add-clerk-id-to-all-users", requireAuth(), userService.addClerkIdToAllUsers);
+userRouter.post("/add-all-new-users-to-clerk", requireAuth(), userService.addNewClerkUsersToMongo);
 
 export default userRouter;
