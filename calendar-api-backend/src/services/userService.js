@@ -291,4 +291,5 @@ export default {
   addBasicPropertiesToNewUser,
   addClerkIdToAllUsers,
   addNewClerkUsersToMongo,
+  updatePositionsToSyncOnMongoUsers,
 };
