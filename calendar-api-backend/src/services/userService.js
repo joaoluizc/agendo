@@ -28,8 +28,18 @@ const createUser = async (userData) => {
   return user;
 };
 
-const findUser = async (email) => {
+const findUserByEmail = async (email) => {
   let user = await User.findOne({ email });
+  return user;
+};
+
+const findAllUsers = async () => {
+  let users = await User.find();
+  return users;
+};
+
+const findUserByClerkId = async (clerkId) => {
+  let user = await User.findOne({ clerkId });
   return user;
 };
 
@@ -115,7 +125,7 @@ async function getAllUsersWithTokens_cl() {
 }
 
 const addGapiToken = async (email, token) => {
-  let user = await findUser(email);
+  let user = await findUserByEmail(email);
   if (!user) {
     throw new Error("User not found");
   }
@@ -140,7 +150,7 @@ const addGapiToken = async (email, token) => {
 };
 
 const getGapiToken = async (email) => {
-  let user = await findUser(email);
+  let user = await findUserByEmail(email);
   if (!user.gapitoken) {
     return null;
   }
@@ -179,10 +189,45 @@ async function addBasicPropertiesToNewUser(userId, userEmail) {
   }
 }
 
+const addClerkIdToAllUsers = async () => {
+  try {
+    const mongoUsers = await findAllUsers();
+    const clerkUsers = await getAllUsersSafeInfo_cl();
+    const clerkUsersMap = new Map(
+      clerkUsers.map((user) => [user.email, user.id])
+    );
+
+    for (const user of mongoUsers) {
+      if (!user.clerkId) {
+        user.clerkId = clerkUsersMap.get(user.email) || null;
+      }
+      console.log(
+        `User: ${user.email}, Clerk ID: ${user.clerkId || "not found"}`
+      );
+    }
+
+    await User.bulkWrite(
+      mongoUsers
+      .filter((user) => user.clerkId && clerkUsersMap.has(user.email))
+      .map((user) => ({
+        updateOne: {
+          filter: { email: user.email },
+          update: { $set: { clerkId: user.clerkId } }, // <-- use $set
+        },
+      }))
+    );
+    console.log("Clerk IDs added to all users");
+  } catch (err) {
+    console.error("Error adding Clerk IDs to users:", err.message);
+    throw err;
+  }
+};
+
 export default {
   createUser,
-  findUser,
+  findUser: findUserByEmail,
   findUser_cl,
+  findUserByClerkId,
   addGapiToken,
   getGapiToken,
   getUserGoogleOAuthToken_cl,
@@ -191,4 +236,5 @@ export default {
   getAllUsersSafeInfo_cl,
   addPositionsToSyncNewUser,
   addBasicPropertiesToNewUser,
+  addClerkIdToAllUsers,
 };
