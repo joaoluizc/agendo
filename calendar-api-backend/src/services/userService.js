@@ -79,6 +79,7 @@ async function getAllUsersSafeInfo_cl() {
       publicMetadata: {
         slingId: user.publicMetadata?.slingId || "",
         type: user.publicMetadata?.type || "",
+        positionsToSync: user.publicMetadata?.positionsToSync || initialPositions,
       },
     };
   });
