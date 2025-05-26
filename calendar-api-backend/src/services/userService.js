@@ -254,6 +254,28 @@ async function addNewClerkUsersToMongo(_req, res) {
   });
 }
 
+async function updatePositionsToSyncOnMongoUsers() {
+  try {
+    const mongoUsers = await findAllUsers();
+    const clerkUsers = await getAllUsersSafeInfo_cl();
+
+    for (const clerkUser of clerkUsers) {
+      const mongoUser = mongoUsers.find((user) => user.email === clerkUser.email);
+      if (mongoUser) {
+        const positionsToSync = clerkUser.publicMetadata?.positionsToSync || initialPositions;
+        await User.updateOne(
+          { email: mongoUser.email },
+          { $set: { positionsToSync } }
+        );
+        console.log(`Updated positions to sync for user: ${mongoUser.email}`);
+      }
+    }
+  } catch (err) {
+    console.error("Error updating positions to sync on MongoDB users:", err.message);
+    throw err;
+  }
+}
+
 export default {
   createUser,
   findUser: findUserByEmail,
