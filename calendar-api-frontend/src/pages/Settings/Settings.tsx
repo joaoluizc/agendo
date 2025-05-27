@@ -5,6 +5,7 @@ import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useEffect } from "react";
 import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges.tsx";
 import GenerateAPIToken from "./GenerateAPIToken/GenerateAPIToken.tsx";
+import ManageLocations from "./ManageLocations/ManageLocations.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
@@ -12,6 +13,7 @@ export default function Settings() {
     positionsToSync,
     originalPositionsToSync,
     setUnsavedChangesAlertOpen,
+    type,
   } = useUserSettings();
 
   const hasUnsavedChanges = () => {
@@ -76,11 +78,28 @@ export default function Settings() {
             >
               Shifts on GCalendar
             </a>
+            <a
+              href="#generate-api-token"
+              className={"font-semibold text-primary"}
+            >
+              API Token
+            </a>
+            <a
+              href="#manage-locations"
+              className={"font-semibold text-primary"}
+            >
+              Manage Locations
+            </a>
           </nav>
           <div className="grid gap-6" id="settings-wrapper">
             {/* <GoogleIntegration></GoogleIntegration> */}
-            <ShiftsToAddToCal></ShiftsToAddToCal>
-            <GenerateAPIToken />
+            <ShiftsToAddToCal />
+            {type === "admin" && (
+              <div className="grid gap-6">
+                <GenerateAPIToken />
+                <ManageLocations />
+              </div>
+            )}
           </div>
         </div>
       </main>

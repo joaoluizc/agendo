@@ -11,6 +11,7 @@ import gCalendarRouter from "./src/controllers/gCalendarController.js";
 import slingRouter from "./src/routers/slingRouter.js";
 import positionRouter from "./src/routers/positionRouters.js";
 import shiftRouter from "./src/routers/shiftRouter.js";
+import locationRouter from "./src/routers/locationRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import { mountSwagger } from "./src/swagger/swagger.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
@@ -58,10 +59,9 @@ connectDB();
 app.use("/gcalendar", gCalendarRouter);
 app.use("/sling", requireAuth(), slingRouter);
 app.use("/position", requireAuth(), positionRouter);
-// app.use("/position", addRequestId, positionRouter);
 app.use("/user", userRouter);
-// app.use("/shift", addRequestId, shiftRouter); // UNPROTECTED FOR DEV TESTING
 app.use("/shift", requireAuth(), shiftRouter);
+app.use("/location", requireAuth(), locationRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" })
