@@ -10,6 +10,10 @@ const LocationSchema = new Schema({
     type: String,
     required: true,
   },
+  assignedUsers: {
+    type: [String],
+    default: [],
+  },
 });
 
 const Location = mongoose.model("Location", LocationSchema);

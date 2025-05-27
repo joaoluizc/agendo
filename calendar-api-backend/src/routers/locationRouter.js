@@ -158,4 +158,33 @@ locationRouter.put("/:id", locationController.updateLocation);
  */
 locationRouter.delete("/:id", locationController.deleteLocation);
 
+/**
+ * @openapi
+ * /{id}/assigned-users:
+ *   put:
+ *     summary: Update assigned users for a location
+ *     tags:
+ *       - Locations
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               assignedUsers:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Assigned users updated
+ */
+
 export default locationRouter;

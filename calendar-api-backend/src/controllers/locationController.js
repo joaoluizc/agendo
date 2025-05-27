@@ -49,6 +49,9 @@ async function updateLocation(req, res) {
   if (!req.body || !req.body.name) {
     return res.status(400).json({ error: "Location name is required" });
   }
+  if (req.body.assignedUsers && !Array.isArray(req.body.assignedUsers)) {
+    return res.status(400).json({ error: "Assigned users must be an array" });
+  }
 
   try {
     const updated = await locationService.updateLocation(
