@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.4.3",
     "node-cron": "^3.0.0",
+    "redis": "^5.1.1",
     "svix": "^1.40.0",
     "swagger-ui-express": "^5.0.1"
   },

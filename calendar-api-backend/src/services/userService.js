@@ -1,7 +1,7 @@
 import { clerkClient } from "@clerk/express";
 import { User } from "../models/UserModel.js";
 import { initialPositions } from "../database/seeds/initialPositions.js";
-import utils from "../utils/utils.js";
+import redisClient from "../database/redisClient.js";
 
 const createUser = async (userData) => {
   // const { firstName, lastName, email, password } = userData;
@@ -79,7 +79,8 @@ async function getAllUsersSafeInfo_cl() {
       publicMetadata: {
         slingId: user.publicMetadata?.slingId || "",
         type: user.publicMetadata?.type || "",
-        positionsToSync: user.publicMetadata?.positionsToSync || initialPositions,
+        positionsToSync:
+          user.publicMetadata?.positionsToSync || initialPositions,
       },
     };
   });
@@ -105,6 +106,14 @@ async function getUserGoogleOAuthToken_cl(userId) {
 }
 
 async function getAllUsersWithTokens_cl() {
+  const cacheKey = "clerk:users:withTokens";
+  // Try to get from cache
+  const cached = await redisClient.get(cacheKey);
+  if (cached) {
+    console.log("getAllUsersWithTokens_cl: Returning cached data");
+    return JSON.parse(cached);
+  }
+
   console.log("getAllUsersWithTokens_cl: Fetching all users from Clerk");
   const users = await getAllUsers_cl();
 
@@ -121,6 +130,15 @@ async function getAllUsersWithTokens_cl() {
       return { ...user, GoogleAccessToken: userTokensResponse };
     })
   );
+
+  // Cache result for 5 minutes
+  await redisClient.set(
+    cacheKey,
+    JSON.stringify(usersWithTokens),
+    "EX",
+    24 * 60 * 60
+  );
+  console.log("getAllUsersWithTokens_cl: Cached data for 24 hours");
 
   return usersWithTokens;
 }
@@ -205,7 +223,11 @@ const addClerkIdToAllUsers = async (_req, res) => {
           { $set: { clerkId: clerkUsersMap.get(user.email) } }
         );
         console.log(`Mongo update result for ${user.email}:`, result);
-        console.log(`Added Clerk ID for user: ${user.email} - ${clerkUsersMap.get(user.email)}`);
+        console.log(
+          `Added Clerk ID for user: ${user.email} - ${clerkUsersMap.get(
+            user.email
+          )}`
+        );
       }
     }
     console.log("Clerk IDs added to all users");
@@ -233,7 +255,8 @@ async function addNewClerkUsersToMongo(_req, res) {
         lastName: clerkUser.lastName || "",
         email: clerkUser.email,
         slingId: clerkUser.publicMetadata?.slingId || "",
-        positionsToSync: clerkUser.publicMetadata?.positionsToSync || initialPositions,
+        positionsToSync:
+          clerkUser.publicMetadata?.positionsToSync || initialPositions,
         type: clerkUser.publicMetadata?.type || "normal",
         clerkId: clerkUser.id,
       }));
@@ -241,12 +264,14 @@ async function addNewClerkUsersToMongo(_req, res) {
     if (newClerkUsers.length === 0) {
       console.log("No new Clerk users to add to MongoDB.");
       return;
-    } 
+    }
 
     await User.insertMany(newClerkUsers);
-    console.log("New Clerk users added to MongoDB:", newClerkUsers.map(u => u.email));
-
-  } catch(err) {
+    console.log(
+      "New Clerk users added to MongoDB:",
+      newClerkUsers.map((u) => u.email)
+    );
+  } catch (err) {
     console.error("Error adding new Clerk users to MongoDB:", err.message);
     throw err;
   }
@@ -261,9 +286,12 @@ async function updatePositionsToSyncOnMongoUsers() {
     const clerkUsers = await getAllUsersSafeInfo_cl();
 
     for (const clerkUser of clerkUsers) {
-      const mongoUser = mongoUsers.find((user) => user.email === clerkUser.email);
+      const mongoUser = mongoUsers.find(
+        (user) => user.email === clerkUser.email
+      );
       if (mongoUser) {
-        const positionsToSync = clerkUser.publicMetadata?.positionsToSync || initialPositions;
+        const positionsToSync =
+          clerkUser.publicMetadata?.positionsToSync || initialPositions;
         await User.updateOne(
           { email: mongoUser.email },
           { $set: { positionsToSync } }
@@ -272,7 +300,10 @@ async function updatePositionsToSyncOnMongoUsers() {
       }
     }
   } catch (err) {
-    console.error("Error updating positions to sync on MongoDB users:", err.message);
+    console.error(
+      "Error updating positions to sync on MongoDB users:",
+      err.message
+    );
     throw err;
   }
 }
