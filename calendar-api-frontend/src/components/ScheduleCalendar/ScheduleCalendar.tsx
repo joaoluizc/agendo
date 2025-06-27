@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Label } from "@radix-ui/react-label";
 import { Input } from "../ui/input.tsx";
 import { CalendarIcon, CalendarSearch, RepeatIcon } from "lucide-react";
@@ -15,7 +15,7 @@ import {
   prettyGCalTime,
   calculateShiftOverlapAmount,
 } from "./scheduleUtils.ts";
-import { CalendarUser } from "@/types/gCalendarTypes.ts";
+import { CalendarUser, UserGCalGrid } from "@/types/gCalendarTypes.ts";
 import {
   HoverCard,
   HoverCardContent,
@@ -34,6 +34,7 @@ import EmptySlot from "./calendar-components/EmptySlot.tsx";
 import DuplicateShifts from "./DuplicateShifts.tsx";
 import { useSchedule } from "@/providers/useSchedule.tsx";
 import ToggleBulkSelector from "./calendar-components/ToggleBulkSelector.tsx";
+import { UserSafeInfo } from "@/types/userTypes.ts";
 
 const calcUserRowHeight = (
   userId: string,
@@ -55,11 +56,29 @@ const calcUserRowHeight = (
   return `${height}rem`;
 };
 
-const userHasGcal = (userId: string, gCalendarEvents: CalendarUser[]) => {
-  const hasGcal = gCalendarEvents.some(
-    (calUser: CalendarUser) => calUser.userId === userId
-  );
-  return hasGcal;
+const calculateGridForGCalEvents = (
+  allUsers: UserSafeInfo[],
+  events: CalendarUser[],
+  selectedDate: Date
+): UserGCalGrid[] => {
+  return allUsers.map(({ id: userId }) => ({
+    userId,
+    events:
+      events
+        .find((calUser) => calUser.userId === userId)
+        ?.events.map((event) => ({
+          ...event,
+          gridStart: calculateGridColumnStart(
+            event.start.dateTime,
+            selectedDate.toString()
+          ),
+          gridSpan: calculateGridColumnSpan(
+            event.start.dateTime,
+            event.end.dateTime,
+            selectedDate.toString()
+          ),
+        })) || [],
+  }));
 };
 
 const Schedule = () => {
@@ -72,6 +91,9 @@ const Schedule = () => {
     setScheduleIsLoading,
   } = useSchedule();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [gCalEventsCalculatedGrid, setGCalEventsCalculatedGrid] = useState<
+    UserGCalGrid[]
+  >([]);
   const { type, allUsers } = useUserSettings();
   const { user } = useUser();
   const visitorId = user?.id;
@@ -86,6 +108,14 @@ const Schedule = () => {
 
       setShifts(shifts);
       setEvents(events);
+
+      const allUsersGridCalculated = calculateGridForGCalEvents(
+        allUsers,
+        events,
+        selectedDate
+      );
+      setGCalEventsCalculatedGrid(allUsersGridCalculated);
+
       setScheduleIsLoading(false);
     } catch (error) {
       console.error("Error fetching calendar data:", error);
@@ -93,28 +123,27 @@ const Schedule = () => {
     }
   };
 
-  const memoizedGCalEvents = useMemo(
-    () =>
-      allUsers.map(({ id: userId }) => ({
-        userId,
-        events:
-          events
-            .find((calUser) => calUser.userId === userId)
-            ?.events.map((event) => ({
-              ...event,
-              gridStart: calculateGridColumnStart(
-                event.start.dateTime,
-                selectedDate.toString()
-              ),
-              gridSpan: calculateGridColumnSpan(
-                event.start.dateTime,
-                event.end.dateTime,
-                selectedDate.toString()
-              ),
-            })) || [],
-      })),
-    [events, selectedDate]
-  );
+  // const memoizedGCalEvents = useMemo(() => {
+  //   const allUsersGridCalculated = allUsers.map(({ id: userId }) => ({
+  //     userId,
+  //     events:
+  //       events
+  //         .find((calUser) => calUser.userId === userId)
+  //         ?.events.map((event) => ({
+  //           ...event,
+  //           gridStart: calculateGridColumnStart(
+  //             event.start.dateTime,
+  //             selectedDate.toString()
+  //           ),
+  //           gridSpan: calculateGridColumnSpan(
+  //             event.start.dateTime,
+  //             event.end.dateTime,
+  //             selectedDate.toString()
+  //           ),
+  //         })) || [],
+  //   }));
+  //   return allUsersGridCalculated;
+  // }, [events, selectedDate]);
 
   const todayButton = {
     content: "Today",
@@ -250,92 +279,91 @@ const Schedule = () => {
                           ></div>
                         )}
                       </div>
-                      {userHasGcal(userId, events) ? (
-                        <div
-                          id="gcalendar-wrapper"
-                          className="grid"
-                          style={{
-                            gridTemplateColumns: "repeat(48, minmax(0, 1fr))",
-                          }}
-                        >
-                          {memoizedGCalEvents
-                            .find((calUser) => calUser.userId === userId)
-                            ?.events.map((event, idx) => {
-                              return (
-                                <HoverCard key={idx}>
-                                  <HoverCardTrigger asChild>
-                                    <div
-                                      key={idx}
-                                      className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded`}
-                                      style={{
-                                        gridColumnStart: event.gridStart,
-                                        gridColumnEnd: `span ${event.gridSpan}`,
-                                        gridRowStart: event?.gridRowNumber,
-                                        backgroundColor: `color-mix(in srgb, white 95%, hsl(var(--shiftmix)) 20%)`,
-                                        fontSize: "0.6875rem",
-                                      }}
-                                    >
-                                      <div className="truncate text-black">
-                                        {event.summary}
-                                      </div>
+                      {/* Always render Google Calendar events for all users */}
+                      <div
+                        id="gcalendar-wrapper"
+                        className="grid"
+                        style={{
+                          gridTemplateColumns: "repeat(48, minmax(0, 1fr))",
+                        }}
+                      >
+                        {gCalEventsCalculatedGrid
+                          .find((calUser) => calUser.userId === userId)
+                          ?.events.map((event, idx) => {
+                            return (
+                              <HoverCard key={idx}>
+                                <HoverCardTrigger asChild>
+                                  <div
+                                    key={idx}
+                                    className={`p-1 m-[0.2rem] z-10 overflow-hidden whitespace-nowrap truncate rounded`}
+                                    style={{
+                                      gridColumnStart: event.gridStart,
+                                      gridColumnEnd: `span ${event.gridSpan}`,
+                                      gridRowStart: event?.gridRowNumber,
+                                      backgroundColor: `color-mix(in srgb, white 95%, hsl(var(--shiftmix)) 20%)`,
+                                      fontSize: "0.6875rem",
+                                    }}
+                                  >
+                                    <div className="truncate text-black">
+                                      {event.summary}
                                     </div>
-                                  </HoverCardTrigger>
-                                  <HoverCardContent className="w-full max-w-md p-6 grid gap-6">
-                                    <div className="flex items-start gap-4">
-                                      <div className="bg-muted rounded-md flex items-center justify-center aspect-square w-12">
-                                        <CalendarIcon className="w-6 h-6" />
+                                  </div>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-full max-w-md p-6 grid gap-6">
+                                  <div className="flex items-start gap-4">
+                                    <div className="bg-muted rounded-md flex items-center justify-center aspect-square w-12">
+                                      <CalendarIcon className="w-6 h-6" />
+                                    </div>
+                                    <div className="grid gap-1">
+                                      <div className="flex items-center gap-2">
+                                        <h3 className="text-xl font-semibold">
+                                          {event.summary}
+                                        </h3>
+                                        {event.recurringEventId && (
+                                          <RepeatIcon className="w-5 h-5 text-muted-foreground" />
+                                        )}
                                       </div>
-                                      <div className="grid gap-1">
-                                        <div className="flex items-center gap-2">
-                                          <h3 className="text-xl font-semibold">
-                                            {event.summary}
-                                          </h3>
-                                          {event.recurringEventId && (
-                                            <RepeatIcon className="w-5 h-5 text-muted-foreground" />
+                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <CalendarIcon className="w-4 h-4" />
+                                        <span>
+                                          {prettyGCalTime(
+                                            event.start.dateTime,
+                                            event.end.dateTime
                                           )}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                          <CalendarIcon className="w-4 h-4" />
-                                          <span>
-                                            {prettyGCalTime(
-                                              event.start.dateTime,
-                                              event.end.dateTime
-                                            )}
-                                          </span>
-                                        </div>
+                                        </span>
                                       </div>
                                     </div>
-                                    <p className="text-muted-foreground max-h-28 truncate">
-                                      <Markup content={event.description} />
-                                    </p>
-                                    <div className="flex gap-4">
-                                      <Button asChild variant="link">
+                                  </div>
+                                  <p className="text-muted-foreground max-h-28 truncate">
+                                    <Markup content={event.description} />
+                                  </p>
+                                  <div className="flex gap-4">
+                                    <Button asChild variant="link">
+                                      <a
+                                        href={event.htmlLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        See more
+                                      </a>
+                                    </Button>
+                                    {event.hangoutLink && (
+                                      <Button>
                                         <a
-                                          href={event.htmlLink}
+                                          href={event.hangoutLink}
                                           target="_blank"
                                           rel="noreferrer"
                                         >
-                                          See more
+                                          Join meeting
                                         </a>
                                       </Button>
-                                      {event.hangoutLink && (
-                                        <Button>
-                                          <a
-                                            href={event.hangoutLink}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                          >
-                                            Join meeting
-                                          </a>
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </HoverCardContent>
-                                </HoverCard>
-                              );
-                            })}
-                        </div>
-                      ) : null}
+                                    )}
+                                  </div>
+                                </HoverCardContent>
+                              </HoverCard>
+                            );
+                          })}
+                      </div>
                     </div>
                   </div>
                 );

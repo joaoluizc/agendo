@@ -28,6 +28,8 @@ import { Button } from "../ui/button.tsx";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import SyncWithGCalBtn from "./calendar-components/SyncWithGCalBtn.tsx";
 import SyncMyGCalBtn from "./calendar-components/SyncMyGCalBtn.tsx";
+import { useUser } from "@clerk/clerk-react";
+import { cn } from "@/lib/utils.ts";
 
 const userHasGcal = (user: User, gCalendarEvents: CalendarUser[]) => {
   return gCalendarEvents.some(
@@ -64,6 +66,8 @@ const SlingSchedule = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [gCalendarEvents, setgCalendarEvents] = useState<CalendarUser[]>([]);
+  const { user } = useUser();
+  const visitorEmail = user?.emailAddresses[0]?.emailAddress || "";
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,7 +113,12 @@ const SlingSchedule = () => {
             <div key={idx} className="flex">
               <div
                 id="user-info-wrapper"
-                className={`p-2 flex items-center border-b`}
+                className={cn(
+                  "p-2 flex items-center border-b",
+                  String(user.email) === String(visitorEmail)
+                    ? "bg-secondary/80"
+                    : "background"
+                )}
                 style={{
                   width: "12%",
                   height: calcUserRowHeight(String(user.id), {
@@ -137,7 +146,12 @@ const SlingSchedule = () => {
               <div id="shifts-data-column" className="flex-1 overflow-x-auto">
                 <div id="visual-grid-wrapper" className="relative">
                   <div
-                    className={`grid absolute inset-0 grid border-b`}
+                    className={cn(
+                      "grid absolute inset-0 grid border-b",
+                      String(user.email) === String(visitorEmail)
+                        ? "bg-secondary/80"
+                        : "background"
+                    )}
                     style={{
                       gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
                       height: calcUserRowHeight(String(user.id), {
@@ -148,7 +162,15 @@ const SlingSchedule = () => {
                   >
                     {[...Array(24).keys()].map((value) => {
                       return (
-                        <div key={`key-${value}`} className="border-r"></div>
+                        <div
+                          key={`key-${value}`}
+                          className={cn(
+                            "border-r",
+                            new Date().getHours() === value
+                              ? "bg-secondary/80"
+                              : "background"
+                          )}
+                        ></div>
                       );
                     })}
                   </div>
