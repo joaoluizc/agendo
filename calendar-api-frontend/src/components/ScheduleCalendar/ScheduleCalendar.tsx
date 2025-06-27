@@ -114,7 +114,7 @@ const Schedule = () => {
       const allUsersGridCalculated = calculateGridForGCalEvents(
         allUsers,
         events,
-        selectedDate
+        date
       );
       console.log("allUsersGridCalculated", allUsersGridCalculated);
       setGCalEventsCalculatedGrid(allUsersGridCalculated);
