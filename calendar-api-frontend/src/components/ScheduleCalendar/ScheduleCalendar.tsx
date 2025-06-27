@@ -106,8 +106,6 @@ const Schedule = () => {
         type === "admin" ? getGCalendarEvents(date) : Promise.resolve([]),
       ]);
 
-      console.log("fetched events", events);
-
       setShifts(shifts);
       setEvents(events);
 
@@ -116,7 +114,6 @@ const Schedule = () => {
         events,
         date
       );
-      console.log("allUsersGridCalculated", allUsersGridCalculated);
       setGCalEventsCalculatedGrid(allUsersGridCalculated);
 
       setScheduleIsLoading(false);

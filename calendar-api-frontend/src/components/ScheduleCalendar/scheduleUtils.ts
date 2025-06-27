@@ -172,21 +172,10 @@ export const calculateGridColumnStart = (
 ) => {
   const startAsDate = new Date(start);
   const dateToRenderAsDate = new Date(dateToRender);
-  console.log("calculateGridColumnStart:", {
-    start,
-    dateToRender,
-    startAsDate,
-    dateToRenderAsDate,
-    startDay: startAsDate.getDate(),
-    renderDay: dateToRenderAsDate.getDate(),
-    startHour: startAsDate.getHours(),
-    startMinutes: startAsDate.getMinutes(),
-  });
   if (startAsDate.getDate() < dateToRenderAsDate.getDate()) return 0; // Shift starts on previous day
   const startHour = startAsDate.getHours();
   const startMinutes = startAsDate.getMinutes();
   const result = startHour * 2 + Math.floor(startMinutes / 30) + 1; // Assuming each column represents 30 minutes
-  console.log("Grid column start result:", result);
   return result;
 };
 
