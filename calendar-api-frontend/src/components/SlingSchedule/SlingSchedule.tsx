@@ -68,6 +68,14 @@ const SlingSchedule = () => {
   const [gCalendarEvents, setgCalendarEvents] = useState<CalendarUser[]>([]);
   const { user } = useUser();
   const visitorEmail = user?.emailAddresses[0]?.emailAddress || "";
+  const [currentHour, setCurrentHour] = useState(new Date().getHours());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentHour(new Date().getHours());
+    }, 60 * 1000); // update every minute
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -166,7 +174,7 @@ const SlingSchedule = () => {
                           key={`key-${value}`}
                           className={cn(
                             "border-r",
-                            new Date().getHours() === value
+                            currentHour === value
                               ? "bg-secondary/80"
                               : "background"
                           )}

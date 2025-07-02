@@ -1,4 +1,14 @@
+import { useEffect, useState } from "react";
+
 const CalendarHeader = () => {
+  const [currentHour, setCurrentHour] = useState(new Date().getHours());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentHour(new Date().getHours());
+    }, 60 * 1000); // update every minute
+    return () => clearInterval(interval);
+  }, []);
   const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
 
   return (
@@ -14,11 +24,7 @@ const CalendarHeader = () => {
               key={i}
               className={`col-span-2 border-r text-center text-xs font-bold truncate font-semibold py-4 ${
                 i % 2 === 0 ? "" : "hidden"
-              } ${
-                new Date().getHours() === i / 2
-                  ? "bg-secondary/80"
-                  : "background"
-              }`}
+              } ${currentHour === i / 2 ? "bg-secondary/80" : "background"}`}
               style={{ gridColumn: `span 2` }}
             >
               {i % 2 === 0 && hours[i / 2]}
