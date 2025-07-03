@@ -75,33 +75,8 @@ const DEFAULT_COLORS = [
   "#84CC16",
 ];
 
-// Mock data - replace with your actual data fetching
-// const mockPositions: Position[] = [
-//   {
-//     id: "1",
-//     positionID: "SLING_001",
-//     name: "Live Chat Support",
-//     color: "#3B82F6",
-//     type: "chat",
-//   },
-//   {
-//     id: "2",
-//     name: "Ticket Resolution",
-//     color: "#10B981",
-//     type: "ticket",
-//   },
-//   {
-//     id: "3",
-//     positionID: "SLING_003",
-//     name: "Break Time",
-//     color: "#F59E0B",
-//     type: "break",
-//   },
-// ];
-
 export default function ManagePositions() {
   const { allPositions, setAllPositions } = useUserSettings();
-  //   const [allPositions, setPositions] = useState<Position[]>(mockPositions);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
@@ -165,10 +140,19 @@ export default function ManagePositions() {
 
     try {
       await updatePosition(updatedPosition);
+      console.log("Updating position:", updatedPosition);
       setAllPositions(
-        allPositions.map((p) =>
-          p._id === editingPosition._id ? updatedPosition : p
-        )
+        allPositions.map((p) => {
+          if (p._id === editingPosition._id) {
+            console.log("Position matched for update:", p);
+            return updatedPosition;
+          }
+          return p;
+        })
+      );
+      console.log(
+        "All positions after update:",
+        allPositions.map((p) => ({ _id: p._id, name: p.name, color: p.color }))
       );
       setIsEditDialogOpen(false);
       setEditingPosition(null);

@@ -91,6 +91,10 @@ class SlingService {
     }, {});
   }
 
+  async updatePositions() {
+    this.positions = await this.getAllPositions();
+  }
+
   async fetchTodaysCalendar(date) {
     const orgId = parseInt(this.user.orgs[0].id);
     const userId = this.user.id;

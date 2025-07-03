@@ -1,6 +1,7 @@
 import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
 import { clerkClient } from "@clerk/express";
+import slingController from "./slingController.js";
 
 const getAllPositions = async (req, res) => {
   try {
@@ -28,6 +29,7 @@ const createPosition = async (req, res) => {
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
+  slingController.updatePositions();
 };
 
 const updatePosition = async (req, res) => {
@@ -57,6 +59,7 @@ const updatePosition = async (req, res) => {
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
+  slingController.updatePositions();
 };
 
 const getUserPositionsToSync = async (req, res) => {
@@ -136,6 +139,7 @@ async function deletePosition(req, res) {
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
+  slingController.updatePositions();
 }
 
 export default {
