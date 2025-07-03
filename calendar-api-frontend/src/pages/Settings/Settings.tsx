@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges.tsx";
 import GenerateAPIToken from "./GenerateAPIToken/GenerateAPIToken.tsx";
 import ManageLocations from "./ManageLocations/ManageLocations.tsx";
+import ManagePositions from "./ManagePositions/ManagePositions.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
@@ -98,6 +99,7 @@ export default function Settings() {
               <div className="grid gap-6">
                 <GenerateAPIToken />
                 <ManageLocations />
+                <ManagePositions />
               </div>
             )}
           </div>

@@ -1,10 +1,11 @@
-import mongoose from 'mongoose'
+import mongoose from "mongoose";
 const { Schema } = mongoose;
 
 const PositionSchema = new Schema({
   positionId: {
     type: String,
-    auto: true,
+    required: false,
+    default: "",
   },
   name: {
     type: String,
@@ -17,10 +18,10 @@ const PositionSchema = new Schema({
   type: {
     type: String,
     required: true,
-    default: 'ticket',
+    default: "ticket",
   },
 });
 
-const Position = mongoose.model('Position', PositionSchema);
+const Position = mongoose.model("Position", PositionSchema);
 
 export default Position;

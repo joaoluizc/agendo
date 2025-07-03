@@ -30,9 +30,40 @@ const createPosition = async (req, res) => {
   }
 };
 
+const updatePosition = async (req, res) => {
+  const id = req.params.positionId;
+  const positionData = req.body;
+  if (!id) {
+    return res.status(400).json({ message: "Position ID is required" });
+  }
+  if (!positionData) {
+    return res.status(400).json({ message: "Position data is required" });
+  }
+  if (!positionData.name) {
+    return res.status(400).json({ message: "Position name is required" });
+  }
+  if (!positionData.color) {
+    return res.status(400).json({ message: "Position color is required" });
+  }
+  if (!positionData.type) {
+    return res.status(400).json({ message: "Position type is required" });
+  }
+  if (!positionData.positionId) {
+    positionData.positionId = "";
+  }
+  try {
+    const position = await positionService.updatePosition(id, positionData);
+    res.status(200).json(position);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 const getUserPositionsToSync = async (req, res) => {
   try {
-    const positions = await positionService.getUserPositionsToSync(req.auth.userId);
+    const positions = await positionService.getUserPositionsToSync(
+      req.auth.userId
+    );
     res.status(200).json(positions);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -94,12 +125,27 @@ async function getPosition(req, res) {
   }
 }
 
+async function deletePosition(req, res) {
+  const positionId = req.params.positionId;
+  try {
+    const position = await positionService.deletePosition(positionId);
+    if (!position) {
+      return res.status(404).json({ message: "Position not found" });
+    }
+    res.status(200).json({ message: "Position deleted successfully" });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+}
+
 export default {
   createPosition,
+  updatePosition,
   getUserPositionsToSync,
   // getUserPositionsToSync_cl,
   getAllPositions,
   setUserPositionsToSync,
   // setUserPositionsToSync_cl,
   getPosition,
+  deletePosition,
 };

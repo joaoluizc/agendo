@@ -9,6 +9,10 @@ positionRouter.post("/new", positionController.createPosition);
 
 positionRouter.get("/", positionController.getPosition);
 
+positionRouter.put("/:positionId", positionController.updatePosition);
+
+positionRouter.delete("/:positionId", positionController.deletePosition);
+
 positionRouter.get("/sync", positionController.getUserPositionsToSync);
 
 positionRouter.put("/sync", positionController.setUserPositionsToSync);
