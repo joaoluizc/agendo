@@ -186,7 +186,7 @@ const SlingSchedule = () => {
                 <div
                   id="shifts-wrapper"
                   className="grid"
-                  style={{ gridTemplateColumns: "repeat(48, minmax(0, 1fr))" }}
+                  style={{ gridTemplateColumns: "repeat(96, minmax(0, 1fr))" }}
                 >
                   {user.shifts.map((shift, idx) => {
                     const start = calculateGridColumnStart(
@@ -223,7 +223,7 @@ const SlingSchedule = () => {
                     id="gcalendar-wrapper"
                     className="grid"
                     style={{
-                      gridTemplateColumns: "repeat(48, minmax(0, 1fr))",
+                      gridTemplateColumns: "repeat(96, minmax(0, 1fr))",
                     }}
                   >
                     {gCalendarEvents
