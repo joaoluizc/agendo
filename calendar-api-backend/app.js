@@ -12,6 +12,7 @@ import slingRouter from "./src/routers/slingRouter.js";
 import positionRouter from "./src/routers/positionRouters.js";
 import shiftRouter from "./src/routers/shiftRouter.js";
 import locationRouter from "./src/routers/locationRouter.js";
+import adaRouter from "./src/routers/adaRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import { mountSwagger } from "./src/swagger/swagger.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
@@ -62,6 +63,7 @@ app.use("/position", requireAuth(), positionRouter);
 app.use("/user", userRouter);
 app.use("/shift", requireAuth(), shiftRouter);
 app.use("/location", requireAuth(), locationRouter);
+app.use("/ada", adaRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" })

@@ -12,6 +12,7 @@ import Settings from "./pages/Settings/Settings.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import RootLayout from "./layouts/root-layout.tsx";
 import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
+import AdaChat from "./pages/AdaChat/AdaChat.tsx";
 import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
 
 const router = createBrowserRouter([
@@ -19,6 +20,7 @@ const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { path: "/", element: <Home /> },
+      { path: "/ada", element: <AdaChat /> },
       { path: "/login", element: <Login /> },
       { path: "/privacy", element: <PrivacyPolicy /> },
       { path: "/terms", element: <TermsOfService /> },

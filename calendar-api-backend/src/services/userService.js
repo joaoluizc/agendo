@@ -131,12 +131,12 @@ async function getAllUsersWithTokens_cl() {
     })
   );
 
-  // Cache result for 15 minutes
+  // Cache result for 10 minutes
   await redisClient.set(cacheKey, JSON.stringify(usersWithTokens), {
-    EX: 15 * 60,
+    EX: 10 * 60,
     NX: true,
   });
-  console.log("getAllUsersWithTokens_cl: Cached data for 15 minutes");
+  console.log("getAllUsersWithTokens_cl: Cached data for 10 minutes");
 
   return usersWithTokens;
 }
