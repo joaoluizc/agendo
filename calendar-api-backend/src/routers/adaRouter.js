@@ -1,6 +1,7 @@
 import express from "express";
 import { searchQuery, webhookHandler } from "../controllers/adaController.js";
 import crypto from "crypto";
+import AdaAiSearch from "../models/AdaAiSearchModel.js";
 
 const router = express.Router();
 
@@ -38,5 +39,25 @@ router.post(
     webhookHandler(req, res, next);
   }
 );
+
+// Endpoint to get all AI searches from a given time frame
+router.get("/searches", async (req, res) => {
+  try {
+    const { from, to, success, cacheHit } = req.query;
+    const query = {};
+    if (from || to) {
+      query.requestedAt = {};
+      if (from) query.requestedAt.$gte = new Date(from);
+      if (to) query.requestedAt.$lte = new Date(to);
+    }
+    if (success !== undefined) query.success = success === "true";
+    if (cacheHit !== undefined) query.cacheHit = cacheHit === "true";
+    const results = await AdaAiSearch.find(query).sort({ requestedAt: -1 });
+    res.json(results);
+  } catch (err) {
+    console.error("[AdaRouter] Error fetching AI searches:", err);
+    res.status(500).json({ error: "Failed to fetch AI searches" });
+  }
+});
 
 export default router;

@@ -1,4 +1,5 @@
 import process from "process";
+import redisClient from "../database/redisClient.js";
 
 const ADA_BASE_URL = process.env.ADA_BASE_URL;
 const ADA_API_KEY = process.env.ADA_API_KEY;
@@ -33,6 +34,17 @@ export const sendMessage = async (conversationId, message) => {
   console.log(
     `[AdaService] Sending message to convo ${conversationId}: ${message}`
   );
+  // Check cache first
+  const cacheKey = `ada-search:${message}`;
+  try {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) {
+      console.log(`[AdaService] Cache hit for query: ${message}`);
+      return JSON.parse(cached);
+    }
+  } catch (err) {
+    console.error("[AdaService] Redis cache error:", err);
+  }
   const response = await fetch(
     `${ADA_BASE_URL}/api/v2/conversations/${conversationId}/messages`,
     {
@@ -60,6 +72,8 @@ export const sendMessage = async (conversationId, message) => {
 };
 // Map to hold pending replies keyed by conversation_id
 const pendingConversations = new Map();
+// Map to track send times for latency measurement
+const messageSendTimes = new Map();
 
 /**
  * Waits for a reply for a given conversation ID. Returns a promise resolving with the message content.
@@ -68,6 +82,10 @@ export const waitForReply = (conversationId) => {
   console.log(
     `[AdaService] Waiting for reply on conversation ${conversationId}`
   );
+  // Record the time when waiting starts (message sent)
+  const now = Date.now();
+  messageSendTimes.set(conversationId, now);
+  console.log(`[AdaService] Message sent at epoch: ${now}`);
   return new Promise((resolve) => {
     pendingConversations.set(conversationId, resolve);
   });
@@ -84,7 +102,17 @@ export const handleWebhook = (webhookBody) => {
   console.log(
     `[AdaService] Received webhook for convo ${convId} from author role: ${authorRole}`
   );
+  const receivedTime = Date.now();
+  console.log(`[AdaService] Webhook received at epoch: ${receivedTime}`);
   if (resolver && authorRole === "ai_agent") {
+    const sentTime = messageSendTimes.get(convId);
+    if (sentTime) {
+      const latency = receivedTime - sentTime;
+      console.log(
+        `[AdaService] Latency for conversation ${convId}: ${latency} ms`
+      );
+      messageSendTimes.delete(convId);
+    }
     resolver(content);
     pendingConversations.delete(convId);
     // end the conversation after resolving

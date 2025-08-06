@@ -14,6 +14,7 @@ import RootLayout from "./layouts/root-layout.tsx";
 import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
 import AdaChat from "./pages/AdaChat/AdaChat.tsx";
 import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
+import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 
 const router = createBrowserRouter([
   {
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: "/login", element: <Login /> },
       { path: "/privacy", element: <PrivacyPolicy /> },
       { path: "/terms", element: <TermsOfService /> },
+      { path: "/ada-stats", element: <AdaStats /> },
       { path: "*", element: <NotFound /> },
       {
         element: <ProtectedRoute />,
