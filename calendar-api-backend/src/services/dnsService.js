@@ -1,10 +1,38 @@
-import fetch from "node-fetch";
+import dns from "dns/promises";
 
 async function lookupDomain(domain) {
-  const url = `https://networkcalc.com/api/dns/lookup/${domain}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch DNS info for ${domain}`);
-  return res.json();
+  const result = {};
+  try {
+    result.A = await dns.resolve(domain, "A");
+  } catch (e) {
+    result.A = [];
+  }
+  try {
+    result.AAAA = await dns.resolve(domain, "AAAA");
+  } catch (e) {
+    result.AAAA = [];
+  }
+  try {
+    result.CNAME = await dns.resolve(domain, "CNAME");
+  } catch (e) {
+    result.CNAME = [];
+  }
+  try {
+    result.MX = await dns.resolve(domain, "MX");
+  } catch (e) {
+    result.MX = [];
+  }
+  try {
+    result.TXT = await dns.resolve(domain, "TXT");
+  } catch (e) {
+    result.TXT = [];
+  }
+  try {
+    result.CAA = await dns.resolve(domain, "CAA");
+  } catch (e) {
+    result.CAA = [];
+  }
+  return result;
 }
 
 export async function getDnsInfo(domain) {
