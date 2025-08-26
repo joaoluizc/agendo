@@ -20,7 +20,8 @@ export default defineConfig({
         // secure: true, // Set this to `true` if the target server uses a valid SSL certificate
       },
       '/api': {
-        target: process.env.BACK_END_URL,
+        //target: process.env.BACK_END_URL,
+        target: 'http://calendar-api-backend:3001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''), // Adjust the rewrite as necessary
         // secure: true, // Set this to `true` if the target server uses a valid SSL certificate
