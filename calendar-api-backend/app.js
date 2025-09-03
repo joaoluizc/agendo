@@ -1,5 +1,5 @@
+import dotenv from "dotenv";
 import express from "express";
-import session from "express-session";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import process from "process";
@@ -17,6 +17,8 @@ import dnsRouter from "./src/routers/dnsRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import { mountSwagger } from "./src/swagger/swagger.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
+
+dotenv.config();
 
 const port = process.env.PORT || 3001;
 
@@ -41,22 +43,11 @@ const corsOptions = {
   optionsSuccessStatus: 200,
   credentials: true,
 };
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: true }, // Set to true if using HTTPS
-    proxy: true,
-  })
-);
 app.use(cors(corsOptions));
 app.use(addRequestId);
 mountSwagger(app);
 
 connectDB();
-
-// await seedPositions();
 
 app.use("/gcalendar", gCalendarRouter);
 app.use("/sling", requireAuth(), slingRouter);
