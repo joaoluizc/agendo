@@ -302,7 +302,16 @@ const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
         },
         (err, response) => {
           if (err) {
-            console.log(`[${requestId}] - Error deleting event`, err);
+            if (
+              err.errors.message &&
+              err.errors.message === "Resource has been deleted"
+            ) {
+              console.log(
+                `[${requestId}] - Event ${event.id} has already been deleted. Event details: ${event.summary}, ${event.start.dateTime} - ${event.end.dateTime}`
+              );
+            } else {
+              console.log(`[${requestId}] - Error deleting event`, err);
+            }
             reject(err);
           } else {
             resolve(response);
