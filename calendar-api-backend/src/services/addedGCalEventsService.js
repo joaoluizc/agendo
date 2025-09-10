@@ -41,38 +41,71 @@ const addEvents_cl = async (user, events, requestId = "req-id-nd") => {
 };
 
 const findEventsByDate = async (date, requestId = "req-id-nd") => {
+  // Get the date in YYYY-MM-DD format
   const adjustedDate = date.split("T")[0];
+  // Calculate the start and end of the day in ISO format
+  const startOfDay = new Date(adjustedDate + "T00:00:00.000Z");
+  const endOfDay = new Date(adjustedDate + "T23:59:59.999Z");
 
   try {
-    const allEvents = await UsersGCalEvents.find();
-
-    const prevAddedEvents = allEvents.map((userEvents) => {
-      const events = userEvents.events;
-
-      const eventsOnDate = events.filter((event) => {
-        const matchesDate = String(
-          new Date(event.start.dateTime).toISOString()
-        ).includes(adjustedDate);
-        return matchesDate;
-      });
-
-      userEvents.events = [...eventsOnDate];
-      if (eventsOnDate.length > 0) {
-        return userEvents;
-      }
-
-      return null;
-    });
+    // Use aggregation to filter events array by date, parsing dateTime string to Date
+    const usersWithEvents = await UsersGCalEvents.aggregate([
+      {
+        $project: {
+          userId: 1,
+          events: 1,
+        },
+      },
+      {
+        $addFields: {
+          events: {
+            $filter: {
+              input: "$events",
+              as: "event",
+              cond: {
+                $let: {
+                  vars: {
+                    eventDate: {
+                      $cond: [
+                        { $eq: [{ $type: "$$event.start.dateTime" }, "date"] },
+                        "$$event.start.dateTime",
+                        {
+                          $dateFromString: {
+                            dateString: "$$event.start.dateTime",
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  in: {
+                    $and: [
+                      { $gte: ["$$eventDate", startOfDay] },
+                      { $lte: ["$$eventDate", endOfDay] },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $match: {
+          "events.0": { $exists: true },
+        },
+      },
+    ]);
 
     console.log(
-      `[${requestId}] findEventsByDate: Total users with events for date ${date}: ${prevAddedEvents.length} users found`
+      `[${requestId}] findEventsByDate: Total users with events for date ${date}: ${usersWithEvents.length} users found`
     );
 
-    return prevAddedEvents;
+    return usersWithEvents;
   } catch (error) {
     console.error(
       `[${requestId}] findEventsByDate: Error fetching events: ${error.message}`
     );
+    return [];
   }
 };
 

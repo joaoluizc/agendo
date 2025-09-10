@@ -16,6 +16,7 @@ import adaRouter from "./src/routers/adaRouter.js";
 import dnsRouter from "./src/routers/dnsRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import { mountSwagger } from "./src/swagger/swagger.js";
+import addedGCalEventsService from "./src/services/addedGCalEventsService.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
 
 dotenv.config();

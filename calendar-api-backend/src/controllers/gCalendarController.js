@@ -211,7 +211,6 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
   );
 });
 
-
 /**
  * @openapi
  * /gcalendar/all-events:
@@ -311,7 +310,7 @@ gCalendarRouter.post(
       ? utils.todayISO(req.body.date)
       : utils.todayISO(new Date());
     console.log(
-      `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.auth.firstName}`
+      `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.auth.userId}`
     );
     try {
       const result = await gCalendarService.addDaysShiftsToGcal_cl(
