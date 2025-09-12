@@ -375,7 +375,7 @@ gCalendarRouter.get("/", (req, res) =>
  * @openapi
  * /gcalendar/all-events-excluding-platform:
  *   get:
- *     summary: Get all Google Calendar events for all users on a specific date, excluding events created by this platform (admin only)
+ *     summary: Get all Google Calendar events for all users on a specific date, excluding events created by this platform and workingLocation events (admin only)
  *     tags:
  *       - From google calendar
  *     security:
@@ -453,7 +453,7 @@ gCalendarRouter.get(
     }
 
     console.log(
-      `[${req.requestId}] Fetching GCalendar events excluding platform-created events for ${req.auth.userId} on date ${date}`
+      `[${req.requestId}] Fetching GCalendar events excluding platform-created and workingLocation events for ${req.auth.userId} on date ${date}`
     );
     try {
       const response =
@@ -466,16 +466,16 @@ gCalendarRouter.get(
 
       if (Array.isArray(events) && events.length > 0) {
         console.log(
-          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events (excluding platform-created events)`
+          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events (excluding platform-created and workingLocation events)`
         );
         res.status(200).json({ events, errors: usersWithErrors });
       } else {
         console.warn(
-          `[${req.requestId}] No eligible events found (excluding platform-created events)`
+          `[${req.requestId}] No eligible events found (excluding platform-created and workingLocation events)`
         );
         res.status(204).json({
           message:
-            "No eligible events found (excluding platform-created events)",
+            "No eligible events found (excluding platform-created and workingLocation events)",
           errors: usersWithErrors,
         });
       }

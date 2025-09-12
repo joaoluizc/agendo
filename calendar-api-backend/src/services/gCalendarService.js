@@ -847,13 +847,16 @@ const getAllUsersEventsExcludingPlatform = async (
         // Fetch events from Google Calendar
         events = await getUserEvents_cl(user, date, requestId);
 
-        // Filter out platform-created events
+        // Filter out platform-created events and workingLocation events
         const filteredEvents = events.filter((event) => {
-          return !platformEventIds.includes(event.id);
+          return (
+            !platformEventIds.includes(event.id) &&
+            event.eventType !== "workingLocation"
+          );
         });
 
         console.log(
-          `[${requestId}] - User ${user.firstName}: ${events.length} total events, ${filteredEvents.length} after filtering platform events`
+          `[${requestId}] - User ${user.firstName}: ${events.length} total events, ${filteredEvents.length} after filtering platform and workingLocation events`
         );
 
         return { userId, slingId, events: filteredEvents };
@@ -876,7 +879,7 @@ const getAllUsersEventsExcludingPlatform = async (
     const allEventsFiltered = allEvents.filter((event) => event.events);
 
     console.log(
-      `[${requestId}] - Successfully fetched events for ${allEventsFiltered.length} users, excluding platform-created events`
+      `[${requestId}] - Successfully fetched events for ${allEventsFiltered.length} users, excluding platform-created and workingLocation events`
     );
 
     return { events: allEventsFiltered, usersWithErrors };
