@@ -23,6 +23,48 @@ const createPosition = async (req, res) => {
   if (!positionData.color) {
     return res.status(400).json({ message: "Position color is required" });
   }
+
+  // Validate new fields if provided
+  if (
+    positionData.minTime !== undefined &&
+    (typeof positionData.minTime !== "number" || positionData.minTime < 0)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Minimum time must be a positive number" });
+  }
+  if (
+    positionData.maxTime !== undefined &&
+    (typeof positionData.maxTime !== "number" || positionData.maxTime < 0)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Maximum time must be a positive number" });
+  }
+  if (
+    positionData.minTime &&
+    positionData.maxTime &&
+    positionData.minTime > positionData.maxTime
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Minimum time cannot be greater than maximum time" });
+  }
+  if (
+    positionData.stress !== undefined &&
+    typeof positionData.stress !== "boolean"
+  ) {
+    return res.status(400).json({ message: "Stress must be a boolean value" });
+  }
+  if (
+    positionData.requiredSkills !== undefined &&
+    !Array.isArray(positionData.requiredSkills)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Required skills must be an array" });
+  }
+
   try {
     const position = await positionService.createPosition(positionData);
     res.status(201).json(position);
@@ -53,6 +95,48 @@ const updatePosition = async (req, res) => {
   if (!positionData.positionId) {
     positionData.positionId = "";
   }
+
+  // Validate new fields if provided
+  if (
+    positionData.minTime !== undefined &&
+    (typeof positionData.minTime !== "number" || positionData.minTime < 0)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Minimum time must be a positive number" });
+  }
+  if (
+    positionData.maxTime !== undefined &&
+    (typeof positionData.maxTime !== "number" || positionData.maxTime < 0)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Maximum time must be a positive number" });
+  }
+  if (
+    positionData.minTime &&
+    positionData.maxTime &&
+    positionData.minTime > positionData.maxTime
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Minimum time cannot be greater than maximum time" });
+  }
+  if (
+    positionData.stress !== undefined &&
+    typeof positionData.stress !== "boolean"
+  ) {
+    return res.status(400).json({ message: "Stress must be a boolean value" });
+  }
+  if (
+    positionData.requiredSkills !== undefined &&
+    !Array.isArray(positionData.requiredSkills)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Required skills must be an array" });
+  }
+
   try {
     const position = await positionService.updatePosition(id, positionData);
     res.status(200).json(position);

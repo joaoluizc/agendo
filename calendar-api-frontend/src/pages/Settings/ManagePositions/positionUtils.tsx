@@ -3,7 +3,17 @@ import { Position } from "@/types/positionTypes";
 export async function createPosition(
   data: Omit<Position, "_id" | "sync">
 ): Promise<Position> {
-  const { name, type, color, positionId } = data;
+  const {
+    name,
+    type,
+    color,
+    positionId,
+    minTime,
+    maxTime,
+    stress,
+    requiredSkills,
+  } = data;
+
   const response = await fetch(`/api/position/new`, {
     method: "POST",
     headers: {
@@ -14,6 +24,10 @@ export async function createPosition(
       type,
       color,
       ...(positionId && { positionId }),
+      ...(minTime !== undefined && { minTime }),
+      ...(maxTime !== undefined && { maxTime }),
+      ...(stress !== undefined && { stress }),
+      ...(requiredSkills !== undefined && { requiredSkills }),
     }),
   });
 

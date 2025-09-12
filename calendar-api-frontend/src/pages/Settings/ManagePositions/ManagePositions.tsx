@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,14 +46,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Edit, Trash2 } from "lucide-react";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { Position } from "@/types/positionTypes";
+import { Skill } from "@/types/skillTypes";
 import {
   createPosition,
   deletePosition,
   updatePosition,
 } from "./positionUtils";
+import { getAllSkills } from "./skillUtils";
 import { toast } from "sonner";
 
 const POSITION_TYPES = [
@@ -80,12 +83,31 @@ export default function ManagePositions() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     color: DEFAULT_COLORS[0],
-    type: "chat" as Position["type"],
+    type: "live channel" as Position["type"],
     positionId: "",
+    minTime: 30,
+    maxTime: 480,
+    stress: false,
+    requiredSkills: [] as string[],
   });
+
+  // Load skills on component mount
+  useEffect(() => {
+    const loadSkills = async () => {
+      try {
+        const skillsData = await getAllSkills();
+        setSkills(skillsData);
+      } catch (error) {
+        console.error("Error loading skills:", error);
+        toast.error("Failed to load skills");
+      }
+    };
+    loadSkills();
+  }, []);
 
   const resetForm = () => {
     setFormData({
@@ -93,7 +115,26 @@ export default function ManagePositions() {
       color: DEFAULT_COLORS[0],
       type: "live channel",
       positionId: "",
+      minTime: 30,
+      maxTime: 480,
+      stress: false,
+      requiredSkills: [],
     });
+  };
+
+  const handleSkillToggle = (skillId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      requiredSkills: prev.requiredSkills.includes(skillId)
+        ? prev.requiredSkills.filter((id) => id !== skillId)
+        : [...prev.requiredSkills, skillId],
+    }));
+  };
+
+  const formatTime = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
   };
 
   const handleCreate = async () => {
@@ -101,6 +142,10 @@ export default function ManagePositions() {
       name: formData.name,
       color: formData.color,
       type: formData.type,
+      minTime: formData.minTime,
+      maxTime: formData.maxTime,
+      stress: formData.stress,
+      requiredSkills: formData.requiredSkills,
       ...(formData.positionId && { positionID: formData.positionId }),
     };
 
@@ -123,6 +168,10 @@ export default function ManagePositions() {
       color: position.color,
       type: position.type,
       positionId: position.positionId || "",
+      minTime: position.minTime || 30,
+      maxTime: position.maxTime || 480,
+      stress: position.stress || false,
+      requiredSkills: position.requiredSkills || [],
     });
     setIsEditDialogOpen(true);
   };
@@ -135,6 +184,10 @@ export default function ManagePositions() {
       name: formData.name,
       color: formData.color,
       type: formData.type,
+      minTime: formData.minTime,
+      maxTime: formData.maxTime,
+      stress: formData.stress,
+      requiredSkills: formData.requiredSkills,
       ...(formData.positionId && { positionId: formData.positionId }),
     };
 
@@ -195,14 +248,14 @@ export default function ManagePositions() {
                 Add Position
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
               <DialogHeader>
                 <DialogTitle>Create New Position</DialogTitle>
                 <DialogDescription>
                   Add a new position for support agents
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
+              <div className="grid gap-4 py-4 overflow-y-auto flex-1">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Position Name</Label>
                   <Input
@@ -280,6 +333,87 @@ export default function ManagePositions() {
                     Enter the legacy ID if this position exists in Sling
                   </p>
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="minTime">Minimum Time (minutes)</Label>
+                    <Input
+                      id="minTime"
+                      type="number"
+                      min="1"
+                      value={formData.minTime}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          minTime: parseInt(e.target.value) || 30,
+                        })
+                      }
+                      placeholder="30"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {formatTime(formData.minTime)}
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="maxTime">Maximum Time (minutes)</Label>
+                    <Input
+                      id="maxTime"
+                      type="number"
+                      min="1"
+                      value={formData.maxTime}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          maxTime: parseInt(e.target.value) || 480,
+                        })
+                      }
+                      placeholder="480"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {formatTime(formData.maxTime)}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="stress"
+                      checked={formData.stress}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, stress: checked as boolean })
+                      }
+                    />
+                    <Label htmlFor="stress">High Stress Position</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Mark this position as high stress for workload management
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Required Skills</Label>
+                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                    {skills.map((skill) => (
+                      <div
+                        key={skill._id}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`skill-${skill._id}`}
+                          checked={formData.requiredSkills.includes(skill._id)}
+                          onCheckedChange={() => handleSkillToggle(skill._id)}
+                        />
+                        <Label
+                          htmlFor={`skill-${skill._id}`}
+                          className="text-sm"
+                        >
+                          {skill.name}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Select the skills required for this position
+                  </p>
+                </div>
               </div>
               <DialogFooter>
                 <Button
@@ -303,7 +437,8 @@ export default function ManagePositions() {
               <TableHead>Color</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead>Integration</TableHead>
+              <TableHead>Stress</TableHead>
+              <TableHead>Skills</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -321,17 +456,40 @@ export default function ManagePositions() {
                 <TableCell className="font-medium">{position.name}</TableCell>
                 <TableCell className="capitalize">{position.type}</TableCell>
                 <TableCell>
-                  {position.positionId && (
-                    <a
-                      href={`https://app.getsling.com/manage/positions/${position.positionId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Badge variant="secondary" className="gap-1">
-                        <ExternalLink className="h-3 w-3" />
-                        Sling Position
-                      </Badge>
-                    </a>
+                  {position.stress ? (
+                    <Badge variant="destructive" className="text-xs">
+                      High Stress
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">
+                      Normal
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {position.requiredSkills &&
+                  position.requiredSkills.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {position.requiredSkills.slice(0, 2).map((skillId) => {
+                        const skill = skills.find((s) => s._id === skillId);
+                        return skill ? (
+                          <Badge
+                            key={skillId}
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            {skill.name}
+                          </Badge>
+                        ) : null;
+                      })}
+                      {position.requiredSkills.length > 2 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{position.requiredSkills.length - 2} more
+                        </Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">None</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
@@ -383,12 +541,12 @@ export default function ManagePositions() {
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Edit Position</DialogTitle>
               <DialogDescription>Update the position details</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-4 py-4 overflow-y-auto flex-1">
               <div className="grid gap-2">
                 <Label htmlFor="edit-name">Position Name</Label>
                 <Input
@@ -464,6 +622,87 @@ export default function ManagePositions() {
                 />
                 <p className="text-sm text-muted-foreground">
                   Enter the legacy ID if this position exists in Sling
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-minTime">Minimum Time (minutes)</Label>
+                  <Input
+                    id="edit-minTime"
+                    type="number"
+                    min="1"
+                    value={formData.minTime}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        minTime: parseInt(e.target.value) || 30,
+                      })
+                    }
+                    placeholder="30"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {formatTime(formData.minTime)}
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-maxTime">Maximum Time (minutes)</Label>
+                  <Input
+                    id="edit-maxTime"
+                    type="number"
+                    min="1"
+                    value={formData.maxTime}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        maxTime: parseInt(e.target.value) || 480,
+                      })
+                    }
+                    placeholder="480"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {formatTime(formData.maxTime)}
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="edit-stress"
+                    checked={formData.stress}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, stress: checked as boolean })
+                    }
+                  />
+                  <Label htmlFor="edit-stress">High Stress Position</Label>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Mark this position as high stress for workload management
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label>Required Skills</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                  {skills.map((skill) => (
+                    <div
+                      key={skill._id}
+                      className="flex items-center space-x-2"
+                    >
+                      <Checkbox
+                        id={`edit-skill-${skill._id}`}
+                        checked={formData.requiredSkills.includes(skill._id)}
+                        onCheckedChange={() => handleSkillToggle(skill._id)}
+                      />
+                      <Label
+                        htmlFor={`edit-skill-${skill._id}`}
+                        className="text-sm"
+                      >
+                        {skill.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Select the skills required for this position
                 </p>
               </div>
             </div>

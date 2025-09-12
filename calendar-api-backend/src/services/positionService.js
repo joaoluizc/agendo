@@ -4,12 +4,17 @@ import { User } from "../models/UserModel.js";
 import userService from "./userService.js";
 
 const createPosition = async (data) => {
-  const { name, color, type } = data;
+  const { name, color, type, minTime, maxTime, stress, requiredSkills } = data;
+
   const position = new Position({
     name,
     color,
     type,
     positionId: data.positionId || "",
+    minTime: minTime || 30,
+    maxTime: maxTime || 480,
+    stress: stress || false,
+    requiredSkills: requiredSkills || [],
   });
   await position.save();
   return position;
@@ -30,11 +35,28 @@ const updatePosition = async (id, data) => {
   if (!position) {
     return null;
   }
-  const { name, color, type, positionId } = data;
+  const {
+    name,
+    color,
+    type,
+    positionId,
+    minTime,
+    maxTime,
+    stress,
+    requiredSkills,
+  } = data;
+
   position.name = name;
   position.color = color;
   position.type = type;
   position.positionId = positionId;
+
+  // Update new fields if provided
+  if (minTime !== undefined) position.minTime = minTime;
+  if (maxTime !== undefined) position.maxTime = maxTime;
+  if (stress !== undefined) position.stress = stress;
+  if (requiredSkills !== undefined) position.requiredSkills = requiredSkills;
+
   await position.save();
   return position;
 };
