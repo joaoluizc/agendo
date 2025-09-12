@@ -127,9 +127,40 @@ const deleteEvents = async (userId, events, requestId = "req-id-nd") => {
   }
 };
 
+/**
+ * Get all platform-created event IDs from the database
+ * @param {string} requestId - Request ID for logging
+ * @returns {Promise<Array<string>>} Array of event IDs created by the platform
+ */
+const getAllPlatformEventIds = async (requestId = "req-id-nd") => {
+  try {
+    console.log(`[${requestId}] - Fetching all platform-created event IDs`);
+
+    const allUserEvents = await UsersGCalEvents.find({});
+    const platformEventIds = [];
+
+    allUserEvents.forEach((userEvent) => {
+      userEvent.events.forEach((event) => {
+        if (event.id) {
+          platformEventIds.push(event.id);
+        }
+      });
+    });
+
+    console.log(
+      `[${requestId}] - Found ${platformEventIds.length} platform-created event IDs`
+    );
+    return platformEventIds;
+  } catch (error) {
+    console.error(`[${requestId}] - Error fetching platform event IDs:`, error);
+    return [];
+  }
+};
+
 export default {
   addEvents: addEvents,
   addEvents_cl,
   findEventsByDate,
   deleteEvents,
+  getAllPlatformEventIds,
 };

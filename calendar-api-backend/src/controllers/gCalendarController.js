@@ -371,6 +371,124 @@ gCalendarRouter.get("/", (req, res) =>
   res.status(200).json({ message: "hey there :-))))" })
 );
 
+/**
+ * @openapi
+ * /gcalendar/all-events-excluding-platform:
+ *   get:
+ *     summary: Get all Google Calendar events for all users on a specific date, excluding events created by this platform (admin only)
+ *     tags:
+ *       - From google calendar
+ *     security:
+ *       - clerkAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "2024-06-01"
+ *         description: "The date for which to retrieve calendar data using ISO 8601 format. If date is invalid, the current date will be used."
+ *     responses:
+ *       200:
+ *         description: List of events and users with errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 events:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       204:
+ *         description: No eligible events found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Failed to fetch events
+ */
+gCalendarRouter.get(
+  "/all-events-excluding-platform",
+  requireAuth(),
+  adminOnly,
+  async (req, res) => {
+    // Handle missing or invalid date parameter
+    if (!req.query.date) {
+      return res.status(400).json({
+        error: "Date parameter is required. Use format: ?date=YYYY-MM-DD",
+      });
+    }
+
+    let date;
+    try {
+      // Handle different date formats
+      const dateString = req.query.date.includes("/")
+        ? req.query.date.split("/")[0]
+        : req.query.date;
+      date = new Date(dateString);
+
+      // Validate the date
+      if (isNaN(date.getTime())) {
+        throw new Error("Invalid date format");
+      }
+    } catch (error) {
+      return res.status(400).json({
+        error: "Invalid date format. Use YYYY-MM-DD format",
+      });
+    }
+
+    console.log(
+      `[${req.requestId}] Fetching GCalendar events excluding platform-created events for ${req.auth.userId} on date ${date}`
+    );
+    try {
+      const response =
+        await gCalendarService.getAllUsersEventsExcludingPlatform(
+          date,
+          req.requestId
+        );
+      const events = response.events;
+      const usersWithErrors = response.usersWithErrors;
+
+      if (Array.isArray(events) && events.length > 0) {
+        console.log(
+          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events (excluding platform-created events)`
+        );
+        res.status(200).json({ events, errors: usersWithErrors });
+      } else {
+        console.warn(
+          `[${req.requestId}] No eligible events found (excluding platform-created events)`
+        );
+        res.status(204).json({
+          message:
+            "No eligible events found (excluding platform-created events)",
+          errors: usersWithErrors,
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[${req.requestId}] Error fetching all user events excluding platform:`,
+        error
+      );
+      res.status(500).json({ error: "Failed to fetch events" });
+    }
+  }
+);
+
 // // Cron job to check and refresh gapi tokens every 30 minutes
 // cron.schedule("*/30 * * * *", async () => {
 //   console.log("Running cron job to check and refresh tokens");

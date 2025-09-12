@@ -812,6 +812,83 @@ function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
   return shouldSync;
 }
 
+/**
+ * Get Google Calendar events for all users, excluding events created by this platform
+ * @param {Date} date - The date to fetch events for
+ * @param {string} requestId - Request ID for logging
+ * @returns {Promise<Object>} Object containing events and any errors
+ */
+const getAllUsersEventsExcludingPlatform = async (
+  date,
+  requestId = "req-id-nd"
+) => {
+  console.log(
+    `[${requestId}] - Fetching all users events excluding platform-created events`
+  );
+
+  try {
+    // Get all users with Google authentication
+    const users = await userService.getAllUsersWithTokens_cl();
+    let usersWithErrors = [];
+
+    // Get all platform-created event IDs from the database
+    const platformEventIds =
+      await addedGCalEventsService.getAllPlatformEventIds(requestId);
+    console.log(
+      `[${requestId}] - Found ${platformEventIds.length} platform-created event IDs to exclude`
+    );
+
+    const allEventsPromises = users.map(async (user) => {
+      const slingId = user.publicMetadata.slingId;
+      const userId = user.id;
+
+      let events;
+      try {
+        // Fetch events from Google Calendar
+        events = await getUserEvents_cl(user, date, requestId);
+
+        // Filter out platform-created events
+        const filteredEvents = events.filter((event) => {
+          return !platformEventIds.includes(event.id);
+        });
+
+        console.log(
+          `[${requestId}] - User ${user.firstName}: ${events.length} total events, ${filteredEvents.length} after filtering platform events`
+        );
+
+        return { userId, slingId, events: filteredEvents };
+      } catch (e) {
+        console.log(
+          `[${requestId}] - Error fetching events for user ${user.firstName}: `,
+          e
+        );
+        usersWithErrors.push({
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          error: e?.errors?.[0]?.message || "Unknown error",
+        });
+        return {};
+      }
+    });
+
+    const allEvents = await Promise.all(allEventsPromises);
+    const allEventsFiltered = allEvents.filter((event) => event.events);
+
+    console.log(
+      `[${requestId}] - Successfully fetched events for ${allEventsFiltered.length} users, excluding platform-created events`
+    );
+
+    return { events: allEventsFiltered, usersWithErrors };
+  } catch (error) {
+    console.error(
+      `[${requestId}] - Error in getAllUsersEventsExcludingPlatform:`,
+      error
+    );
+    throw error;
+  }
+};
+
 export default {
   getUserInfo,
   getUserEvents,
@@ -828,4 +905,5 @@ export default {
   addUsersDayShifts_cl,
   deleteEvents,
   getAllUsersEvents_cl,
+  getAllUsersEventsExcludingPlatform,
 };
