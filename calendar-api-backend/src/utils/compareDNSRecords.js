@@ -28,7 +28,7 @@ function matchARecords(aRecords) {
 
 function matchCnameRecords(cnameRecords) {
   if (areTargetRecordsEqual(cnameRecords, ["s.multiscreensite.com"])) {
-    return "OK. Duda CNAME record found.";
+    return "OK. Duda main instance CNAME record found.";
   } else if (
     areTargetRecordsEqual(cnameRecords, ["s.eu-multiscreensite.com"])
   ) {
