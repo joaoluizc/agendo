@@ -13,14 +13,14 @@ function matchARecords(aRecords) {
     if (aRecords.length === 2) {
       return "OK. Duda main instance A records found.";
     } else {
-      return "NOT OK. Duda main instance A records found, but there are extra records. Remove the extra records.";
+      return "NOT OK. Duda main instance A records found, but there are extra records. Remove the extra records, keep only 100.24.208.97 and 35.172.94.1.";
     }
   }
   if (aRecords.includes("52.59.120.70") && aRecords.includes("18.197.248.23")) {
     if (aRecords.length === 2) {
       return "OK. Duda EU instance A records found.";
     } else {
-      return "NOT OK. Duda EU instance A records found, but there are extra records. Remove the extra records.";
+      return "NOT OK. Duda EU instance A records found, but there are extra records. Remove the extra records, keep only 52.59.120.70 and 18.197.248.23.";
     }
   }
   return "NOT OK. Please check the A records.";
