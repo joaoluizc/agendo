@@ -1,4 +1,5 @@
 import dns from "dns/promises";
+import { compareDNSRecordsToDuda } from "../utils/compareDNSRecords.js";
 
 async function lookupDomain(domain) {
   const result = {};
@@ -42,5 +43,6 @@ export async function getDnsInfo(domain) {
     lookupDomain(naked),
     lookupDomain(www),
   ]);
-  return { naked: nakedInfo, www: wwwInfo };
+  const diagnoses = compareDNSRecordsToDuda(nakedInfo, wwwInfo);
+  return { naked: nakedInfo, www: wwwInfo, diagnoses };
 }
