@@ -20,6 +20,7 @@ import dnsRouter from "./src/routers/dnsRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import { mountSwagger } from "./src/swagger/swagger.js";
 import forecastRouter from "./src/routers/forecastRouter.js";
+import constraintRouter from "./src/routers/constraintRouter.js";
 import { startDemandForecastCron } from "./src/cron/demandForecastCron.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
 
@@ -72,6 +73,7 @@ app.use("/ada", adaRouter);
 app.use("/dns", dnsRouter);
 
 app.use("/forecast", requireAuth(), forecastRouter);
+app.use("/constraints", constraintRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" })
