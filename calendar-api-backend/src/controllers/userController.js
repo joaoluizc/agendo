@@ -9,7 +9,7 @@ const userInfo = async (req, res) => {
   if (!userId) {
     return res.status(400).json({ message: "userId is required" });
   }
-  
+
   const user = await userService.findUser(userEmail);
   if (!user) {
     return res.status(400).json({ message: "User not found" });
@@ -36,19 +36,19 @@ const userInfo_cl = async (req, res) => {
 
   let user;
   try {
-    user = await userService.findUser_cl(userId);
+    user = await userService.findUserByClerkId(userId);
   } catch (err) {
     console.error(err.message);
     return res.status(500).json({ message: `caught error: ${err.message}` });
   }
 
   const response = {
-    email: user.emailAddresses[0].emailAddress,
+    email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    slingId: user.publicMetadata.slingId,
-    timeZone: user.publicMetadata.timeZone,
-    type: user.publicMetadata.type,
+    slingId: user.slingId,
+    timeZone: user.timeZone,
+    type: user.type,
   };
   res.status(200).json(response);
 };
