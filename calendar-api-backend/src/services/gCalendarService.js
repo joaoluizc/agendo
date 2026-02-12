@@ -6,6 +6,7 @@ import { google } from "googleapis";
 import process from "process";
 import addedGCalEventsService from "./addedGCalEventsService.js";
 import { newShiftToEvent } from "../utils/newShiftToEvent.js";
+import positionService from "./positionService.js";
 
 dotenv.config();
 
