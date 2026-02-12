@@ -313,7 +313,7 @@ gCalendarRouter.post(
       `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.auth.userId}`,
     );
     try {
-      const result = await gCalendarService.addDaysShiftsToGcal(
+      const result = await gCalendarService.addDaysShiftsToGcal_cl(
         date,
         req.requestId,
       );

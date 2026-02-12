@@ -544,9 +544,10 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
         console.log(
           `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
         );
-        const positionsToSync = user.publicMetadata.positionsToSync.map(
-          (position) => position.positionId.toString(),
-        );
+        const positionsToSync = positionService.getUserPositionsToSync(user.id);
+        // const positionsToSync = user.publicMetadata.positionsToSync.map(
+        //   (position) => position.positionId.toString(),
+        // );
         const shiftsToAdd = userShifts.filter((event) =>
           positionsToSync.includes(event.position.id.toString()),
         );
