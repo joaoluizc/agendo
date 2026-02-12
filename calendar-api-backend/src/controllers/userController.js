@@ -80,7 +80,7 @@ const newClerkUser = async (req, res) => {
   const slingId = utils.getSlingIdByEmail(userEmail);
 
   console.log(
-    `[${req.requestId}]: newClerkUser called for user: ${userEmail}, clerkId: ${clerkId}, slingId: ${slingId}`
+    `[${req.requestId}]: newClerkUser called for user: ${userEmail}, clerkId: ${clerkId}, slingId: ${slingId}`,
   );
 
   await userService.createUser({
