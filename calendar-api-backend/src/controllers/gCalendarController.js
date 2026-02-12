@@ -179,7 +179,7 @@ gCalendarRouter.get("/calendars", requireAuth(), async (req, res) => {
 
 gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
   console.log(
-    `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId}`
+    `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId}`,
   );
   // const tokens = await userService.getGapiToken(req.user.email);
   const tokens = await userService.getUserGoogleOAuthToken_cl(req.auth.userId);
@@ -203,11 +203,11 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
         return res.send("Error");
       }
       console.log(
-        `[${req.requestId}] GCal fetch successful: ${response.data.items.length} events`
+        `[${req.requestId}] GCal fetch successful: ${response.data.items.length} events`,
       );
       const events = response.data.items;
       res.json(events);
-    }
+    },
   );
 });
 
@@ -269,19 +269,19 @@ gCalendarRouter.get(
   async (req, res) => {
     const date = new Date(req.query.date.split("/")[0]);
     console.log(
-      `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId} on date ${date}`
+      `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId} on date ${date}`,
     );
     try {
       const response = await gCalendarService.getAllUsersEvents_cl(
         date,
-        req.requestId
+        req.requestId,
       );
       const events = response.events;
       const usersWithErrors = response.usersWithErrors;
 
       if (Array.isArray(events) && events.length > 0) {
         console.log(
-          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events`
+          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events`,
         );
         res.status(200).json({ events, errors: usersWithErrors });
       } else {
@@ -294,11 +294,11 @@ gCalendarRouter.get(
     } catch (error) {
       console.error(
         `[${req.requestId}] Error fetching all user events:`,
-        error
+        error,
       );
       res.status(500).json({ error: "Failed to fetch events" });
     }
-  }
+  },
 );
 
 gCalendarRouter.post(
@@ -310,15 +310,15 @@ gCalendarRouter.post(
       ? utils.todayISO(req.body.date)
       : utils.todayISO(new Date());
     console.log(
-      `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.auth.userId}`
+      `[${req.requestId}] gCalendarController day's shifts to gcal 1: Adding all shifts to GCal for date ${date}. Request from user ${req.auth.userId}`,
     );
     try {
-      const result = await gCalendarService.addDaysShiftsToGcal_cl(
+      const result = await gCalendarService.addDaysShiftsToGcal(
         date,
-        req.requestId
+        req.requestId,
       );
       console.log(
-        `[${req.requestId}] gCalendarController day's shifts to gcal 2: Shifts added to GCal for date ${date}`
+        `[${req.requestId}] gCalendarController day's shifts to gcal 2: Shifts added to GCal for date ${date}`,
       );
       return res.status(result.status).json({
         message: result.message,
@@ -328,7 +328,7 @@ gCalendarRouter.post(
       console.error(`[${req.requestId}] Error adding shifts to GCal:`, error);
       return res.status(500).json({ error: "Failed to add shifts to GCal" });
     }
-  }
+  },
 );
 
 gCalendarRouter.post(
@@ -341,7 +341,7 @@ gCalendarRouter.post(
     const userId = req.auth.userId;
 
     console.log(
-      `[${req.requestId}] gCalendarController user day's shifts to gcal 1: Adding user shifts to GCal for date ${date}. Request from user ${userId}`
+      `[${req.requestId}] gCalendarController user day's shifts to gcal 1: Adding user shifts to GCal for date ${date}. Request from user ${userId}`,
     );
 
     const user = await userService.findUser_cl(userId);
@@ -349,26 +349,26 @@ gCalendarRouter.post(
       `[${
         req.requestId
       }] gCalendarController - User found for ${userId}. ${JSON.stringify(
-        user
-      )}`
+        user,
+      )}`,
     );
 
     try {
       const result = await gCalendarService.addUsersDayShifts_cl(
         user,
         date,
-        req.requestId
+        req.requestId,
       );
       return res.status(result.status).json(result.message);
     } catch (error) {
       console.error(`[${req.requestId}] Error adding shifts to GCal:`, error);
       return res.status(500).json({ error: "Failed to add shifts to GCal" });
     }
-  }
+  },
 );
 
 gCalendarRouter.get("/", (req, res) =>
-  res.status(200).json({ message: "hey there :-))))" })
+  res.status(200).json({ message: "hey there :-))))" }),
 );
 
 /**
@@ -453,25 +453,25 @@ gCalendarRouter.get(
     }
 
     console.log(
-      `[${req.requestId}] Fetching GCalendar events excluding platform-created and workingLocation events for ${req.auth.userId} on date ${date}`
+      `[${req.requestId}] Fetching GCalendar events excluding platform-created and workingLocation events for ${req.auth.userId} on date ${date}`,
     );
     try {
       const response =
         await gCalendarService.getAllUsersEventsExcludingPlatform(
           date,
-          req.requestId
+          req.requestId,
         );
       const events = response.events;
       const usersWithErrors = response.usersWithErrors;
 
       if (Array.isArray(events) && events.length > 0) {
         console.log(
-          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events (excluding platform-created and workingLocation events)`
+          `[${req.requestId}] GCal fetch successful for date ${date}: ${events.length} events (excluding platform-created and workingLocation events)`,
         );
         res.status(200).json({ events, errors: usersWithErrors });
       } else {
         console.warn(
-          `[${req.requestId}] No eligible events found (excluding platform-created and workingLocation events)`
+          `[${req.requestId}] No eligible events found (excluding platform-created and workingLocation events)`,
         );
         res.status(204).json({
           message:
@@ -482,11 +482,11 @@ gCalendarRouter.get(
     } catch (error) {
       console.error(
         `[${req.requestId}] Error fetching all user events excluding platform:`,
-        error
+        error,
       );
       res.status(500).json({ error: "Failed to fetch events" });
     }
-  }
+  },
 );
 
 // // Cron job to check and refresh gapi tokens every 30 minutes
