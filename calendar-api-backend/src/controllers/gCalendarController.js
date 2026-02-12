@@ -344,7 +344,7 @@ gCalendarRouter.post(
       `[${req.requestId}] gCalendarController user day's shifts to gcal 1: Adding user shifts to GCal for date ${date}. Request from user ${userId}`,
     );
 
-    const user = await userService.findUser_cl(userId);
+    const user = await userService.findUserByClerkId(userId);
     console.log(
       `[${
         req.requestId
