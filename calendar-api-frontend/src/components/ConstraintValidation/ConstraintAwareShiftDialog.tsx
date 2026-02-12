@@ -31,10 +31,6 @@ const ConstraintAwareShiftDialog: React.FC<ConstraintAwareShiftDialogProps> = ({
   const { validateShift, validationResult, isValidating } =
     useConstraintValidation();
 
-  const handleShiftData = (shiftData: any) => {
-    setPendingShift(shiftData);
-  };
-
   const handleValidateAndCreate = async () => {
     if (!pendingShift) return;
 
