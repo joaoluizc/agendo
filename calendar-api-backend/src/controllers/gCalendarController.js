@@ -354,7 +354,7 @@ gCalendarRouter.post(
     );
 
     try {
-      const result = await gCalendarService.addUsersDayShifts_cl(
+      const result = await gCalendarService.addUsersDayShifts(
         user,
         date,
         req.requestId,
