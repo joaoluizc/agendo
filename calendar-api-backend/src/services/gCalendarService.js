@@ -360,7 +360,7 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
     console.log(
       `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
-    const usersWithGoogle = await userService.getAllUsersWithTokens();
+    const usersWithGoogle = await userService.getAllUsersWithTokens_cl();
     console.log(
       `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`,
     );
