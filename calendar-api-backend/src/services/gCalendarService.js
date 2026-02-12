@@ -13,7 +13,7 @@ const getOAuth2Client = (tokens) => {
   const oauth2Client = new google.auth.OAuth2(
     process.env.CLIENT_ID,
     process.env.SECRET_ID,
-    process.env.REDIRECT
+    process.env.REDIRECT,
   );
   oauth2Client.setCredentials(tokens);
   return oauth2Client;
@@ -36,7 +36,7 @@ const getUserInfo = async (tokens, requestId = "req-id-nd") => {
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
       },
-    }
+    },
   );
   return await response.json();
 };
@@ -44,7 +44,7 @@ const getUserInfo = async (tokens, requestId = "req-id-nd") => {
 const getUserEvents = async (
   email,
   date = new Date(),
-  requestId = "req-id-nd"
+  requestId = "req-id-nd",
 ) => {
   console.log(`[${requestId}] - Fetching user events for ${email}`);
   const tokens = await userService.getGapiToken(email); // Retrieve tokens from the user service
@@ -76,7 +76,7 @@ const getUserEvents = async (
           const events = response.data.items;
           resolve(events);
         }
-      }
+      },
     );
   });
 };
@@ -84,7 +84,7 @@ const getUserEvents = async (
 async function getUserEvents_cl(
   user,
   date = new Date(),
-  requestId = "req-id-nd"
+  requestId = "req-id-nd",
 ) {
   const userId = user.id;
   const tokens = user.GoogleAccessToken;
@@ -117,7 +117,7 @@ async function getUserEvents_cl(
           const events = response.data.items;
           resolve(events);
         }
-      }
+      },
     );
   });
 }
@@ -152,7 +152,7 @@ const getAllUsersEvents_cl = async (date, requestId = "req-id-nd") => {
     } catch (e) {
       console.log(
         `[${requestId}] - Error fetching events for user ${user.firstName}: `,
-        e
+        e,
       );
       usersWithErrors.push({
         userId: user.id,
@@ -172,7 +172,7 @@ const getAllUsersEvents_cl = async (date, requestId = "req-id-nd") => {
 
 const addEvent = async (user, event, requestId = "req-id-nd") => {
   console.log(`[${requestId}] - Adding event`);
-  const tokens = await getUserTokens(user);
+  const tokens = await userService.getUserGoogleOAuthToken_cl(user.clerkId);
   const oauth2Client = getOAuth2Client(tokens);
   const calendar = google.calendar({ version: "v3", auth: oauth2Client });
   const addedEvent = await new Promise((resolve, reject) => {
@@ -185,13 +185,13 @@ const addEvent = async (user, event, requestId = "req-id-nd") => {
         if (err) {
           console.log(
             `[${requestId}] - Error adding event to user ${user.email}`,
-            err
+            err,
           );
           reject(err);
         } else {
           resolve(response);
         }
-      }
+      },
     );
   });
   return addedEvent.data;
@@ -200,7 +200,7 @@ const addEvent = async (user, event, requestId = "req-id-nd") => {
 const addEvent_cl = async (user, event, requestId = "req-id-nd") => {
   console.log(
     `[${requestId}] - Adding event to user ${user.firstName}: `,
-    JSON.stringify(event)
+    JSON.stringify(event),
   );
   const tokens = await userService.getUserGoogleOAuthToken_cl(user.id);
   const oauth2Client = getOAuth2Client(tokens);
@@ -215,18 +215,18 @@ const addEvent_cl = async (user, event, requestId = "req-id-nd") => {
         if (err) {
           console.error(
             `[${requestId}] - Error adding event to user ${user.firstName}`,
-            err
+            err,
           );
           reject(err);
         } else {
           resolve(response);
         }
-      }
+      },
     );
   });
   console.log(
     `[${requestId}] - Event added to user ${user.firstName}`,
-    JSON.stringify(addedEvent.data)
+    JSON.stringify(addedEvent.data),
   );
   return addedEvent.data;
 };
@@ -250,7 +250,7 @@ const addEvents = async (user, events, requestId = "req-id-nd") => {
           } else {
             resolve(response);
           }
-        }
+        },
       );
     });
   });
@@ -277,7 +277,7 @@ const deleteEvents = async (user, events, requestId = "req-id-nd") => {
           } else {
             resolve(response);
           }
-        }
+        },
       );
     });
   });
@@ -307,7 +307,7 @@ const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
               err.errors.message === "Resource has been deleted"
             ) {
               console.log(
-                `[${requestId}] - Event ${event.id} has already been deleted. Event details: ${event.summary}, ${event.start.dateTime} - ${event.end.dateTime}`
+                `[${requestId}] - Event ${event.id} has already been deleted. Event details: ${event.summary}, ${event.start.dateTime} - ${event.end.dateTime}`,
               );
             } else {
               console.log(`[${requestId}] - Error deleting event`, err);
@@ -316,7 +316,7 @@ const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
           } else {
             resolve(response);
           }
-        }
+        },
       );
     });
   });
@@ -344,7 +344,7 @@ const updateEvents_cl = async (user, events, requestId = "req-id-nd") => {
           } else {
             resolve(response);
           }
-        }
+        },
       );
     });
   });
@@ -358,83 +358,83 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
   try {
     const calendar = await slingController.getCalendar(date);
     console.log(
-      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
+      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
     const usersWithGoogle = await userService.getAllUsersWithTokens();
     console.log(
-      `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`
+      `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`,
     );
 
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
     console.log(
-      `[${requestId}] - Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`
+      `[${requestId}] - Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`,
     );
 
     await Promise.all(
       usersWithGoogle.map(async (user) => {
         const slingUser = calendar.filter(
-          (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId)
+          (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
         )[0];
         if (!slingUser) {
           console.log(
-            `[${requestId}] - Found no shifts for user ${user.email}, no event was added to calendar`
+            `[${requestId}] - Found no shifts for user ${user.email}, no event was added to calendar`,
           );
           return;
         }
         const userShifts = slingUser.shifts;
         console.log(
-          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.email}`
+          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.email}`,
         );
 
         const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-          (prevAddedEvent) => prevAddedEvent?.userId === user?.id
+          (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
         );
         if (prevAddedEventsForUser) {
           // delete events from GCal
           console.log(
-            `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} events for user ${user.email} on date ${date}`
+            `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} events for user ${user.email} on date ${date}`,
           );
           try {
             await deleteEvents(user, prevAddedEventsForUser.events, requestId);
             await addedGCalEventsService.deleteEvents(
               user.id,
               prevAddedEventsForUser.events,
-              requestId
+              requestId,
             );
           } catch (e) {
             console.log(
-              `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`
+              `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`,
             );
           }
         }
 
         console.log(
-          `[${requestId}] - Filtering shifts for ${user.email} to what user wants to sync`
+          `[${requestId}] - Filtering shifts for ${user.email} to what user wants to sync`,
         );
         const positionsToSync = user.positionsToSync.map((position) =>
-          position.positionId.toString()
+          position.positionId.toString(),
         );
         const shiftsToAdd = userShifts.filter((event) =>
-          positionsToSync.includes(event.position.id.toString())
+          positionsToSync.includes(event.position.id.toString()),
         );
         const userEvents = shiftsToAdd.map((shift) =>
-          utils.shiftToEvent(shift)
+          utils.shiftToEvent(shift),
         );
 
         console.log(
-          `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`
+          `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`,
         );
         usersWithChanges.push({ email: user.email, addedEvents: userEvents });
         numberOfAddedEvents += userEvents.length;
         const addedEvents = await Promise.all(
           userEvents.map(
-            async (event) => await addEvent(user, event, requestId)
-          )
+            async (event) => await addEvent(user, event, requestId),
+          ),
         );
         await addedGCalEventsService.addEvents(user, addedEvents, requestId);
         console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
-      })
+      }),
     );
     if (numberOfAddedEvents?.length === 0 && usersWithChanges?.length === 0) {
       return { status: 200, message: "No shifts eligible to be added to GCal" };
@@ -447,7 +447,7 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
   } catch (e) {
     console.error(
       `[${requestId}] - Error adding shifts to GCal: `,
-      JSON.stringify(e)
+      JSON.stringify(e),
     );
     return { status: 500, message: "Error adding shifts to GCal" };
   }
@@ -461,7 +461,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
   try {
     const calendar = await slingController.getCalendar(date);
     console.log(
-      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
+      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
     const usersTokensResponse = await userService.getAllUsersWithTokens_cl();
     const usersWithGoogle = usersTokensResponse.filter((user) => {
@@ -477,73 +477,73 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       return true;
     });
     console.log(
-      `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`
+      `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`,
     );
 
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
     console.log(
-      `[${requestId}] - Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`
+      `[${requestId}] - Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`,
     );
 
     await Promise.all(
       usersWithGoogle.map(async (user) => {
         const slingUser = calendar.filter(
           (slingUserCal) =>
-            Number(slingUserCal.id) === Number(user.publicMetadata.slingId)
+            Number(slingUserCal.id) === Number(user.publicMetadata.slingId),
         )[0];
         if (!slingUser) {
           console.log(
-            `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`
+            `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`,
           );
           return;
         }
         const userShifts = slingUser.shifts;
         console.log(
-          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`
+          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
         );
 
         const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-          (prevAddedEvent) => prevAddedEvent?.userId === user?.id
+          (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
         );
         if (prevAddedEventsForUser) {
           // delete events from GCal
           console.log(
-            `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} events for user ${user.firstName} on date ${date}`
+            `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} events for user ${user.firstName} on date ${date}`,
           );
           try {
             await deleteEvents_cl(
               user,
               prevAddedEventsForUser.events,
-              requestId
+              requestId,
             );
             await addedGCalEventsService.deleteEvents(
               user.id,
               prevAddedEventsForUser.events,
-              requestId
+              requestId,
             );
           } catch (e) {
             console.log(
-              `[${requestId}] - Error deleting events for user ${user.firstName} on date ${date}. Error Message: ${e}`
+              `[${requestId}] - Error deleting events for user ${user.firstName} on date ${date}. Error Message: ${e}`,
             );
           }
         }
 
         console.log(
-          `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`
+          `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
         );
         const positionsToSync = user.publicMetadata.positionsToSync.map(
-          (position) => position.positionId.toString()
+          (position) => position.positionId.toString(),
         );
         const shiftsToAdd = userShifts.filter((event) =>
-          positionsToSync.includes(event.position.id.toString())
+          positionsToSync.includes(event.position.id.toString()),
         );
         const userEvents = shiftsToAdd.map((shift) =>
-          utils.shiftToEvent(shift)
+          utils.shiftToEvent(shift),
         );
 
         console.log(
-          `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`
+          `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
         );
         usersWithChanges.push({
           firstName: user.firstName,
@@ -554,18 +554,18 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
         try {
           addedEvents = await Promise.all(
             userEvents.map(
-              async (event) => await addEvent_cl(user, event, requestId)
-            )
+              async (event) => await addEvent_cl(user, event, requestId),
+            ),
           );
           await addedGCalEventsService.addEvents_cl(
             user,
             addedEvents,
-            requestId
+            requestId,
           );
         } catch (error) {
           console.error(
             `[${requestId}] - Error adding event for user ${user.firstName}: `,
-            error.errors[0].message
+            error.errors[0].message,
           );
           usersWithErrors.push({
             userId: user.id,
@@ -575,7 +575,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
           });
         }
         console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
-      })
+      }),
     );
     if (numberOfAddedEvents?.length === 0 && usersWithChanges?.length === 0) {
       return {
@@ -601,15 +601,15 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
   try {
     const calendar = await slingController.getCalendar(date);
     console.log(
-      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
+      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
 
     const slingUser = calendar.find(
-      (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId)
+      (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
     );
     if (!slingUser) {
       console.log(
-        `[${requestId}] - Found no shifts for user ${user.email}, no event was added to calendar`
+        `[${requestId}] - Found no shifts for user ${user.email}, no event was added to calendar`,
       );
       return {
         status: 200,
@@ -618,48 +618,48 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
     }
     const userShifts = slingUser.shifts;
     console.log(
-      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.email}`
+      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.email}`,
     );
 
     console.log(
-      `[${requestId}] - Filtering shifts for ${user.email} to what user wants to sync`
+      `[${requestId}] - Filtering shifts for ${user.email} to what user wants to sync`,
     );
     const positionsToSync = user.positionsToSync.map((position) =>
-      position.positionId.toString()
+      position.positionId.toString(),
     );
     const shiftsToAdd = userShifts.filter((event) =>
-      positionsToSync.includes(event.position.id.toString())
+      positionsToSync.includes(event.position.id.toString()),
     );
     const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
 
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
     const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-      (prevAddedEvent) => prevAddedEvent?.userId === user?.id
+      (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
     );
     if (prevAddedEventsForUser) {
       console.log(
-        `[${requestId}] - Deleting ${prevAddedEventsForUser.events?.length} events for user ${user.email} on date ${date}.`
+        `[${requestId}] - Deleting ${prevAddedEventsForUser.events?.length} events for user ${user.email} on date ${date}.`,
       );
       try {
         await deleteEvents(user, prevAddedEventsForUser.events, requestId);
         await addedGCalEventsService.deleteEvents(
           user.id,
           prevAddedEventsForUser.events,
-          requestId
+          requestId,
         );
       } catch (e) {
         console.log(
-          `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`
+          `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`,
         );
       }
     }
 
     console.log(
-      `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`
+      `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`,
     );
     const addedEvents = await Promise.all(
-      userEvents.map(async (event) => await addEvent(user, event, requestId))
+      userEvents.map(async (event) => await addEvent(user, event, requestId)),
     );
     await addedGCalEventsService.addEvents(user, addedEvents, requestId);
     console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
@@ -679,18 +679,18 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
   try {
     const calendar = await slingController.getCalendar(date);
     console.log(
-      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`
+      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
 
     const slingUser = calendar.find((slingUserCal) => {
       console.log(
-        `comparing ${slingUserCal.id} with ${user.publicMetadata.slingId}`
+        `comparing ${slingUserCal.id} with ${user.publicMetadata.slingId}`,
       );
       return Number(slingUserCal.id) === Number(user.publicMetadata.slingId);
     });
     if (!slingUser) {
       console.log(
-        `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`
+        `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`,
       );
       return {
         status: 200,
@@ -699,48 +699,50 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
     }
     const userShifts = slingUser.shifts;
     console.log(
-      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`
+      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
     );
 
     console.log(
-      `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`
+      `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
     );
     const positionsToSync = user.publicMetadata.positionsToSync.map(
-      (position) => position.positionId.toString()
+      (position) => position.positionId.toString(),
     );
     const shiftsToAdd = userShifts.filter((event) =>
-      positionsToSync.includes(event.position.id.toString())
+      positionsToSync.includes(event.position.id.toString()),
     );
     const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
 
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
     const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-      (prevAddedEvent) => prevAddedEvent?.userId === user?.id
+      (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
     );
     if (prevAddedEventsForUser) {
       console.log(
-        `[${requestId}] - Deleting ${prevAddedEventsForUser.events?.length} events for user ${user.firstName} on date ${date}.`
+        `[${requestId}] - Deleting ${prevAddedEventsForUser.events?.length} events for user ${user.firstName} on date ${date}.`,
       );
       try {
         await deleteEvents_cl(user, prevAddedEventsForUser.events, requestId);
         await addedGCalEventsService.deleteEvents(
           user.id,
           prevAddedEventsForUser.events,
-          requestId
+          requestId,
         );
       } catch (e) {
         console.log(
-          `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`
+          `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`,
         );
       }
     }
 
     console.log(
-      `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`
+      `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
     );
     const addedEvents = await Promise.all(
-      userEvents.map(async (event) => await addEvent_cl(user, event, requestId))
+      userEvents.map(
+        async (event) => await addEvent_cl(user, event, requestId),
+      ),
     );
     await addedGCalEventsService.addEvents_cl(user, addedEvents, requestId);
     console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
@@ -752,7 +754,7 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
   } catch (e) {
     console.log(
       `[${requestId}] - Error adding shifts to GCal: `,
-      JSON.stringify(e)
+      JSON.stringify(e),
     );
     return { status: 500, message: "Error adding shifts to GCal" };
   }
@@ -764,7 +766,7 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
   const user = await userService.findUser_cl(userId);
   if (!shouldSyncShift(user, shift, requestId)) {
     console.log(
-      `[${requestId}] - Shift not eligible to be synced. Ending addEventForShift flow.`
+      `[${requestId}] - Shift not eligible to be synced. Ending addEventForShift flow.`,
     );
     return;
   }
@@ -782,7 +784,7 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
   } catch (e) {
     console.error(
       `[${requestId}] - Error adding event to calendar for shift ${shift._id}: `,
-      e
+      e,
     );
   }
 
@@ -793,21 +795,21 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
 
 function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
   console.log(
-    `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`
+    `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`,
   );
   console.log(
     `[${requestId}] - Details of shift being checked: ${JSON.stringify(
       shift,
       null,
-      2
-    )}`
+      2,
+    )}`,
   );
   const positionsToSync = clerkUser.publicMetadata.positionsToSync.map(
-    (position) => position._id.toString()
+    (position) => position._id.toString(),
   );
   const shouldSync = positionsToSync.includes(shift.positionId.toString());
   console.log(
-    `[${requestId}] - Position ${shift.positionId} sync status: ${shouldSync}`
+    `[${requestId}] - Position ${shift.positionId} sync status: ${shouldSync}`,
   );
   return shouldSync;
 }
@@ -820,10 +822,10 @@ function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
  */
 const getAllUsersEventsExcludingPlatform = async (
   date,
-  requestId = "req-id-nd"
+  requestId = "req-id-nd",
 ) => {
   console.log(
-    `[${requestId}] - Fetching all users events excluding platform-created events`
+    `[${requestId}] - Fetching all users events excluding platform-created events`,
   );
 
   try {
@@ -835,7 +837,7 @@ const getAllUsersEventsExcludingPlatform = async (
     const platformEventIds =
       await addedGCalEventsService.getAllPlatformEventIds(requestId);
     console.log(
-      `[${requestId}] - Found ${platformEventIds.length} platform-created event IDs to exclude`
+      `[${requestId}] - Found ${platformEventIds.length} platform-created event IDs to exclude`,
     );
 
     const allEventsPromises = users.map(async (user) => {
@@ -856,14 +858,14 @@ const getAllUsersEventsExcludingPlatform = async (
         });
 
         console.log(
-          `[${requestId}] - User ${user.firstName}: ${events.length} total events, ${filteredEvents.length} after filtering platform and workingLocation events`
+          `[${requestId}] - User ${user.firstName}: ${events.length} total events, ${filteredEvents.length} after filtering platform and workingLocation events`,
         );
 
         return { userId, slingId, events: filteredEvents };
       } catch (e) {
         console.log(
           `[${requestId}] - Error fetching events for user ${user.firstName}: `,
-          e
+          e,
         );
         usersWithErrors.push({
           userId: user.id,
@@ -879,14 +881,14 @@ const getAllUsersEventsExcludingPlatform = async (
     const allEventsFiltered = allEvents.filter((event) => event.events);
 
     console.log(
-      `[${requestId}] - Successfully fetched events for ${allEventsFiltered.length} users, excluding platform-created and workingLocation events`
+      `[${requestId}] - Successfully fetched events for ${allEventsFiltered.length} users, excluding platform-created and workingLocation events`,
     );
 
     return { events: allEventsFiltered, usersWithErrors };
   } catch (error) {
     console.error(
       `[${requestId}] - Error in getAllUsersEventsExcludingPlatform:`,
-      error
+      error,
     );
     throw error;
   }
