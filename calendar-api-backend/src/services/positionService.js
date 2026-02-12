@@ -71,6 +71,7 @@ const getUserPositionsToSync = async (userId) => {
   if (!user) {
     throw new Error("User not found");
   }
+  console.log(`User in getUserPositionsToSync: ${JSON.stringify(user)}`);
   return user.positionsToSync;
 };
 
