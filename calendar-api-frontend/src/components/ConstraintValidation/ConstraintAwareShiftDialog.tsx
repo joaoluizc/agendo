@@ -44,7 +44,7 @@ const ConstraintAwareShiftDialog: React.FC<ConstraintAwareShiftDialogProps> = ({
         endTime: pendingShift.endTime,
       },
       pendingShift.userIds[0], // Assuming single user for now
-      pendingShift.positionId
+      pendingShift.positionId,
     );
 
     if (result?.ok) {
@@ -87,7 +87,6 @@ const ConstraintAwareShiftDialog: React.FC<ConstraintAwareShiftDialogProps> = ({
             <CreateShiftDialog
               selectedDate={selectedDate}
               selectedUserId={selectedUserId}
-              onShiftData={handleShiftData}
             >
               <Button variant="outline" className="w-full">
                 Configure Shift Details
@@ -176,7 +175,7 @@ const ConstraintAwareShiftDialog: React.FC<ConstraintAwareShiftDialogProps> = ({
             disabled={
               !pendingShift ||
               isValidating ||
-              (validationResult && !validationResult.ok)
+              (validationResult?.ok === false)
             }
           >
             {isValidating ? "Validating..." : "Create Shift"}

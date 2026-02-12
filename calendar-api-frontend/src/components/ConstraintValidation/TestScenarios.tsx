@@ -11,7 +11,6 @@ import { Badge } from "../ui/badge";
 import { Alert, AlertDescription } from "../ui/alert";
 import {
   Clock,
-  User,
   AlertTriangle,
   XCircle,
   CheckCircle,

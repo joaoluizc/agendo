@@ -16,9 +16,7 @@ import {
   XCircle,
   AlertTriangle,
   Info,
-  Users,
   Calendar,
-  Clock,
   Code,
   Loader2,
 } from "lucide-react";
@@ -55,12 +53,11 @@ const mockDateRange = {
 
 const ConstraintDemo: React.FC = () => {
   const [shifts, setShifts] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState(mockDateRange);
+  const [dateRange] = useState(mockDateRange);
   const [jsonInput, setJsonInput] = useState(exampleSchedule);
   const [isValidJson, setIsValidJson] = useState(true);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const { validateSchedule, validationResult, isValidating } =
-    useConstraintValidation();
+  const { validateSchedule, isValidating } = useConstraintValidation();
 
   const handleValidationComplete = (result: any) => {
     console.log("Validation completed:", result);
