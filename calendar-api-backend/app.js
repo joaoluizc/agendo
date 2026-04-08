@@ -39,7 +39,7 @@ app.use(
     verify: function (req, res, buf) {
       req.rawBody = buf;
     },
-  })
+  }),
 );
 app.use(clerkMiddleware());
 app.use(cookieParser());
@@ -76,13 +76,13 @@ app.use("/forecast", requireAuth(), forecastRouter);
 app.use("/constraints", constraintRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
-  res.status(200).json({ message: "authenticated" })
+  res.status(200).json({ message: "authenticated" }),
 );
 
 app.get("/", (req, res) =>
-  res.status(200).json({ message: "hey there :-))))" })
+  res.status(200).json({ message: "hey there :-))))" }),
 );
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Calendar api backend running on ${port}`);
 });

@@ -6,10 +6,10 @@ COPY package*.json ./
 
 RUN rm -rf node_modules
 
-RUN npm install
+RUN npm install --omit=dev
 
 COPY --chown=:.:. . .
 
 EXPOSE 3001
 
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

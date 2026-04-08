@@ -4,7 +4,7 @@ services:
       context: ./calendar-api-backend
       dockerfile: Dockerfile
     container_name: calendar-api-backend
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npm run start"
     volumes:
       - ./calendar-api-backend:/usr/src/app:consistent
       - ./calendar-api-backend/.env:/usr/src/app/.env
