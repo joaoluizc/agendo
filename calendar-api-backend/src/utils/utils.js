@@ -21,7 +21,7 @@ const todayISO = (date) => {
 const shiftToEvent = (shift) => {
   const event = {
     summary: shift.position.name,
-    // description: 'optional',
+    description: `event created by agendo on ${new Date().toString()}`,
     start: {
       dateTime: shift.dtstart,
       timeZone: "Brazil/East",
@@ -41,7 +41,7 @@ const getSlingIdByEmail = async (email) => {
 
   if (!slingUsers) {
     console.error(
-      "Sling users not found. Please check if SlingService is initialized correctly."
+      "Sling users not found. Please check if SlingService is initialized correctly.",
     );
     return undefined;
   }
