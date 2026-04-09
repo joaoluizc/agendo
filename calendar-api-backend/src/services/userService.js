@@ -43,9 +43,19 @@ const findUserByClerkId = async (clerkId) => {
   return user;
 };
 
+const findUsersByClerkIds = async (clerkIds) => {
+  let users = await User.find({ clerkId: { $in: clerkIds } });
+  return users;
+};
+
 const findUser_cl = async (userId) => {
   const user = await clerkClient.users.getUser(userId);
   return user;
+};
+
+const getSlingIdByClerkId = async (clerkId) => {
+  const user = await User.findOne({ clerkId });
+  return user?.slingId;
 };
 
 const getAllUsersWithTokens = async () => {
@@ -92,7 +102,7 @@ async function getUserGoogleOAuthToken_cl(userId) {
   try {
     response = await clerkClient.users.getUserOauthAccessToken(
       userId,
-      provider
+      provider,
     );
   } catch (e) {
     console.error("Error getting google oauth token: ", JSON.stringify(e));
@@ -123,12 +133,12 @@ async function getAllUsersWithTokens_cl() {
       if (!userTokensResponse) {
         console.log(
           "getAllUsersWithTokens_cl: No Google OAuth token found for user:",
-          user.id
+          user.id,
         );
         return { ...user };
       }
       return { ...user, GoogleAccessToken: userTokensResponse };
-    })
+    }),
   );
 
   // Cache result for 10 minutes
@@ -211,20 +221,20 @@ const addClerkIdToAllUsers = async (_req, res) => {
     const mongoUsers = await findAllUsers();
     const clerkUsers = await getAllUsersSafeInfo_cl();
     const clerkUsersMap = new Map(
-      clerkUsers.map((user) => [user.email, user.id])
+      clerkUsers.map((user) => [user.email, user.id]),
     );
 
     for (const user of mongoUsers) {
       if (!user.clerkId && clerkUsersMap.has(user.email)) {
         const result = await User.updateOne(
           { email: user.email },
-          { $set: { clerkId: clerkUsersMap.get(user.email) } }
+          { $set: { clerkId: clerkUsersMap.get(user.email) } },
         );
         console.log(`Mongo update result for ${user.email}:`, result);
         console.log(
           `Added Clerk ID for user: ${user.email} - ${clerkUsersMap.get(
-            user.email
-          )}`
+            user.email,
+          )}`,
         );
       }
     }
@@ -246,7 +256,7 @@ async function addNewClerkUsersToMongo(_req, res) {
     const newClerkUsers = clerkUsers
       .filter(
         (clerkUser) =>
-          !mongoUsers.some((mongoUser) => mongoUser.email === clerkUser.email)
+          !mongoUsers.some((mongoUser) => mongoUser.email === clerkUser.email),
       )
       .map((clerkUser) => ({
         firstName: clerkUser.firstName || "",
@@ -267,7 +277,7 @@ async function addNewClerkUsersToMongo(_req, res) {
     await User.insertMany(newClerkUsers);
     console.log(
       "New Clerk users added to MongoDB:",
-      newClerkUsers.map((u) => u.email)
+      newClerkUsers.map((u) => u.email),
     );
   } catch (err) {
     console.error("Error adding new Clerk users to MongoDB:", err.message);
@@ -285,14 +295,14 @@ async function updatePositionsToSyncOnMongoUsers() {
 
     for (const clerkUser of clerkUsers) {
       const mongoUser = mongoUsers.find(
-        (user) => user.email === clerkUser.email
+        (user) => user.email === clerkUser.email,
       );
       if (mongoUser) {
         const positionsToSync =
           clerkUser.publicMetadata?.positionsToSync || initialPositions;
         await User.updateOne(
           { email: mongoUser.email },
-          { $set: { positionsToSync } }
+          { $set: { positionsToSync } },
         );
         console.log(`Updated positions to sync for user: ${mongoUser.email}`);
       }
@@ -300,7 +310,7 @@ async function updatePositionsToSyncOnMongoUsers() {
   } catch (err) {
     console.error(
       "Error updating positions to sync on MongoDB users:",
-      err.message
+      err.message,
     );
     throw err;
   }
@@ -311,6 +321,8 @@ export default {
   findUser: findUserByEmail,
   findUser_cl,
   findUserByClerkId,
+  findUsersByClerkIds,
+  getSlingIdByClerkId,
   addGapiToken,
   getGapiToken,
   getUserGoogleOAuthToken_cl,

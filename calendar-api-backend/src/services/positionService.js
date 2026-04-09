@@ -2,6 +2,7 @@
 import Position from "../models/PositionModel.js";
 import { User } from "../models/UserModel.js";
 import userService from "./userService.js";
+import redisClient from "../database/redisClient.js";
 
 const createPosition = async (data) => {
   const { name, color, type, minTime, maxTime, stress, requiredSkills } = data;
@@ -71,8 +72,34 @@ const getUserPositionsToSync = async (userId) => {
   if (!user) {
     throw new Error("User not found");
   }
-  console.log(`User in getUserPositionsToSync: ${JSON.stringify(user)}`);
   return user.positionsToSync;
+};
+
+const getPositionsToSyncForUsers = async (userIds) => {
+  const users = await userService.findUsersByClerkIds(userIds);
+
+  const cacheKey = `positionsToSync:${userIds.sort().join(",")}`;
+
+  try {
+    const cachedData = await redisClient.get(cacheKey);
+    if (cachedData) {
+      return JSON.parse(cachedData);
+    }
+  } catch (redisError) {
+    console.warn("Redis cache retrieval failed:", redisError);
+  }
+
+  const positionsToSync = users.map((user) => user.positionsToSync).flat();
+
+  try {
+    await redisClient.set(cacheKey, JSON.stringify(positionsToSync), {
+      EX: 86400,
+    }); // Cache for 24 hours
+  } catch (redisError) {
+    console.warn("Redis cache set failed:", redisError);
+  }
+
+  return positionsToSync;
 };
 
 const setUserPositionsToSync = async (userId, positions) => {
@@ -91,5 +118,6 @@ export default {
   updatePosition,
   deletePosition,
   getUserPositionsToSync,
+  getPositionsToSyncForUsers,
   setUserPositionsToSync,
 };

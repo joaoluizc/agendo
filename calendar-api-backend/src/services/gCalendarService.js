@@ -153,7 +153,7 @@ const getAllUsersEvents_cl = async (date, requestId = "req-id-nd") => {
     } catch (e) {
       console.log(
         `[${requestId}] - Error fetching events for user ${user.firstName}: `,
-        e,
+        e?.errors?.[0]?.message,
       );
       usersWithErrors.push({
         userId: user.id,
@@ -493,17 +493,24 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       `[${requestId}] - Found ${usersWithGoogle.length} users authenticated with Google`,
     );
 
+    console.time(`[${requestId}] prevAddedEventsByUsers`);
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
+    console.timeEnd(`[${requestId}] prevAddedEventsByUsers`);
     console.log(
       `[${requestId}] - Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`,
     );
+
+    const userIds = usersWithGoogle.map((user) => user.id);
+    const positionsByUser =
+      await positionService.getPositionsToSyncForUsers(userIds);
 
     await Promise.all(
       usersWithGoogle.map(async (user) => {
         const slingUser = calendar.filter(
           (slingUserCal) =>
-            Number(slingUserCal.id) === Number(user.publicMetadata.slingId),
+            Number(slingUserCal.id) ===
+            Number(userService.getSlingIdByClerkId(user.id)),
         )[0];
         if (!slingUser) {
           console.log(
@@ -545,14 +552,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
         console.log(
           `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
         );
-        const positionsToSyncResponse =
-          await positionService.getUserPositionsToSync(user.id);
-        const positionsToSync = positionsToSyncResponse.map((position) =>
-          position.positionId.toString(),
-        );
-        // const positionsToSync = user.publicMetadata.positionsToSync.map(
-        //   (position) => position.positionId.toString(),
-        // );
+        const positionsToSync = positionsByUser[user.id] || [];
         const shiftsToAdd = userShifts.filter((event) =>
           positionsToSync.includes(event.position.id.toString()),
         );
@@ -581,21 +581,25 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
             requestId,
           );
         } catch (error) {
+          const errorMessage =
+            error?.errors?.[0]?.message ||
+            error?.message ||
+            "Unknown error adding event";
           console.error(
             `[${requestId}] - Error adding event for user ${user.firstName}: `,
-            error.errors[0].message,
+            errorMessage,
           );
           usersWithErrors.push({
             userId: user.id,
             firstName: user.firstName,
             lastName: user.lastName,
-            error: error.errors[0].message,
+            error: errorMessage,
           });
         }
         console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
       }),
     );
-    if (numberOfAddedEvents?.length === 0 && usersWithChanges?.length === 0) {
+    if (numberOfAddedEvents === 0 && usersWithChanges?.length === 0) {
       return {
         status: 200,
         message: "No shifts eligible to be added to GCal",
@@ -731,8 +735,14 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
     );
     const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
 
+    console.time(
+      `[${requestId}] - start timing on find previously added calendar events by date`,
+    );
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
+    console.timeEnd(
+      `[${requestId}] - end timing on find previously added calendar events by date`,
+    );
     const prevAddedEventsForUser = prevAddedEventsByUsers.find(
       (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
     );
