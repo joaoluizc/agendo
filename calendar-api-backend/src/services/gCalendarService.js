@@ -304,7 +304,7 @@ const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
         (err, response) => {
           if (err) {
             if (
-              err.errors.message &&
+              err?.errors?.message &&
               err.errors.message === "Resource has been deleted"
             ) {
               console.log(
