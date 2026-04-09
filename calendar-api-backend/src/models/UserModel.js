@@ -184,6 +184,13 @@ UserSchema.pre("save", async function (next) {
 });
 
 // Create the User model
-const User = mongoose.model("User", UserSchema);
+if (process.env.NODE_ENV === "development") {
+  console.log("Using development collection for users");
+}
+const collectionName =
+  process.env.NODE_ENV === "development" ? "dev-users" : "users";
+const User = mongoose.model("User", UserSchema, collectionName);
+
+// const User = mongoose.model("User", UserSchema);
 
 export { User };
