@@ -55,6 +55,10 @@ const findUser_cl = async (userId) => {
 
 const getSlingIdByClerkId = async (clerkId) => {
   const user = await User.findOne({ clerkId });
+  console.log(`getSlingIdByClerkId: Found user for clerkId ${clerkId}:`, {
+    email: user?.email,
+    slingId: user?.slingId,
+  });
   return user?.slingId;
 };
 
@@ -124,7 +128,6 @@ async function getAllUsersWithTokens_cl() {
     return JSON.parse(cached);
   }
 
-  console.log("getAllUsersWithTokens_cl: Fetching all users from Clerk");
   const users = await getAllUsers_cl();
 
   const usersWithTokens = await Promise.all(
@@ -137,7 +140,11 @@ async function getAllUsersWithTokens_cl() {
         );
         return { ...user };
       }
-      return { ...user, GoogleAccessToken: userTokensResponse };
+      return {
+        ...user,
+        GoogleAccessToken: userTokensResponse,
+        slingId: await getSlingIdByClerkId(user.id),
+      };
     }),
   );
 

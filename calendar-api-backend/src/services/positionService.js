@@ -89,7 +89,13 @@ const getPositionsToSyncForUsers = async (userIds) => {
     console.warn("Redis cache retrieval failed:", redisError);
   }
 
-  const positionsToSync = users.map((user) => user.positionsToSync).flat();
+  const positionsToSync = users.reduce((acc, user) => {
+    const userPositionsToSync = user.positionsToSync
+      .filter((pos) => pos.sync === true)
+      .map((pos) => pos.positionId);
+    acc[user.clerkId] = userPositionsToSync;
+    return acc;
+  }, {});
 
   try {
     await redisClient.set(cacheKey, JSON.stringify(positionsToSync), {

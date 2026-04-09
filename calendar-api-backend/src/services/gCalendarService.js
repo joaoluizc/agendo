@@ -508,9 +508,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
     await Promise.all(
       usersWithGoogle.map(async (user) => {
         const slingUser = calendar.filter(
-          (slingUserCal) =>
-            Number(slingUserCal.id) ===
-            Number(userService.getSlingIdByClerkId(user.id)),
+          (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
         )[0];
         if (!slingUser) {
           console.log(
@@ -553,6 +551,9 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
           `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
         );
         const positionsToSync = positionsByUser[user.id] || [];
+        console.log(
+          `positionsByUser for ${user.firstName}: ${JSON.stringify(positionsByUser[user.id])}`,
+        );
         const shiftsToAdd = userShifts.filter((event) =>
           positionsToSync.includes(event.position.id.toString()),
         );
