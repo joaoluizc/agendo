@@ -80,14 +80,14 @@ const getPositionsToSyncForUsers = async (userIds) => {
 
   const cacheKey = `positionsToSync:${userIds.sort().join(",")}`;
 
-  try {
-    const cachedData = await redisClient.get(cacheKey);
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
-  } catch (redisError) {
-    console.warn("Redis cache retrieval failed:", redisError);
-  }
+  // try {
+  //   const cachedData = await redisClient.get(cacheKey);
+  //   if (cachedData) {
+  //     return JSON.parse(cachedData);
+  //   }
+  // } catch (redisError) {
+  //   console.warn("Redis cache retrieval failed:", redisError);
+  // }
 
   const positionsToSync = users.reduce((acc, user) => {
     const userPositionsToSync = user.positionsToSync
