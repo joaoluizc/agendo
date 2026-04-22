@@ -16,8 +16,12 @@ import AdaChat from "./pages/AdaChat/AdaChat.tsx";
 import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
 import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 import ConstraintDemo from "./pages/ConstraintDemo/ConstraintDemo.tsx";
+// TRIP CALENDAR — Remove this import when deleting the feature.
+import JoaoTrip from "./pages/JoaoTrip/index.tsx";
 
 const router = createBrowserRouter([
+  // TRIP CALENDAR — Remove this route entry when deleting the feature.
+  { path: "/joao-trip", element: <JoaoTrip /> },
   {
     element: <RootLayout />,
     children: [

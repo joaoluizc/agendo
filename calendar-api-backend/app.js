@@ -22,6 +22,8 @@ import { mountSwagger } from "./src/swagger/swagger.js";
 import forecastRouter from "./src/routers/forecastRouter.js";
 import constraintRouter from "./src/routers/constraintRouter.js";
 import { startDemandForecastCron } from "./src/cron/demandForecastCron.js";
+// TRIP CALENDAR — Remove this import when deleting the feature.
+import tripCalendarRouter from "./src/routers/tripCalendarRouter.js";
 // import seedPositions from "./src/database/seeds/seedPositions.js";
 
 dotenv.config();
@@ -74,6 +76,8 @@ app.use("/dns", dnsRouter);
 
 app.use("/forecast", requireAuth(), forecastRouter);
 app.use("/constraints", constraintRouter);
+// TRIP CALENDAR — Remove this line when deleting the feature.
+app.use("/trip-calendar", tripCalendarRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" }),
