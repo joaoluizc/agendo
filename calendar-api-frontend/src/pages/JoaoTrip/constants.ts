@@ -28,6 +28,3 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   other:      "Other",
 };
 
-// Set VITE_TRIP_BUDGET in your .env to override. Falls back to 3000.
-export const TRIP_BUDGET =
-  Number(import.meta.env.VITE_TRIP_BUDGET) || 3000;

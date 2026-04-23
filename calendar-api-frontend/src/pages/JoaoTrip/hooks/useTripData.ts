@@ -37,7 +37,6 @@ export function useTripData(): UseTripDataResult {
     if (!dayMap.has(event.date)) {
       dayMap.set(event.date, {
         date: event.date,
-        dayLabel: event.dayLabel,
         events: [],
       });
     }

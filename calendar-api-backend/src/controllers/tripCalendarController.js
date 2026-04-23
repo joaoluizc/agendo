@@ -64,20 +64,17 @@ export async function getTripCalendar(req, res) {
     const rows = parseCSV(csvText);
 
     const events = rows
-      .filter((row) => row.date)
+      .filter((row) => row.start_date)
       .map((row) => ({
-        date: row.date || "",
-        dayLabel: row.day_label || "",
+        date: row.start_date || "",
+        endDate: row.end_date || "",
         startTime: row.start_time || "",
         endTime: row.end_time || "",
-        eventName: row.event_name || "",
+        eventName: row.activity || "",
         category: row.category || "other",
         location: row.location || "",
         notes: row.notes || "",
-        cost: parseFloat(row.cost) || 0,
-        confirmed:
-          row.confirmed?.toLowerCase() === "yes" ||
-          row.confirmed?.toLowerCase() === "true",
+        people: row.people || "",
       }));
 
     res.json(events);

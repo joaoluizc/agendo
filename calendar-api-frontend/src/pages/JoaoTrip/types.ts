@@ -11,21 +11,19 @@ export type Category =
 
 export interface TripEvent {
   date: string;
-  dayLabel: string;
+  endDate: string;
   startTime: string;
   endTime: string;
   eventName: string;
   category: Category;
   location: string;
   notes: string;
-  cost: number;
-  confirmed: boolean;
+  people: string;
 }
 
 export type ViewMode = "daily" | "weekly";
 
 export interface DayGroup {
   date: string;
-  dayLabel: string;
   events: TripEvent[];
 }

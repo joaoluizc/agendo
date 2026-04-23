@@ -2,7 +2,7 @@
 // To remove: delete the entire src/pages/JoaoTrip/ directory and the two joao-trip lines in main.tsx.
 
 import React from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, Users } from "lucide-react";
 import type { TripEvent } from "../types";
 import { CATEGORY_COLORS, CATEGORY_LABELS } from "../constants";
 
@@ -63,25 +63,8 @@ function EventCard({ event, isLast }: EventCardProps) {
           borderRadius: 10,
           padding: "11px 13px",
           background: "#fff",
-          position: "relative",
         }}
       >
-        {/* Cost — top right */}
-        {event.cost > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: 11,
-              right: 13,
-              fontSize: 12,
-              fontWeight: 500,
-              color: "#374151",
-            }}
-          >
-            ${event.cost % 1 === 0 ? event.cost.toFixed(0) : event.cost.toFixed(2)}
-          </span>
-        )}
-
         {/* Time */}
         {timeLabel && (
           <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>
@@ -97,7 +80,6 @@ function EventCard({ event, isLast }: EventCardProps) {
             color: "#111827",
             lineHeight: 1.3,
             marginBottom: 6,
-            paddingRight: event.cost > 0 ? 48 : 0,
           }}
         >
           {event.eventName}
@@ -110,7 +92,7 @@ function EventCard({ event, isLast }: EventCardProps) {
               display: "flex",
               alignItems: "flex-start",
               gap: 4,
-              marginBottom: event.notes ? 4 : 7,
+              marginBottom: 4,
             }}
           >
             <MapPin
@@ -120,6 +102,27 @@ function EventCard({ event, isLast }: EventCardProps) {
             />
             <span style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.4 }}>
               {event.location}
+            </span>
+          </div>
+        )}
+
+        {/* People */}
+        {event.people && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 4,
+              marginBottom: 4,
+            }}
+          >
+            <Users
+              size={11}
+              color="#9CA3AF"
+              style={{ marginTop: 1, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.4 }}>
+              {event.people}
             </span>
           </div>
         )}
@@ -139,7 +142,7 @@ function EventCard({ event, isLast }: EventCardProps) {
           </div>
         )}
 
-        {/* Category badge + confirmed dot */}
+        {/* Category badge */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span
             style={{
@@ -154,9 +157,6 @@ function EventCard({ event, isLast }: EventCardProps) {
           >
             {CATEGORY_LABELS[event.category] ?? event.category}
           </span>
-          {event.confirmed && (
-            <span style={{ fontSize: 11, color: "#22C55E" }}>✓ confirmed</span>
-          )}
         </div>
       </div>
     </div>
