@@ -21,12 +21,12 @@ const getOAuth2Client = (tokens) => {
 };
 
 const getUserTokens = async (user) => {
-  if (user?.tokens) {
-    return user.tokens;
-  } else if (user?.gapitoken) {
-    return user.gapitoken;
-  }
-  return await userService.getGapiToken(user.email);
+  if (user?.tokens) return user.tokens;
+  if (user?.gapitoken) return user.gapitoken;
+  const legacyToken = await userService.getGapiToken(user.email);
+  if (legacyToken) return legacyToken;
+  if (user?.clerkId) return userService.getUserGoogleOAuthToken_cl(user.clerkId);
+  return null;
 };
 
 const getUserInfo = async (tokens, requestId = "req-id-nd") => {
