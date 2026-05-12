@@ -375,6 +375,7 @@ gCalendarRouter.post(
     const date = req.body.date
       ? utils.todayISO(req.body.date)
       : utils.todayISO(new Date());
+    const userId = req.auth.userId;
     const { userEmail } = req.body;
 
     if (!userEmail) {
@@ -385,7 +386,7 @@ gCalendarRouter.post(
       `[${req.requestId}] gCalendarController admin sync user shifts 1: Syncing shifts for ${userEmail} on date ${date}. Request from admin ${req.auth.userId}`,
     );
 
-    const user = await userService.findUser(userEmail);
+    const user = await userService.findUserByClerkId(userId);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
