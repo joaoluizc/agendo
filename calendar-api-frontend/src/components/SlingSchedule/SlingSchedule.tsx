@@ -28,6 +28,7 @@ import { Button } from "../ui/button.tsx";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import SyncWithGCalBtn from "./calendar-components/SyncWithGCalBtn.tsx";
 import SyncMyGCalBtn from "./calendar-components/SyncMyGCalBtn.tsx";
+import SyncUserGCalBtn from "./calendar-components/SyncUserGCalBtn.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils.ts";
 
@@ -122,7 +123,7 @@ const SlingSchedule = () => {
               <div
                 id="user-info-wrapper"
                 className={cn(
-                  "p-2 flex items-center border-b",
+                  "p-2 flex items-center border-b group",
                   String(user.email) === String(visitorEmail)
                     ? "bg-secondary/80"
                     : "background"
@@ -147,8 +148,13 @@ const SlingSchedule = () => {
                       .join("")}
                   </AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="min-w-0">
                   <div className="text-xs font-semibold truncate">{`${user.name} ${user.lastname}`}</div>
+                  <SyncUserGCalBtn
+                    selectedDate={selectedDate}
+                    userEmail={user.email}
+                    userName={user.name}
+                  />
                 </div>
               </div>
               <div id="shifts-data-column" className="flex-1 overflow-x-auto">

@@ -367,6 +367,48 @@ gCalendarRouter.post(
   },
 );
 
+gCalendarRouter.post(
+  "/admin-sync-user-day-shifts",
+  requireAuth(),
+  adminOnly,
+  async (req, res) => {
+    const date = req.body.date
+      ? utils.todayISO(req.body.date)
+      : utils.todayISO(new Date());
+    const { userEmail } = req.body;
+
+    if (!userEmail) {
+      return res.status(400).json({ error: "userEmail is required" });
+    }
+
+    console.log(
+      `[${req.requestId}] gCalendarController admin sync user shifts 1: Syncing shifts for ${userEmail} on date ${date}. Request from admin ${req.auth.userId}`,
+    );
+
+    const user = await userService.findUser(userEmail);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    try {
+      const result = await gCalendarService.addUsersDayShifts(
+        user,
+        date,
+        req.requestId,
+      );
+      return res.status(result.status).json(result.message);
+    } catch (error) {
+      console.error(
+        `[${req.requestId}] Error syncing user shifts to GCal:`,
+        error,
+      );
+      return res
+        .status(500)
+        .json({ error: "Failed to sync user shifts to GCal" });
+    }
+  },
+);
+
 gCalendarRouter.get("/", (req, res) =>
   res.status(200).json({ message: "hey there :-))))" }),
 );
