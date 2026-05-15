@@ -391,6 +391,7 @@ gCalendarRouter.post(
     }
 
     try {
+      await gCalendarService.deleteUserDayTrackedEvents(user, date, req.requestId);
       const result = await gCalendarService.addUsersDayShifts(
         user,
         date,

@@ -619,6 +619,39 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
   }
 };
 
+const deleteUserDayTrackedEvents = async (user, date, requestId = "req-id-nd") => {
+  const prevAddedEventsByUsers = await addedGCalEventsService.findEventsByDate(date, requestId);
+  const prevAddedEventsForUser = prevAddedEventsByUsers.find(
+    (prev) => prev?.userId === user?.id,
+  );
+  if (!prevAddedEventsForUser?.events?.length) {
+    console.log(`[${requestId}] - No tracked events to delete for user ${user.email} on ${date}`);
+    return;
+  }
+  console.log(
+    `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} tracked events for ${user.email} on ${date}`,
+  );
+  const tokens = await getUserTokens(user);
+  const oauth2Client = getOAuth2Client(tokens);
+  const cal = google.calendar({ version: "v3", auth: oauth2Client });
+  await Promise.allSettled(
+    prevAddedEventsForUser.events.map(
+      (event) =>
+        new Promise((resolve) => {
+          cal.events.delete({ calendarId: "primary", eventId: event.id }, (err) => {
+            if (err) {
+              console.log(
+                `[${requestId}] - Could not delete event ${event.id} from GCal: ${err.message || err}`,
+              );
+            }
+            resolve();
+          });
+        }),
+    ),
+  );
+  await addedGCalEventsService.deleteEvents(user.id, prevAddedEventsForUser.events, requestId);
+};
+
 const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
   console.log(`[${requestId}] - Adding user's day shifts to GCal`);
   try {
@@ -935,6 +968,7 @@ export default {
   addEventForShift,
   addDaysShiftsToGcal,
   addDaysShiftsToGcal_cl,
+  deleteUserDayTrackedEvents,
   addUsersDayShifts,
   addUsersDayShifts_cl,
   deleteEvents,
