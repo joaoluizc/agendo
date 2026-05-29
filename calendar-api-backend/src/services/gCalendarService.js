@@ -525,20 +525,9 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
 
     await Promise.all(
       usersWithGoogle.map(async (user) => {
-        const slingUser = calendar.filter(
-          (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
-        )[0];
-        if (!slingUser) {
-          console.log(
-            `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`,
-          );
-          return;
-        }
-        const userShifts = slingUser.shifts;
-        console.log(
-          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
-        );
-
+        // Delete previously-tracked events BEFORE checking whether the user has shifts today.
+        // Without this ordering, syncing a day where all shifts were deleted would leave stale
+        // GCal events behind (the !slingUser guard would return early and skip cleanup).
         const prevAddedEventsForUser = prevAddedEventsByUsers.find(
           (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
         );
@@ -569,6 +558,20 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
             );
           }
         }
+
+        const slingUser = calendar.filter(
+          (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
+        )[0];
+        if (!slingUser) {
+          console.log(
+            `[${requestId}] - Found no shifts for user ${user.firstName}, no new events to add`,
+          );
+          return;
+        }
+        const userShifts = slingUser.shifts;
+        console.log(
+          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
+        );
 
         console.log(
           `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
@@ -766,45 +769,11 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
       `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
 
-    const slingUser = calendar.find((slingUserCal) => {
-      console.log(
-        `comparing ${slingUserCal.id} with ${user.publicMetadata.slingId}`,
-      );
-      return Number(slingUserCal.id) === Number(user.publicMetadata.slingId);
-    });
-    if (!slingUser) {
-      console.log(
-        `[${requestId}] - Found no shifts for user ${user.firstName}, no event was added to calendar`,
-      );
-      return {
-        status: 200,
-        message: `Found no shifts for user ${user.firstName}, no event was added to calendar`,
-      };
-    }
-    const userShifts = slingUser.shifts;
-    console.log(
-      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
-    );
-
-    console.log(
-      `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
-    );
-    const positionsToSync = user.publicMetadata.positionsToSync.map(
-      (position) => position.positionId.toString(),
-    );
-    const shiftsToAdd = userShifts.filter((event) =>
-      positionsToSync.includes(event.position.id.toString()),
-    );
-    const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
-
-    console.time(
-      `[${requestId}] - start timing on find previously added calendar events by date`,
-    );
+    // Delete previously-tracked events BEFORE checking whether the user has shifts today.
+    // Without this ordering, syncing a day where all shifts were deleted would leave stale
+    // GCal events behind (the !slingUser guard would return early and skip cleanup).
     const prevAddedEventsByUsers =
       await addedGCalEventsService.findEventsByDate(date, requestId);
-    console.timeEnd(
-      `[${requestId}] - end timing on find previously added calendar events by date`,
-    );
     const prevAddedEventsForUser = prevAddedEventsByUsers.find(
       (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
     );
@@ -833,6 +802,37 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
         );
       }
     }
+
+    const slingUser = calendar.find((slingUserCal) => {
+      console.log(
+        `comparing ${slingUserCal.id} with ${user.publicMetadata.slingId}`,
+      );
+      return Number(slingUserCal.id) === Number(user.publicMetadata.slingId);
+    });
+    if (!slingUser) {
+      console.log(
+        `[${requestId}] - Found no shifts for user ${user.firstName}, no new events to add`,
+      );
+      return {
+        status: 200,
+        message: `Found no shifts for user ${user.firstName}, no new events to add`,
+      };
+    }
+    const userShifts = slingUser.shifts;
+    console.log(
+      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
+    );
+
+    console.log(
+      `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
+    );
+    const positionsToSync = user.publicMetadata.positionsToSync.map(
+      (position) => position.positionId.toString(),
+    );
+    const shiftsToAdd = userShifts.filter((event) =>
+      positionsToSync.includes(event.position.id.toString()),
+    );
+    const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
 
     console.log(
       `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
