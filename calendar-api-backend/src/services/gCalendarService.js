@@ -484,6 +484,13 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
   }
 };
 
+const processBatch = async (users, batchSize, processor) => {
+  for (let i = 0; i < users.length; i += batchSize) {
+    const batch = users.slice(i, i + batchSize);
+    await Promise.all(batch.map(processor));
+  }
+};
+
 const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
   console.log(`[${requestId}] - Adding day's shifts to GCal`);
   let usersWithChanges = [];
@@ -523,114 +530,116 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
     const positionsByUser =
       await positionService.getPositionsToSyncForUsers(userIds);
 
-    await Promise.all(
-      usersWithGoogle.map(async (user) => {
-        // Delete previously-tracked events BEFORE checking whether the user has shifts today.
-        // Without this ordering, syncing a day where all shifts were deleted would leave stale
-        // GCal events behind (the !slingUser guard would return early and skip cleanup).
-        const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-          (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
+    const processUser = async (user) => {
+      // Delete previously-tracked events BEFORE checking whether the user has shifts today.
+      // Without this ordering, syncing a day where all shifts were deleted would leave stale
+      // GCal events behind (the !slingUser guard would return early and skip cleanup).
+      const prevAddedEventsForUser = prevAddedEventsByUsers.find(
+        (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
+      );
+      if (prevAddedEventsForUser) {
+        console.log(
+          `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} tracked events for user ${user.firstName} on date ${date}`,
         );
-        if (prevAddedEventsForUser) {
-          console.log(
-            `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} tracked events for user ${user.firstName} on date ${date}`,
-          );
-          const { deletedIds, failedIds } = await deleteEvents_cl(
-            user,
-            prevAddedEventsForUser.events,
+        const { deletedIds, failedIds } = await deleteEvents_cl(
+          user,
+          prevAddedEventsForUser.events,
+          requestId,
+        );
+        // Clean up DB tracking for events that were deleted (or were already gone from GCal).
+        // Do this even if some deletions failed so stale records don't accumulate.
+        const eventsToRemoveFromTracking = prevAddedEventsForUser.events.filter(
+          (e) => deletedIds.includes(e.id),
+        );
+        if (eventsToRemoveFromTracking.length > 0) {
+          await addedGCalEventsService.deleteEvents(
+            user.id,
+            eventsToRemoveFromTracking,
             requestId,
           );
-          // Clean up DB tracking for events that were deleted (or were already gone from GCal).
-          // Do this even if some deletions failed so stale records don't accumulate.
-          const eventsToRemoveFromTracking = prevAddedEventsForUser.events.filter(
-            (e) => deletedIds.includes(e.id),
+        }
+        if (failedIds.length > 0) {
+          console.warn(
+            `[${requestId}] - ${failedIds.length} event(s) could not be deleted from GCal for user ${user.firstName} — they may appear as duplicates until the next sync`,
           );
-          if (eventsToRemoveFromTracking.length > 0) {
-            await addedGCalEventsService.deleteEvents(
-              user.id,
-              eventsToRemoveFromTracking,
-              requestId,
-            );
-          }
-          if (failedIds.length > 0) {
-            console.warn(
-              `[${requestId}] - ${failedIds.length} event(s) could not be deleted from GCal for user ${user.firstName} — they may appear as duplicates until the next sync`,
-            );
-          }
         }
+      }
 
-        const slingUser = calendar.filter(
-          (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
-        )[0];
-        if (!slingUser) {
-          console.log(
-            `[${requestId}] - Found no shifts for user ${user.firstName}, no new events to add`,
-          );
-          return;
-        }
-        const userShifts = slingUser.shifts;
+      const slingUser = calendar.filter(
+        (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
+      )[0];
+      if (!slingUser) {
         console.log(
-          `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
+          `[${requestId}] - Found no shifts for user ${user.firstName}, no new events to add`,
         );
+        return;
+      }
+      const userShifts = slingUser.shifts;
+      console.log(
+        `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
+      );
 
-        console.log(
-          `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
+      console.log(
+        `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
+      );
+      const positionsToSync = positionsByUser[user.id] || [];
+      console.log(
+        `[${requestId}] - positionsToSync for ${user.firstName}: ${JSON.stringify(positionsToSync)}`,
+      );
+      const shiftsToAdd = userShifts.filter((event) =>
+        positionsToSync.includes(event.position.id.toString()),
+      );
+      const userEvents = shiftsToAdd.map((shift) =>
+        utils.shiftToEvent(shift),
+      );
+
+      console.log(
+        `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
+      );
+
+      // Use allSettled so a single failed insert does not discard successfully-added events.
+      const addResults = await Promise.allSettled(
+        userEvents.map((event) => addEvent_cl(user, event, requestId)),
+      );
+
+      const addedEvents = addResults
+        .filter((r) => r.status === "fulfilled")
+        .map((r) => r.value);
+      const failedAdds = addResults.filter((r) => r.status === "rejected");
+
+      if (failedAdds.length > 0) {
+        const firstError =
+          failedAdds[0].reason?.errors?.[0]?.message ||
+          failedAdds[0].reason?.message ||
+          "Unknown error";
+        console.error(
+          `[${requestId}] - ${failedAdds.length}/${userEvents.length} event(s) failed to add for user ${user.firstName}. First error: ${firstError}`,
         );
-        const positionsToSync = positionsByUser[user.id] || [];
-        console.log(
-          `[${requestId}] - positionsToSync for ${user.firstName}: ${JSON.stringify(positionsToSync)}`,
-        );
-        const shiftsToAdd = userShifts.filter((event) =>
-          positionsToSync.includes(event.position.id.toString()),
-        );
-        const userEvents = shiftsToAdd.map((shift) =>
-          utils.shiftToEvent(shift),
-        );
-
-        console.log(
-          `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
-        );
-
-        // Use allSettled so a single failed insert does not discard successfully-added events.
-        const addResults = await Promise.allSettled(
-          userEvents.map((event) => addEvent_cl(user, event, requestId)),
-        );
-
-        const addedEvents = addResults
-          .filter((r) => r.status === "fulfilled")
-          .map((r) => r.value);
-        const failedAdds = addResults.filter((r) => r.status === "rejected");
-
-        if (failedAdds.length > 0) {
-          const firstError =
-            failedAdds[0].reason?.errors?.[0]?.message ||
-            failedAdds[0].reason?.message ||
-            "Unknown error";
-          console.error(
-            `[${requestId}] - ${failedAdds.length}/${userEvents.length} event(s) failed to add for user ${user.firstName}. First error: ${firstError}`,
-          );
-          usersWithErrors.push({
-            userId: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            error: `Failed to add ${failedAdds.length}/${userEvents.length} events: ${firstError}`,
-          });
-        }
-
-        if (addedEvents.length > 0) {
-          await addedGCalEventsService.addEvents_cl(user, addedEvents, requestId);
-        }
-
-        usersWithChanges.push({
+        usersWithErrors.push({
+          userId: user.id,
           firstName: user.firstName,
-          addedEvents: addedEvents,
+          lastName: user.lastName,
+          error: `Failed to add ${failedAdds.length}/${userEvents.length} events: ${firstError}`,
         });
-        numberOfAddedEvents += addedEvents.length;
-        console.log(
-          `[${requestId}] - ${addedEvents.length}/${userEvents.length} event(s) added for user ${user.firstName}`,
-        );
-      }),
-    );
+      }
+
+      if (addedEvents.length > 0) {
+        await addedGCalEventsService.addEvents_cl(user, addedEvents, requestId);
+      }
+
+      usersWithChanges.push({
+        firstName: user.firstName,
+        addedEvents: addedEvents,
+      });
+      numberOfAddedEvents += addedEvents.length;
+      console.log(
+        `[${requestId}] - ${addedEvents.length}/${userEvents.length} event(s) added for user ${user.firstName}`,
+      );
+    };
+
+    // Process users in batches of 10 to limit memory usage
+    await processBatch(usersWithGoogle, 10, processUser);
+
     if (numberOfAddedEvents === 0 && usersWithChanges?.length === 0) {
       return {
         status: 200,
@@ -691,16 +700,104 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
       `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
     );
 
+    // Delete previously-tracked events BEFORE checking whether the user has shifts today.
+    // Without this ordering, syncing a day where all shifts were deleted would leave stale
+    // GCal events behind (the !slingUser guard would return early and skip cleanup).
+    const prevAddedEventsByUsers =
+      await addedGCalEventsService.findEventsByDate(date, requestId);
+    console.log(
+      `[${requestId}] - findEventsByDate returned ${prevAddedEventsByUsers.length} users with events`,
+    );
+    const prevAddedEventsForUser = prevAddedEventsByUsers.find(
+      (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
+    );
+    console.log(
+      `[${requestId}] - Looking for events matching userId: ${user?.id}. Found: ${!!prevAddedEventsForUser}${
+        prevAddedEventsForUser
+          ? ` with ${prevAddedEventsForUser.events?.length} events`
+          : ""
+      }`,
+    );
+    if (prevAddedEventsForUser?.events?.length) {
+      console.log(
+        `[${requestId}] - Deleting ${prevAddedEventsForUser.events.length} tracked events for user ${user.email} on date ${date}`,
+      );
+      try {
+        const tokens = await getUserTokens(user);
+        if (!tokens) {
+          console.error(
+            `[${requestId}] - No Google tokens found for user ${user.email}, cannot delete events`,
+          );
+        } else {
+          const oauth2Client = getOAuth2Client(tokens);
+          const cal = google.calendar({ version: "v3", auth: oauth2Client });
+          const deleteResults = await Promise.allSettled(
+            prevAddedEventsForUser.events.map(
+              (event) =>
+                new Promise((resolve) => {
+                  cal.events.delete(
+                    { calendarId: "primary", eventId: event.id },
+                    (err) => {
+                      if (err) {
+                        const errMsg = err?.errors?.[0]?.message || err?.message || "Unknown error";
+                        if (errMsg === "Resource has been deleted") {
+                          resolve({ id: event.id, status: "already-deleted" });
+                        } else {
+                          console.error(
+                            `[${requestId}] - Failed to delete event ${event.id}: ${errMsg}`,
+                          );
+                          resolve({ id: event.id, status: "failed", error: errMsg });
+                        }
+                      } else {
+                        resolve({ id: event.id, status: "deleted" });
+                      }
+                    },
+                  );
+                }),
+            ),
+          );
+
+          const allResults = deleteResults.map((r) => r.value);
+          const deletedIds = allResults
+            .filter((r) => r.status === "deleted" || r.status === "already-deleted")
+            .map((r) => r.id);
+          const failedIds = allResults
+            .filter((r) => r.status === "failed")
+            .map((r) => r.id);
+
+          if (deletedIds.length > 0) {
+            const eventsToRemoveFromTracking = prevAddedEventsForUser.events.filter(
+              (e) => deletedIds.includes(e.id),
+            );
+            await addedGCalEventsService.deleteEvents(
+              user.id,
+              eventsToRemoveFromTracking,
+              requestId,
+            );
+          }
+          if (failedIds.length > 0) {
+            console.warn(
+              `[${requestId}] - ${failedIds.length} event(s) could not be deleted from GCal for user ${user.email} — they may appear as duplicates`,
+            );
+          }
+        }
+      } catch (e) {
+        console.error(
+          `[${requestId}] - Error deleting events for user ${user.email}: ${e.message}`,
+        );
+      }
+    }
+
     const slingUser = calendar.find(
       (slingUserCal) => Number(slingUserCal.id) === Number(user.slingId),
     );
     if (!slingUser) {
       console.log(
-        `[${requestId}] - Found no shifts for user ${user.email}, no event was added to calendar`,
+        `[${requestId}] - Found no shifts for user ${user.email}, no new events to add`,
       );
       return {
         status: 200,
-        message: `Found no shifts for user ${user.email}, no event was added to calendar`,
+        message: `Found no shifts for user ${user.email}, no new events to add`,
       };
     }
     const userShifts = slingUser.shifts;
@@ -719,36 +816,34 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
     );
     const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
 
-    const prevAddedEventsByUsers =
-      await addedGCalEventsService.findEventsByDate(date, requestId);
-    const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-      (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
-    );
-    if (prevAddedEventsForUser) {
-      console.log(
-        `[${requestId}] - Deleting ${prevAddedEventsForUser.events?.length} events for user ${user.email} on date ${date}.`,
-      );
-      try {
-        await deleteEvents(user, prevAddedEventsForUser.events, requestId);
-        await addedGCalEventsService.deleteEvents(
-          user.id,
-          prevAddedEventsForUser.events,
-          requestId,
-        );
-      } catch (e) {
-        console.log(
-          `[${requestId}] - Error deleting events for user ${user.email} on date ${date}. Error Message: ${e}`,
-        );
-      }
-    }
-
     console.log(
       `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`,
     );
-    const addedEvents = await Promise.all(
+
+    // Use allSettled so a single failed insert does not discard successfully-added events.
+    const addResults = await Promise.allSettled(
       userEvents.map(async (event) => await addEvent(user, event, requestId)),
     );
-    await addedGCalEventsService.addEvents(user, addedEvents, requestId);
+
+    const addedEvents = addResults
+      .filter((r) => r.status === "fulfilled")
+      .map((r) => r.value);
+    const failedAdds = addResults.filter((r) => r.status === "rejected");
+
+    if (failedAdds.length > 0) {
+      const firstError =
+        failedAdds[0].reason?.errors?.[0]?.message ||
+        failedAdds[0].reason?.message ||
+        "Unknown error";
+      console.error(
+        `[${requestId}] - ${failedAdds.length}/${userEvents.length} event(s) failed to add for user ${user.email}. First error: ${firstError}`,
+      );
+    }
+
+    if (addedEvents.length > 0) {
+      await addedGCalEventsService.addEvents(user, addedEvents, requestId);
+    }
+
     console.log(`[${requestId}] - ${addedEvents?.length} event(s) added`);
     return {
       status: 200,
