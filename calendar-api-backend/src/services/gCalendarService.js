@@ -729,6 +729,9 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
             `[${requestId}] - No Google tokens found for user ${user.email}, cannot delete events`,
           );
         } else {
+          console.log(
+            `[${requestId}] - Retrieved Google tokens for user ${user.email}, attempting to delete ${prevAddedEventsForUser.events.length} events`,
+          );
           const oauth2Client = getOAuth2Client(tokens);
           const cal = google.calendar({ version: "v3", auth: oauth2Client });
           const deleteResults = await Promise.allSettled(
@@ -764,6 +767,10 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
           const failedIds = allResults
             .filter((r) => r.status === "failed")
             .map((r) => r.id);
+
+          console.log(
+            `[${requestId}] - Google Calendar deletion results: ${deletedIds.length} deleted/already-deleted, ${failedIds.length} failed`,
+          );
 
           if (deletedIds.length > 0) {
             const eventsToRemoveFromTracking = prevAddedEventsForUser.events.filter(
