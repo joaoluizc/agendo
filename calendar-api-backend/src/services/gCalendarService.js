@@ -531,11 +531,20 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       await positionService.getPositionsToSyncForUsers(userIds);
 
     const processUser = async (user) => {
+      // Look up MongoDB user to get consistent userId for database tracking
+      const mongoUser = await userService.findUserByClerkId(user.id);
+      if (!mongoUser) {
+        console.log(
+          `[${requestId}] - MongoDB user not found for Clerk ID ${user.id}, skipping`,
+        );
+        return;
+      }
+
       // Delete previously-tracked events BEFORE checking whether the user has shifts today.
       // Without this ordering, syncing a day where all shifts were deleted would leave stale
       // GCal events behind (the !slingUser guard would return early and skip cleanup).
       const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-        (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
+        (prevAddedEvent) => prevAddedEvent?.userId === mongoUser?.id,
       );
       if (prevAddedEventsForUser) {
         console.log(
@@ -553,7 +562,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
         );
         if (eventsToRemoveFromTracking.length > 0) {
           await addedGCalEventsService.deleteEvents(
-            user.id,
+            mongoUser.id,
             eventsToRemoveFromTracking,
             requestId,
           );
@@ -624,7 +633,9 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       }
 
       if (addedEvents.length > 0) {
-        await addedGCalEventsService.addEvents_cl(user, addedEvents, requestId);
+        // Use mongoUser.id for consistent database tracking
+        const userForTracking = { ...user, id: mongoUser.id };
+        await addedGCalEventsService.addEvents_cl(userForTracking, addedEvents, requestId);
       }
 
       usersWithChanges.push({
@@ -994,12 +1005,22 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
   let event;
   let addedEvent = null;
   try {
+    // Get MongoDB user for consistent database tracking
+    const mongoUser = await userService.findUserByClerkId(user.id);
+    if (!mongoUser) {
+      console.error(
+        `[${requestId}] - MongoDB user not found for Clerk ID ${user.id}, cannot sync shift`,
+      );
+      return;
+    }
+
     // transform shift into calendar event
     event = await newShiftToEvent(shift);
     // add event to GCal
     addedEvent = await addEvent_cl(user, event, requestId);
-    // add event to addedGCalEvents collection
-    await addedGCalEventsService.addEvents_cl(user, [addedEvent], requestId);
+    // add event to addedGCalEvents collection with MongoDB user ID for consistency
+    const userForTracking = { ...user, id: mongoUser.id };
+    await addedGCalEventsService.addEvents_cl(userForTracking, [addedEvent], requestId);
     console.log(`[${requestId}] - Event added successfully to google calendar`);
   } catch (e) {
     console.error(
