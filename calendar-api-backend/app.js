@@ -22,6 +22,8 @@ import { mountSwagger } from "./src/swagger/swagger.js";
 import forecastRouter from "./src/routers/forecastRouter.js";
 import constraintRouter from "./src/routers/constraintRouter.js";
 import { startDemandForecastCron } from "./src/cron/demandForecastCron.js";
+// DiscovAI search — self-contained module, see src/discovai/README.md to remove.
+import discovaiRouter from "./src/discovai/discovaiRouter.js";
 
 dotenv.config();
 
@@ -78,6 +80,9 @@ app.use("/skills", requireAuth(), skillRouter);
 
 app.use("/ada", adaRouter);
 app.use("/dns", dnsRouter);
+
+// DiscovAI search (public, no auth — like /ada and /dns). Self-contained module.
+app.use("/discovai", discovaiRouter);
 
 app.use("/forecast", requireAuth(), forecastRouter);
 app.use("/constraints", constraintRouter);

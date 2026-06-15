@@ -12,9 +12,13 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@ai-sdk/openai": "^0.0.40",
     "@clerk/express": "^1.7.30",
     "@googleapis/calendar": "^9.7.9",
     "@googleapis/oauth2": "^1.0.7",
+    "@supabase/supabase-js": "^2.44.4",
+    "@upstash/redis": "^1.33.0",
+    "ai": "^3.2.38",
     "connect-redis": "^9.0.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",

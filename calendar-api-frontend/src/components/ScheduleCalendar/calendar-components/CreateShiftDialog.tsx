@@ -341,7 +341,7 @@ export default function CreateShiftDialog({
                 <Input
                   id="startTime"
                   className={cn(
-                    "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
+                    "col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer",
                     fieldsValidation.startTime ? "border-red-500" : ""
                   )}
                   ref={startTimeRef}
@@ -369,7 +369,7 @@ export default function CreateShiftDialog({
                 <Input
                   id="endTime"
                   className={cn(
-                    "p-2 border rounded hover:bg-secondary/80 cursor-pointer",
+                    "col-span-3 p-2 border rounded hover:bg-secondary/80 cursor-pointer",
                     fieldsValidation.endTime ? "border-red-500" : ""
                   )}
                   ref={endTimeRef}
