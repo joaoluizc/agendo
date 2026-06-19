@@ -14,8 +14,6 @@
   "dependencies": {
     "@ai-sdk/openai": "^0.0.40",
     "@clerk/express": "^1.7.30",
-    "@googleapis/calendar": "^9.7.9",
-    "@googleapis/oauth2": "^1.0.7",
     "@supabase/supabase-js": "^2.44.4",
     "@upstash/redis": "^1.33.0",
     "ai": "^3.2.38",
@@ -25,14 +23,15 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "googleapis": "^137.1.0",
+    "googleapis": "^173.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.4.3",
-    "node-cron": "^3.0.0",
+    "node-cron": "^4.4.1",
     "redis": "^5.1.1",
     "svix": "^1.40.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.1.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

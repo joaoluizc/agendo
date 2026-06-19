@@ -48,7 +48,6 @@ export function scheduleAdaChatsJob() {
       }
     },
     {
-      scheduled: true,
       timezone: "UTC",
     }
   );
