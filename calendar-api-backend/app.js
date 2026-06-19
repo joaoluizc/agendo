@@ -24,6 +24,8 @@ import constraintRouter from "./src/routers/constraintRouter.js";
 import { startDemandForecastCron } from "./src/cron/demandForecastCron.js";
 // DiscovAI search — self-contained module, see src/discovai/README.md to remove.
 import discovaiRouter from "./src/discovai/discovaiRouter.js";
+// Jira backlog — self-contained module, see src/jiraBacklog/README.md to remove.
+import jiraBacklogRouter from "./src/jiraBacklog/jiraBacklogRouter.js";
 
 dotenv.config();
 
@@ -83,6 +85,10 @@ app.use("/dns", dnsRouter);
 
 // DiscovAI search (public, no auth — like /ada and /dns). Self-contained module.
 app.use("/discovai", discovaiRouter);
+
+// Jira backlog (self-contained module). Authed like the rest of /app; admin-only
+// mutations are enforced inside the router via agendo's adminOnly middleware.
+app.use("/jira-backlog", requireAuth(), jiraBacklogRouter);
 
 app.use("/forecast", requireAuth(), forecastRouter);
 app.use("/constraints", constraintRouter);

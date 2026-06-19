@@ -82,7 +82,7 @@
     <div class="wrap">
       <header>
         <h1>DiscovAI Search · agendo test console</h1>
-        <p>Streams from <code>POST /discovai/chat</code> (SSE) on this same backend.</p>
+        <p>Streams from <code>POST /discovai/&lt;dataset&gt;/chat</code> (SSE) on this same backend.</p>
       </header>
 
       <div class="searchbar">
@@ -91,6 +91,10 @@
       </div>
 
       <div class="options">
+        <label>Dataset
+          <input type="text" id="dataset" value="duda" spellcheck="false"
+            style="width:130px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);" />
+        </label>
         <label><input type="checkbox" id="refreshCache" /> Bypass cache</label>
         <label><input type="checkbox" id="debug" /> Debug logs (server)</label>
       </div>
@@ -125,9 +129,12 @@
       const goEl = $("go");
 
       // This page is served at the route's mount root (e.g. /discovai), so derive
-      // the chat endpoint from the current path. A bare relative "./chat" would
-      // resolve against the parent ("/chat") when there's no trailing slash -> 404.
-      const CHAT_URL = window.location.pathname.replace(/\/+$/, "") + "/chat";
+      // the API base from the current path (a bare relative "./chat" would resolve
+      // against the parent when there's no trailing slash). The endpoint is
+      // mount + /<dataset>/chat, so each dataset has its own URL.
+      const MOUNT_BASE = window.location.pathname.replace(/\/+$/, "");
+      const chatUrlFor = (dataset) =>
+        `${MOUNT_BASE}/${encodeURIComponent(dataset || "duda")}/chat`;
 
       function escapeHtml(s) {
         return String(s ?? "")
@@ -218,12 +225,13 @@
       async function runSearch() {
         const query = queryEl.value.trim();
         if (!query) return;
+        const dataset = ($("dataset").value || "duda").trim();
         resetUI();
         goEl.disabled = true;
         setStatus("Connecting…", "loading");
 
         try {
-          const resp = await fetch(CHAT_URL, {
+          const resp = await fetch(chatUrlFor(dataset), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

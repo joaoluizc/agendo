@@ -1,9 +1,11 @@
 import { Redis } from "@upstash/redis";
 import { discovaiConfig } from "./config.js";
 
-// Cache keys — ported verbatim from DiscovAI-search/server/src/db/redis.ts.
-export const embeddingVectorCacheKey = (query) => `cache:search:${query}`;
-export const llmResultCacheKey = (prompt) => `cache:llm:${prompt}`;
+// Cache keys — namespaced by dataset so two datasets can never serve each other's
+// cached results (a query shared between "duda" and a white-label set must not leak).
+export const embeddingVectorCacheKey = (dataset, query) =>
+  `cache:search:${dataset}:${query}`;
+export const llmResultCacheKey = (dataset, prompt) => `cache:llm:${dataset}:${prompt}`;
 
 // Caching is OPTIONAL: if Upstash env vars are absent we return a no-op client
 // with the same { get, setex } interface, so the pipeline still works (uncached).

@@ -22,10 +22,10 @@ import { addRefToUrl } from "./lib/utils.js";
  *   - top5: the top-5 *raw* documents (with chunk_text/metadata) fed to the LLM
  *   - moreResults: remaining results as {title,url}
  */
-export async function runSearch({ query, refreshCache = false, debug = false }) {
+export async function runSearch({ query, dataset, refreshCache = false, debug = false }) {
   const redis = getRedis();
   const supabase = getSupabase();
-  const cacheKey = embeddingVectorCacheKey(query);
+  const cacheKey = embeddingVectorCacheKey(dataset, query);
 
   const cacheResult = refreshCache ? null : await redis.get(cacheKey);
 
@@ -59,6 +59,7 @@ export async function runSearch({ query, refreshCache = false, debug = false }) 
       query_embedding: embedding,
       match_threshold: 0.5,
       match_count: 15,
+      filter_dataset: dataset,
     });
     documents = result.data ?? [];
     queryEmbeddingError = result.error;
@@ -69,6 +70,7 @@ export async function runSearch({ query, refreshCache = false, debug = false }) 
       const { data: articles } = await supabase
         .from("support_articles")
         .select("id, title, url")
+        .eq("dataset", dataset)
         .in("id", articleIds);
 
       const articleMap = new Map(articles?.map((a) => [a.id, a]) || []);
@@ -148,17 +150,17 @@ export async function runSearch({ query, refreshCache = false, debug = false }) 
   return { searchResult, top5, moreResults, source };
 }
 
-/** Returns a cached LLM answer string, or null on miss. */
-export async function getLlmCache(query) {
+/** Returns a cached LLM answer string for a dataset, or null on miss. */
+export async function getLlmCache(dataset, query) {
   const redis = getRedis();
-  const raw = await redis.get(llmResultCacheKey(query));
+  const raw = await redis.get(llmResultCacheKey(dataset, query));
   return raw && typeof raw === "string" ? raw : null;
 }
 
 /** Cache the generated LLM answer (12h TTL, matching DiscovAI). */
-export async function setLlmCache(query, text) {
+export async function setLlmCache(dataset, query, text) {
   const redis = getRedis();
-  await redis.setex(llmResultCacheKey(query), 60 * 60 * 12, text);
+  await redis.setex(llmResultCacheKey(dataset, query), 60 * 60 * 12, text);
 }
 
 /** Returns the streaming LLM result (has a `.textStream` async iterable). */

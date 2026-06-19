@@ -141,6 +141,20 @@ const Header = () => {
                   </NavigationMenuLink>
                 </NavLink>
               </NavigationMenuItem>
+              <NavigationMenuItem>
+                <NavLink
+                  to="/app/jira-backlog"
+                  className={({ isActive }) =>
+                    `${
+                      isActive ? "text-foreground" : "text-muted-foreground"
+                    } transition-colors hover:text-foreground`
+                  }
+                >
+                  <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                    Jira Backlog
+                  </NavigationMenuLink>
+                </NavLink>
+              </NavigationMenuItem>
             </SignedIn>
           </NavigationMenuList>
         </NavigationMenu>
@@ -187,6 +201,9 @@ const Header = () => {
                 </NavLink>
                 <NavLink to="/app/settings" className="hover:text-foreground">
                   Settings
+                </NavLink>
+                <NavLink to="/app/jira-backlog" className="text-muted-foreground hover:text-foreground">
+                  Jira Backlog
                 </NavLink>
               </SignedIn>
             </nav>

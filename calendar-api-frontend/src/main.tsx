@@ -16,6 +16,8 @@ import AdaChat from "./pages/AdaChat/AdaChat.tsx";
 import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
 import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 import ConstraintDemo from "./pages/ConstraintDemo/ConstraintDemo.tsx";
+// Jira backlog — self-contained feature, see pages/JiraBacklog/README.md to remove.
+import JiraBacklog from "./pages/JiraBacklog/JiraBacklog.tsx";
 
 const router = createBrowserRouter([
   {
@@ -36,6 +38,7 @@ const router = createBrowserRouter([
           { path: "/app/sling-schedule", element: <SlingSchedule /> },
           { path: "/app/schedule", element: <Schedule /> },
           { path: "/app/settings", element: <Settings /> },
+          { path: "/app/jira-backlog", element: <JiraBacklog /> },
         ],
       },
     ],

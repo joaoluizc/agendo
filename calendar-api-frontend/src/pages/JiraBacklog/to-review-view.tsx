@@ -1,0 +1,94 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { JiraIssue, JiraTableMeta } from "./types";
+import { TO_REVIEW_COLUMNS, groupBySquadForReview } from "./constants";
+import { FieldCell } from "./cells";
+
+const isGrow = (id: string) => id === "desc";
+
+/**
+ * "To Review" view: issues with status "Review with Squad", grouped into collapsible squad
+ * sections (squads alphabetical). Within a group: Regressions first, then urgency
+ * descending, nulls last (compareToReview). Rows open the detail panel, same as the main
+ * table. No horizontal scroll — the reduced column set fits the page width.
+ */
+export function ToReviewView({ issues, meta }: { issues: JiraIssue[]; meta: JiraTableMeta }) {
+  const groups = groupBySquadForReview(issues);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  if (!issues.length) {
+    return (
+      <div className="rounded-md border py-12 text-center text-muted-foreground">
+        Nothing flagged for review. (Issues with status “Review with Squad” show up here.)
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map(({ squad, issues: list }) => {
+        const isCollapsed = collapsed[squad];
+        return (
+          <div key={squad} className="overflow-hidden rounded-lg border">
+            <button
+              type="button"
+              onClick={() => setCollapsed((s) => ({ ...s, [squad]: !s[squad] }))}
+              className="flex w-full items-center gap-2 bg-muted/40 px-3 py-2 text-left font-medium hover:bg-muted/60"
+            >
+              {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {squad}
+              <span className="text-sm font-normal text-muted-foreground">({list.length})</span>
+            </button>
+
+            {!isCollapsed && (
+              <table className="w-full border-collapse border-t text-sm">
+                <thead>
+                  <tr>
+                    {TO_REVIEW_COLUMNS.map((desc) => {
+                      const grow = isGrow(desc.id);
+                      return (
+                        <th
+                          key={desc.id}
+                          style={{ minWidth: desc.minWidth, width: grow ? "100%" : undefined }}
+                          className={cn(
+                            "border-b bg-background px-3 py-2 text-left text-xs font-medium text-muted-foreground",
+                            grow ? "" : "whitespace-nowrap",
+                          )}
+                        >
+                          {desc.header}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((issue) => (
+                    <tr
+                      key={issue._id}
+                      className="cursor-pointer border-b transition-colors last:border-0 hover:bg-muted/40"
+                      onClick={() => meta.openDetail(issue._id)}
+                    >
+                      {TO_REVIEW_COLUMNS.map((desc) => {
+                        const grow = isGrow(desc.id);
+                        return (
+                          <td
+                            key={desc.id}
+                            style={{ minWidth: desc.minWidth, width: grow ? "100%" : undefined }}
+                            className={cn("px-3 py-2.5 align-top", grow ? "" : "whitespace-nowrap")}
+                          >
+                            <FieldCell issue={issue} desc={desc} meta={meta} />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

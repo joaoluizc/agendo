@@ -5,6 +5,7 @@ import {
   streamLlm,
 } from "./discovaiService.js";
 import { assertDiscovaiConfig } from "./lib/config.js";
+import { resolveDataset } from "./lib/datasets.js";
 import { genStream, sleep } from "./lib/utils.js";
 import { StreamEvent } from "./lib/streamEvents.js";
 
@@ -16,7 +17,10 @@ import { StreamEvent } from "./lib/streamEvents.js";
  * Wire format stays `data: {json}\n\n` (event name carried inside `.event`).
  */
 const chat = async (req, res) => {
-  const { query, debug = false, refreshCache = false } = req.body || {};
+  const { query, debug = false, refreshCache = false, dataset: bodyDataset } = req.body || {};
+  // Dataset comes from the URL (/discovai/:dataset/chat); /discovai/chat defaults to duda.
+  const requestedDataset = req.params.dataset ?? bodyDataset;
+  const dataset = resolveDataset(requestedDataset);
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -35,6 +39,13 @@ const chat = async (req, res) => {
       return res.end();
     }
 
+    if (!dataset) {
+      writeEvent(StreamEvent.ERROR, {
+        detail: `unknown dataset "${requestedDataset ?? ""}"`,
+      });
+      return res.end();
+    }
+
     writeEvent(StreamEvent.BEGIN_STREAM, { query });
 
     if (debug) {
@@ -43,6 +54,7 @@ const chat = async (req, res) => {
 
     const { searchResult, top5, moreResults } = await runSearch({
       query,
+      dataset,
       refreshCache,
       debug,
     });
@@ -51,7 +63,7 @@ const chat = async (req, res) => {
 
     // LLM answer: replay a cached answer word-by-word, else stream fresh tokens.
     let gathered = "";
-    const cached = await getLlmCache(query);
+    const cached = await getLlmCache(dataset, query);
 
     if (cached) {
       gathered = cached;
@@ -67,7 +79,7 @@ const chat = async (req, res) => {
       }
     }
 
-    await setLlmCache(query, gathered);
+    await setLlmCache(dataset, query, gathered);
 
     writeEvent(StreamEvent.MORE_RESULTS, { more_results: moreResults });
     writeEvent(StreamEvent.FINAL_RESPONSE, { message: gathered });
