@@ -15,7 +15,6 @@ import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
 import AdaChat from "./pages/AdaChat/AdaChat.tsx";
 import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
 import AdaStats from "./pages/AdaStats/AdaStats.tsx";
-import ConstraintDemo from "./pages/ConstraintDemo/ConstraintDemo.tsx";
 // Jira backlog — self-contained feature, see pages/JiraBacklog/README.md to remove.
 import JiraBacklog from "./pages/JiraBacklog/JiraBacklog.tsx";
 
@@ -29,7 +28,6 @@ const router = createBrowserRouter([
       { path: "/privacy", element: <PrivacyPolicy /> },
       { path: "/terms", element: <TermsOfService /> },
       { path: "/ada-stats", element: <AdaStats /> },
-      { path: "/constraint-demo", element: <ConstraintDemo /> },
       { path: "*", element: <NotFound /> },
       {
         element: <ProtectedRoute />,
