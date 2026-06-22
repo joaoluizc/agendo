@@ -2,7 +2,6 @@
 */node_modules
 .env
 node_modules
-calendar-api-backend/src/middlewares/sendCookies.js
 calendar-api-frontend/vite.config.ts
 /.claude/*
 /.claude
