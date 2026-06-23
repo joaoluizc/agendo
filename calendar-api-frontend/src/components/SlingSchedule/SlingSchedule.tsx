@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Shift, User } from "../../types/slingTypes.ts";
 import { Label } from "@radix-ui/react-label";
 import { Input } from "../ui/input.tsx";
@@ -31,6 +31,8 @@ import SyncMyGCalBtn from "./calendar-components/SyncMyGCalBtn.tsx";
 import SyncUserGCalBtn from "./calendar-components/SyncUserGCalBtn.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils.ts";
+import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
+import DateNavButtons from "@/components/DateNavButtons/DateNavButtons.tsx";
 
 const userHasGcal = (user: User, gCalendarEvents: CalendarUser[]) => {
   return gCalendarEvents.some(
@@ -65,7 +67,8 @@ const calcUserRowHeight = (
 const SlingSchedule = () => {
   const [sortedCalendar, setSortedCalendar] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const { selectedDate, dateKey, setDate } = useScheduleDateParam();
+  const datepickerRef = useRef<AirDatepicker | null>(null);
   const [gCalendarEvents, setgCalendarEvents] = useState<CalendarUser[]>([]);
   const { user } = useUser();
   const visitorEmail = user?.emailAddresses[0]?.emailAddress || "";
@@ -78,25 +81,37 @@ const SlingSchedule = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Create the date picker once; picking a day just updates the URL param.
   useEffect(() => {
-    const fetchData = async () => {
-      new AirDatepicker("#date", {
-        onSelect: async ({ date, datepicker }) => {
-          datepicker.hide();
-          if (Array.isArray(date)) date = date[0]; // AirDatepicker might return an array of dates
-          await getShifts(date, setIsLoading, setSortedCalendar);
-          setSelectedDate(date);
-          const gCalendarEventsData = await getGCalendarEvents(date);
-          setgCalendarEvents(gCalendarEventsData);
-        },
-        locale: localeEn,
-      });
-      getShifts(new Date(), setIsLoading, setSortedCalendar);
-      const gCalendarEventsData = await getGCalendarEvents(new Date());
+    datepickerRef.current = new AirDatepicker<HTMLInputElement>("#date", {
+      selectedDates: [selectedDate],
+      onSelect: ({ date, datepicker }) => {
+        datepicker.hide();
+        const newDate = Array.isArray(date) ? date[0] : date; // picker may return an array
+        if (newDate) setDate(newDate);
+      },
+      locale: localeEn,
+    });
+
+    return () => datepickerRef.current?.destroy();
+  }, []);
+
+  // Keep the picker's highlighted day in sync with the URL-driven date
+  // (prev/next/today buttons, refresh on a shared link).
+  useEffect(() => {
+    datepickerRef.current?.selectDate(selectedDate, { silent: true });
+    datepickerRef.current?.setViewDate(selectedDate);
+  }, [dateKey]);
+
+  // Load Sling shifts and Google Calendar events for the selected day.
+  useEffect(() => {
+    const loadSchedule = async () => {
+      await getShifts(selectedDate, setIsLoading, setSortedCalendar);
+      const gCalendarEventsData = await getGCalendarEvents(selectedDate);
       setgCalendarEvents(gCalendarEventsData);
     };
-    fetchData();
-  }, []);
+    loadSchedule();
+  }, [dateKey]);
 
   return (
     <div>
@@ -111,6 +126,7 @@ const SlingSchedule = () => {
           />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2 h-5 w-5" />
         </Label>
+        <DateNavButtons selectedDate={selectedDate} onSelectDate={setDate} />
         <SyncWithGCalBtn selectedDate={selectedDate} />
         <SyncMyGCalBtn selectedDate={selectedDate} />
       </div>

@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Label } from "@radix-ui/react-label";
 import { Input } from "../ui/input.tsx";
 import { CalendarIcon, CalendarSearch, RepeatIcon } from "lucide-react";
@@ -35,6 +35,8 @@ import DuplicateShifts from "./DuplicateShifts.tsx";
 import { useSchedule } from "@/providers/useSchedule.tsx";
 import ToggleBulkSelector from "./calendar-components/ToggleBulkSelector.tsx";
 import { UserSafeInfo } from "@/types/userTypes.ts";
+import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
+import DateNavButtons from "@/components/DateNavButtons/DateNavButtons.tsx";
 
 const calcUserRowHeight = (
   userId: string,
@@ -90,7 +92,8 @@ const Schedule = () => {
     setEvents,
     setScheduleIsLoading,
   } = useSchedule();
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const { selectedDate, dateKey, setDate } = useScheduleDateParam();
+  const datepickerRef = useRef<AirDatepicker | null>(null);
   const [gCalEventsCalculatedGrid, setGCalEventsCalculatedGrid] = useState<
     UserGCalGrid[]
   >([]);
@@ -154,24 +157,36 @@ const Schedule = () => {
     },
   };
 
+  // Create the date picker once; picking a day just updates the URL param.
   useEffect(() => {
-    const datepicker = new AirDatepicker("#date", {
-      onSelect: async ({ date, datepicker }) => {
+    const datepicker = new AirDatepicker<HTMLInputElement>("#date", {
+      selectedDates: [selectedDate],
+      onSelect: ({ date, datepicker }) => {
         datepicker.hide();
-        const newDate = Array.isArray(date) ? date[0] : date || selectedDate;
-        setSelectedDate(newDate);
-        await fetchData(newDate);
+        const newDate = Array.isArray(date) ? date[0] : date;
+        if (newDate) setDate(newDate);
       },
       locale: localeEn,
       toggleSelected: false,
       dateFormat: "E MMM d yyyy",
       buttons: [todayButton, "clear"],
     });
-
-    fetchData(selectedDate);
+    datepickerRef.current = datepicker;
 
     return () => datepicker.destroy();
-  }, [type]);
+  }, []);
+
+  // Keep the picker's highlighted day in sync with the date driven by the URL
+  // (prev/next/today buttons, manual edits, refresh on a shared link).
+  useEffect(() => {
+    datepickerRef.current?.selectDate(selectedDate, { silent: true });
+    datepickerRef.current?.setViewDate(selectedDate);
+  }, [dateKey]);
+
+  // Load shifts (and, for admins, Google Calendar events) for the selected day.
+  useEffect(() => {
+    fetchData(selectedDate);
+  }, [dateKey, type]);
 
   return (
     <div>
@@ -186,6 +201,7 @@ const Schedule = () => {
           />
           <CalendarSearch className="absolute top-1/2 right-2 transform -translate-y-1/2 h-5 w-5" />
         </Label>
+        <DateNavButtons selectedDate={selectedDate} onSelectDate={setDate} />
         <CreateShiftForm selectedDate={selectedDate} />
         <DuplicateShifts selectedDate={selectedDate} />
         <ToggleBulkSelector />
