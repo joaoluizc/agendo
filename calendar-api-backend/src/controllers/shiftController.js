@@ -4,6 +4,7 @@ import { sortByDate, groupByDay, groupByUsers } from "../utils/sortShifts.js";
 import slingController from "./slingController.js";
 import { mergeShiftsFromSling } from "../utils/mergeShiftsFromSling.js";
 import gCalendarService from "../services/gCalendarService.js";
+import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
 import { userIsAdmin } from "../utils/userIsAdmin.js";
 import isISODate from "../utils/isISODate.js";
@@ -472,12 +473,17 @@ async function duplicateShiftsFromDay(req, res) {
     )}`
   );
 
+  // Fetch enforced position ids once (not per shift) for this bulk duplicate.
+  const { objectIds: enforcedObjectIds } =
+    await positionService.getEnforcedPositionIds();
+
   for (const shift of duplicatedShifts) {
     try {
       const addedEvent = await gCalendarService.addEventForShift(
         shift.userId,
         shift,
-        req.requestId
+        req.requestId,
+        enforcedObjectIds
       );
       if (addedEvent) {
         shift.isSynced = true;
