@@ -2,6 +2,13 @@ import { Button } from "@/components/ui/button.tsx";
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { ArrowUpDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Position } from "@/types/positionTypes.tsx";
 
 export const columns: ColumnDef<Position>[] = [
@@ -17,17 +24,18 @@ export const columns: ColumnDef<Position>[] = [
         aria-label="Select all"
       />
     ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => {
-          row.toggleSelected(!!value);
-          // changing the 'original' variable will change the data source
-          // row.original.sync = !!value;
-        }}
-        aria-label="Select row"
-      />
-    ),
+    cell: ({ row }) =>
+      row.original.enforceSync ? (
+        <Checkbox checked disabled aria-label="Sync enforced" />
+      ) : (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => {
+            row.toggleSelected(!!value);
+          }}
+          aria-label="Select row"
+        />
+      ),
     enableSorting: false,
     enableHiding: false,
   },
@@ -44,6 +52,26 @@ export const columns: ColumnDef<Position>[] = [
         </Button>
       );
     },
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <span>{row.original.name}</span>
+        {row.original.enforceSync && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="text-xs cursor-default">
+                  Sync enforced
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                Your admin requires this position to always sync to your Google
+                Calendar. You can&apos;t turn it off.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+    ),
   },
   {
     accessorKey: "type",

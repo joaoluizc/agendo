@@ -30,6 +30,7 @@ export async function getPositionsToSync(): Promise<Position[]> {
       name: position.name,
       type: position.type,
       color: position.color,
+      enforceSync: position.enforceSync ?? false,
       sync:
         toSyncData.find((toSync) => toSync.positionId === position.positionId)
           ?.sync ?? false,
@@ -46,15 +47,16 @@ export async function savePositionsToSync(
   positions: Position[]
 ): Promise<void> {
   console.log("saving positions to sync");
-  const selectedPositions = Object.keys(rowSelection).map((index) => {
-    const currPosition = positions[parseInt(index)];
-    return {
-      _id: currPosition._id,
-      positionId: currPosition.positionId,
-      sync: rowSelection[index],
-      name: currPosition.name,
-    };
-  });
+  // Persist every position's flag (not only selected rows) so deselections are
+  // saved as sync:false too. Enforced positions keep their genuine stored
+  // preference — enforcement is applied at sync time on the backend, so we never
+  // overwrite the user's real choice (clean revert when an admin un-enforces).
+  const selectedPositions = positions.map((currPosition, index) => ({
+    _id: currPosition._id,
+    positionId: currPosition.positionId,
+    sync: currPosition.enforceSync ? currPosition.sync : !!rowSelection[index],
+    name: currPosition.name,
+  }));
   console.log("selectedPositions: ", selectedPositions);
   try {
     await fetch("/api/position/sync", {

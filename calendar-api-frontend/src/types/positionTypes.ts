@@ -11,10 +11,7 @@ export type Position = {
     | "training";
   color: string;
   sync: boolean;
-  minTime?: number; // in minutes
-  maxTime?: number; // in minutes
-  stress?: boolean;
-  requiredSkills?: string[]; // array of skill IDs
+  enforceSync?: boolean; // admin-forced: always synced for every user
 };
 
 export type PositionSync = {

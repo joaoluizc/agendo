@@ -45,6 +45,9 @@ export function DataTable<TValue>({ columns, data }: DataTableProps<TValue>) {
     getSortedRowModel: getSortedRowModel(),
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
+    // Enforced positions are locked on — exclude them from the selection model so
+    // "select all" / "deselect all" can't toggle them.
+    enableRowSelection: (row) => !row.original.enforceSync,
     onRowSelectionChange: setRowSelection,
     state: {
       sorting,

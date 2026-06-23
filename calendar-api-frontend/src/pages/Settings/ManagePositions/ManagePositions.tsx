@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -46,16 +46,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowUpDown } from "lucide-react";
+import {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { Position } from "@/types/positionTypes";
-import { Skill } from "@/types/skillTypes";
 import {
   createPosition,
   deletePosition,
   updatePosition,
 } from "./positionUtils";
-import { getAllSkills } from "./skillUtils";
 import { toast } from "sonner";
 
 const POSITION_TYPES = [
@@ -78,75 +87,32 @@ const DEFAULT_COLORS = [
   "#84CC16",
 ];
 
+const INITIAL_FORM = {
+  name: "",
+  color: DEFAULT_COLORS[0],
+  type: "live channel" as Position["type"],
+  positionId: "",
+  enforceSync: false,
+};
+
 export default function ManagePositions() {
   const { allPositions, setAllPositions } = useUserSettings();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [formData, setFormData] = useState({
-    name: "",
-    color: DEFAULT_COLORS[0],
-    type: "live channel" as Position["type"],
-    positionId: "",
-    minTime: 30,
-    maxTime: 480,
-    stress: false,
-    requiredSkills: [] as string[],
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
-  // Load skills on component mount
-  useEffect(() => {
-    const loadSkills = async () => {
-      try {
-        const skillsData = await getAllSkills();
-        setSkills(skillsData);
-      } catch (error) {
-        console.error("Error loading skills:", error);
-        toast.error("Failed to load skills");
-      }
-    };
-    loadSkills();
-  }, []);
-
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      color: DEFAULT_COLORS[0],
-      type: "live channel",
-      positionId: "",
-      minTime: 30,
-      maxTime: 480,
-      stress: false,
-      requiredSkills: [],
-    });
-  };
-
-  const handleSkillToggle = (skillId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      requiredSkills: prev.requiredSkills.includes(skillId)
-        ? prev.requiredSkills.filter((id) => id !== skillId)
-        : [...prev.requiredSkills, skillId],
-    }));
-  };
-
-  const formatTime = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
-  };
+  const resetForm = () => setFormData(INITIAL_FORM);
 
   const handleCreate = async () => {
     const newPosition = {
       name: formData.name,
       color: formData.color,
       type: formData.type,
-      minTime: formData.minTime,
-      maxTime: formData.maxTime,
-      stress: formData.stress,
-      requiredSkills: formData.requiredSkills,
-      ...(formData.positionId && { positionID: formData.positionId }),
+      enforceSync: formData.enforceSync,
+      ...(formData.positionId && { positionId: formData.positionId }),
     };
 
     try {
@@ -168,10 +134,7 @@ export default function ManagePositions() {
       color: position.color,
       type: position.type,
       positionId: position.positionId || "",
-      minTime: position.minTime || 30,
-      maxTime: position.maxTime || 480,
-      stress: position.stress || false,
-      requiredSkills: position.requiredSkills || [],
+      enforceSync: position.enforceSync || false,
     });
     setIsEditDialogOpen(true);
   };
@@ -184,28 +147,16 @@ export default function ManagePositions() {
       name: formData.name,
       color: formData.color,
       type: formData.type,
-      minTime: formData.minTime,
-      maxTime: formData.maxTime,
-      stress: formData.stress,
-      requiredSkills: formData.requiredSkills,
+      enforceSync: formData.enforceSync,
       ...(formData.positionId && { positionId: formData.positionId }),
     };
 
     try {
       await updatePosition(updatedPosition);
-      console.log("Updating position:", updatedPosition);
       setAllPositions(
-        allPositions.map((p) => {
-          if (p._id === editingPosition._id) {
-            console.log("Position matched for update:", p);
-            return updatedPosition;
-          }
-          return p;
-        })
-      );
-      console.log(
-        "All positions after update:",
-        allPositions.map((p) => ({ _id: p._id, name: p.name, color: p.color }))
+        allPositions.map((p) =>
+          p._id === editingPosition._id ? updatedPosition : p
+        )
       );
       setIsEditDialogOpen(false);
       setEditingPosition(null);
@@ -228,6 +179,113 @@ export default function ManagePositions() {
     }
   };
 
+  const columns: ColumnDef<Position>[] = [
+    {
+      accessorKey: "color",
+      header: "Color",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div
+          className="w-4 h-4 rounded-full border"
+          style={{ backgroundColor: row.original.color }}
+        />
+      ),
+    },
+    {
+      accessorKey: "name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Name
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2 font-medium">
+          {row.original.name}
+          {row.original.enforceSync && (
+            <Badge variant="secondary" className="text-xs">
+              Enforced
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Type
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <span className="capitalize">{row.original.type}</span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">Actions</div>,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleEdit(row.original)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Position</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{row.original.name}"? This
+                  action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleDelete(row.original._id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ),
+    },
+  ];
+
+  const table = useReactTable({
+    data: allPositions,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    onSortingChange: setSorting,
+    getSortedRowModel: getSortedRowModel(),
+    onColumnFiltersChange: setColumnFilters,
+    getFilteredRowModel: getFilteredRowModel(),
+    state: {
+      sorting,
+      columnFilters,
+    },
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -238,24 +296,21 @@ export default function ManagePositions() {
               Manage support agent positions and their assignments
             </CardDescription>
           </div>
-          <Dialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-          >
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Position
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Position</DialogTitle>
                 <DialogDescription>
                   Add a new position for support agents
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4 overflow-y-auto flex-1">
+              <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Position Name</Label>
                   <Input
@@ -333,85 +388,25 @@ export default function ManagePositions() {
                     Enter the legacy ID if this position exists in Sling
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="minTime">Minimum Time (minutes)</Label>
-                    <Input
-                      id="minTime"
-                      type="number"
-                      min="1"
-                      value={formData.minTime}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          minTime: parseInt(e.target.value) || 30,
-                        })
-                      }
-                      placeholder="30"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      {formatTime(formData.minTime)}
-                    </p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="maxTime">Maximum Time (minutes)</Label>
-                    <Input
-                      id="maxTime"
-                      type="number"
-                      min="1"
-                      value={formData.maxTime}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          maxTime: parseInt(e.target.value) || 480,
-                        })
-                      }
-                      placeholder="480"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      {formatTime(formData.maxTime)}
-                    </p>
-                  </div>
-                </div>
                 <div className="grid gap-2">
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      id="stress"
-                      checked={formData.stress}
+                      id="enforceSync"
+                      checked={formData.enforceSync}
                       onCheckedChange={(checked) =>
-                        setFormData({ ...formData, stress: checked as boolean })
+                        setFormData({
+                          ...formData,
+                          enforceSync: checked as boolean,
+                        })
                       }
                     />
-                    <Label htmlFor="stress">High Stress Position</Label>
+                    <Label htmlFor="enforceSync">
+                      Enforce sync for all users
+                    </Label>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Mark this position as high stress for workload management
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Required Skills</Label>
-                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                    {skills.map((skill) => (
-                      <div
-                        key={skill._id}
-                        className="flex items-center space-x-2"
-                      >
-                        <Checkbox
-                          id={`skill-${skill._id}`}
-                          checked={formData.requiredSkills.includes(skill._id)}
-                          onCheckedChange={() => handleSkillToggle(skill._id)}
-                        />
-                        <Label
-                          htmlFor={`skill-${skill._id}`}
-                          className="text-sm"
-                        >
-                          {skill.name}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Select the skills required for this position
+                    Always sync this position to every user&apos;s Google
+                    Calendar. Users can&apos;t opt out. Applies to future syncs.
                   </p>
                 </div>
               </div>
@@ -431,122 +426,91 @@ export default function ManagePositions() {
         </div>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Color</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Stress</TableHead>
-              <TableHead>Skills</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {allPositions.map((position) => (
-              <TableRow key={position._id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-4 h-4 rounded-full border"
-                      style={{ backgroundColor: position.color }}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell className="font-medium">{position.name}</TableCell>
-                <TableCell className="capitalize">{position.type}</TableCell>
-                <TableCell>
-                  {position.stress ? (
-                    <Badge variant="destructive" className="text-xs">
-                      High Stress
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">
-                      Normal
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {position.requiredSkills &&
-                  position.requiredSkills.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {position.requiredSkills.slice(0, 2).map((skillId) => {
-                        const skill = skills.find((s) => s._id === skillId);
-                        return skill ? (
-                          <Badge
-                            key={skillId}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {skill.name}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {position.requiredSkills.length > 2 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{position.requiredSkills.length - 2} more
-                        </Badge>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">None</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(position)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Position</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete "{position.name}"?
-                            This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(position._id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-
-        {allPositions.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            No positions found. Create your first position to get started.
+        <div className="flex items-center py-4">
+          <Input
+            placeholder="Filter positions by name..."
+            value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+            onChange={(event) =>
+              table.getColumn("name")?.setFilterValue(event.target.value)
+            }
+            className="max-w-sm"
+          />
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No positions found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex items-center justify-end space-x-2 py-4">
+          <div className="flex-1 text-sm text-muted-foreground">
+            {table.getFilteredRowModel().rows.length} position(s)
           </div>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+          >
+            Next
+          </Button>
+        </div>
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Position</DialogTitle>
               <DialogDescription>Update the position details</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4 overflow-y-auto flex-1">
+            <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-name">Position Name</Label>
                 <Input
@@ -609,11 +573,11 @@ export default function ManagePositions() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-positionID">
+                <Label htmlFor="edit-positionId">
                   Legacy Position ID (Optional)
                 </Label>
                 <Input
-                  id="edit-positionID"
+                  id="edit-positionId"
                   value={formData.positionId}
                   onChange={(e) =>
                     setFormData({ ...formData, positionId: e.target.value })
@@ -624,85 +588,25 @@ export default function ManagePositions() {
                   Enter the legacy ID if this position exists in Sling
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-minTime">Minimum Time (minutes)</Label>
-                  <Input
-                    id="edit-minTime"
-                    type="number"
-                    min="1"
-                    value={formData.minTime}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        minTime: parseInt(e.target.value) || 30,
-                      })
-                    }
-                    placeholder="30"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {formatTime(formData.minTime)}
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-maxTime">Maximum Time (minutes)</Label>
-                  <Input
-                    id="edit-maxTime"
-                    type="number"
-                    min="1"
-                    value={formData.maxTime}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        maxTime: parseInt(e.target.value) || 480,
-                      })
-                    }
-                    placeholder="480"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {formatTime(formData.maxTime)}
-                  </p>
-                </div>
-              </div>
               <div className="grid gap-2">
                 <div className="flex items-center space-x-2">
                   <Checkbox
-                    id="edit-stress"
-                    checked={formData.stress}
+                    id="edit-enforceSync"
+                    checked={formData.enforceSync}
                     onCheckedChange={(checked) =>
-                      setFormData({ ...formData, stress: checked as boolean })
+                      setFormData({
+                        ...formData,
+                        enforceSync: checked as boolean,
+                      })
                     }
                   />
-                  <Label htmlFor="edit-stress">High Stress Position</Label>
+                  <Label htmlFor="edit-enforceSync">
+                    Enforce sync for all users
+                  </Label>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Mark this position as high stress for workload management
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label>Required Skills</Label>
-                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                  {skills.map((skill) => (
-                    <div
-                      key={skill._id}
-                      className="flex items-center space-x-2"
-                    >
-                      <Checkbox
-                        id={`edit-skill-${skill._id}`}
-                        checked={formData.requiredSkills.includes(skill._id)}
-                        onCheckedChange={() => handleSkillToggle(skill._id)}
-                      />
-                      <Label
-                        htmlFor={`edit-skill-${skill._id}`}
-                        className="text-sm"
-                      >
-                        {skill.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Select the skills required for this position
+                  Always sync this position to every user&apos;s Google Calendar.
+                  Users can&apos;t opt out. Applies to future syncs.
                 </p>
               </div>
             </div>

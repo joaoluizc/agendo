@@ -443,9 +443,18 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
         console.log(
           `[${requestId}] - Filtering shifts for ${user.email} to what user wants to sync`,
         );
-        const positionsToSync = user.positionsToSync.map((position) =>
-          position.positionId.toString(),
-        );
+        // Defensive: this function is currently unwired (no callers), but keep it
+        // consistent with the live paths — enforced positions always sync.
+        const { slingIds: enforcedSlingIds } =
+          await positionService.getEnforcedPositionIds();
+        const positionsToSync = [
+          ...new Set([
+            ...user.positionsToSync.map((position) =>
+              position.positionId.toString(),
+            ),
+            ...enforcedSlingIds,
+          ]),
+        ];
         const shiftsToAdd = userShifts.filter((event) =>
           positionsToSync.includes(event.position.id.toString()),
         );
@@ -591,6 +600,8 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       console.log(
         `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
       );
+      // Enforced positions are already merged into positionsByUser by
+      // positionService.getPositionsToSyncForUsers — no extra union needed here.
       const positionsToSync = positionsByUser[user.id] || [];
       console.log(
         `[${requestId}] - positionsToSync for ${user.firstName}: ${JSON.stringify(positionsToSync)}`,
@@ -826,9 +837,16 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
     console.log(
       `[${requestId}] - Filtering shifts for ${user.email} to what user wants to sync`,
     );
-    const positionsToSync = user.positionsToSync.map((position) =>
-      position.positionId.toString(),
-    );
+    const { slingIds: enforcedSlingIds } =
+      await positionService.getEnforcedPositionIds();
+    const positionsToSync = [
+      ...new Set([
+        ...user.positionsToSync.map((position) =>
+          position.positionId.toString(),
+        ),
+        ...enforcedSlingIds,
+      ]),
+    ];
     const shiftsToAdd = userShifts.filter((event) =>
       positionsToSync.includes(event.position.id.toString()),
     );
@@ -939,9 +957,18 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
     console.log(
       `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
     );
-    const positionsToSync = user.publicMetadata.positionsToSync.map(
-      (position) => position.positionId.toString(),
-    );
+    // Defensive: this function is currently unwired (no callers), but keep it
+    // consistent with the live paths — enforced positions always sync.
+    const { slingIds: enforcedSlingIds } =
+      await positionService.getEnforcedPositionIds();
+    const positionsToSync = [
+      ...new Set([
+        ...user.publicMetadata.positionsToSync.map((position) =>
+          position.positionId.toString(),
+        ),
+        ...enforcedSlingIds,
+      ]),
+    ];
     const shiftsToAdd = userShifts.filter((event) =>
       positionsToSync.includes(event.position.id.toString()),
     );
@@ -991,11 +1018,16 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
   }
 };
 
-const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
+const addEventForShift = async (
+  userId,
+  shift,
+  requestId = "req-id-nd",
+  enforcedObjectIds = null,
+) => {
   console.log(`[${requestId}] - Starting addEventForShift flow`);
 
   const user = await userService.findUser_cl(userId);
-  if (!shouldSyncShift(user, shift, requestId)) {
+  if (!(await shouldSyncShift(user, shift, requestId, enforcedObjectIds))) {
     console.log(
       `[${requestId}] - Shift not eligible to be synced. Ending addEventForShift flow.`,
     );
@@ -1034,7 +1066,12 @@ const addEventForShift = async (userId, shift, requestId = "req-id-nd") => {
   return addedEvent;
 };
 
-function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
+async function shouldSyncShift(
+  clerkUser,
+  shift,
+  requestId = "req-id-nd",
+  enforcedObjectIds = null,
+) {
   console.log(
     `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`,
   );
@@ -1045,10 +1082,18 @@ function shouldSyncShift(clerkUser, shift, requestId = "req-id-nd") {
       2,
     )}`,
   );
-  const positionsToSync = clerkUser.publicMetadata.positionsToSync.map(
+  // Admin-enforced positions always sync, overriding the user's preference.
+  // Callers in a loop should pass enforcedObjectIds to avoid a query per shift.
+  const enforced =
+    enforcedObjectIds ??
+    (await positionService.getEnforcedPositionIds()).objectIds;
+  const positionsToSync = (clerkUser.publicMetadata.positionsToSync || []).map(
     (position) => position._id.toString(),
   );
-  const shouldSync = positionsToSync.includes(shift.positionId.toString());
+  const shiftPositionId = shift.positionId.toString();
+  const shouldSync =
+    positionsToSync.includes(shiftPositionId) ||
+    enforced.includes(shiftPositionId);
   console.log(
     `[${requestId}] - Position ${shift.positionId} sync status: ${shouldSync}`,
   );
