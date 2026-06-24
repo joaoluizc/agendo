@@ -13,6 +13,7 @@ type UserSettingsProviderState = {
   email: string;
   slingId: string;
   type: string;
+  userInfoLoaded: boolean;
   timeZone: number;
   allPositions: Position[];
   allUsers: UserSafeInfo[];
@@ -46,6 +47,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [email, setEmail] = useState("");
   const [slingId, setSlingId] = useState("");
   const [type, setType] = useState("");
+  const [userInfoLoaded, setUserInfoLoaded] = useState(false);
   const [timeZone, setTimeZone] = useState(0);
   const [allPositions, setAllPositions] = useState<Position[]>([]);
   const [allUsers, setAllUsers] = useState<UserSafeInfo[]>([]);
@@ -60,24 +62,32 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
 
   useEffect(() => {
     const getUserSettings = async () => {
-      const response = await fetch("/api/user/info", {
-        method: "GET",
-        mode: "cors",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setFirstName(data.firstName);
-        setLastName(data.lastName);
-        setEmail(data.email);
-        setSlingId(data.slingId);
-        setType(data.type);
-        setTimeZone(data.timeZone);
-      } else {
-        console.error("Failed to get user settings");
+      try {
+        const response = await fetch("/api/user/info", {
+          method: "GET",
+          mode: "cors",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setFirstName(data.firstName);
+          setLastName(data.lastName);
+          setEmail(data.email);
+          setSlingId(data.slingId);
+          setType(data.type);
+          setTimeZone(data.timeZone);
+        } else {
+          console.error("Failed to get user settings");
+        }
+      } catch (e) {
+        console.error("Failed to get user settings", e);
+      } finally {
+        // Mark loaded even on failure so admin route guards stop waiting and degrade
+        // gracefully (a failed load is treated as "not admin", not an infinite spinner).
+        setUserInfoLoaded(true);
       }
     };
     const getPositions = async () => {
@@ -125,6 +135,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     email,
     slingId,
     type,
+    userInfoLoaded,
     timeZone,
     allPositions,
     allUsers,

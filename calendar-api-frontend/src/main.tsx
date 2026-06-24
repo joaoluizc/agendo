@@ -8,6 +8,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
 import Schedule from "./pages/Schedule/Schedule.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
+import AdminRoute from "./routes/AdminRoute.tsx";
 import Settings from "./pages/Settings/Settings.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import RootLayout from "./layouts/root-layout.tsx";
@@ -17,6 +18,7 @@ import SlingSchedule from "./components/SlingSchedule/SlingSchedule.tsx";
 import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 // Jira backlog — self-contained feature, see pages/JiraBacklog/README.md to remove.
 import JiraBacklog from "./pages/JiraBacklog/JiraBacklog.tsx";
+import Tasks from "./pages/Tasks/Tasks.tsx";
 
 const router = createBrowserRouter([
   {
@@ -36,7 +38,13 @@ const router = createBrowserRouter([
           { path: "/app/sling-schedule", element: <SlingSchedule /> },
           { path: "/app/schedule", element: <Schedule /> },
           { path: "/app/settings", element: <Settings /> },
-          { path: "/app/jira-backlog", element: <JiraBacklog /> },
+          {
+            element: <AdminRoute />,
+            children: [
+              { path: "/app/jira-backlog", element: <JiraBacklog /> },
+              { path: "/app/tasks", element: <Tasks /> },
+            ],
+          },
         ],
       },
     ],

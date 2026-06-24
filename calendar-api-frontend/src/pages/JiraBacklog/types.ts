@@ -20,10 +20,6 @@ export interface JiraIssue {
   frustration: string;
   scopeConf: string;
   workaroundQ: string;
-  custFrust: string;
-  custPlan: string;
-  spread: string;
-  tlUrg: string;
   zdCount: number | null;
   zdCountFetchedAt: string | null;
   order: number;
@@ -37,6 +33,48 @@ export interface JiraIssue {
 }
 
 export type IssuePatch = Partial<Omit<JiraIssue, "_id">>;
+
+/** A user-managed issue status (the backlog's status dropdown). */
+export interface BugStatus {
+  _id: string;
+  name: string;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A kanban column / task status (shared across all tickets, customizable). */
+export interface TaskStatus {
+  _id: string;
+  name: string;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A task linked to one ticket, as returned by GET /issues/:id/tasks. */
+export interface Task {
+  _id: string;
+  issueId: string;
+  title: string;
+  statusId: string;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A task flattened with its parent ticket's key + description — for the kanban cards. */
+export interface TaskWithIssue {
+  _id: string;
+  title: string;
+  statusId: string;
+  order: number;
+  issueId: string;
+  issueKey: string;
+  issueDesc: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export type ViewKey = "all" | "open" | "toReview";
 
@@ -75,6 +113,10 @@ export interface JiraTableMeta {
   updateField: (id: string, patch: IssuePatch) => Promise<void>;
   deleteRow: (id: string) => void;
   refreshZd: (id: string) => void;
+  /** Pull as much as possible from the linked Jira ticket onto the row (new-row autofill). */
+  autofill: (id: string) => void;
   /** Open the Notion-style detail panel for a row. */
   openDetail: (id: string) => void;
+  /** Current bug-status names (user-managed) — drives the status dropdown + filter. */
+  statusOptions: readonly string[];
 }

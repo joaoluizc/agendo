@@ -1,11 +1,17 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import {
   ColumnDef,
+  ColumnFiltersState,
   Row,
+  SortingState,
   flexRender,
   getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { JiraIssue, JiraTableMeta } from "./types";
 
@@ -50,7 +56,8 @@ const MemoTableRow = memo(
 
 /**
  * The "All" / "Open" table. No inner scroll container — the page scrolls as a whole, so the
- * table blends into the page. The header is sticky beneath the page toolbar.
+ * table blends into the page. The header is sticky beneath the page toolbar, and is
+ * sortable + filterable per column (see ColumnHeader).
  */
 export function DataTable({
   columns,
@@ -61,49 +68,72 @@ export function DataTable({
   data: JiraIssue[];
   meta: JiraTableMeta;
 }) {
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
   const table = useReactTable({
     data,
     columns,
     meta,
+    state: { sorting, columnFilters },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getRowId: (row) => row._id,
   });
 
+  const rows = table.getRowModel().rows;
+  const hasFilters = columnFilters.length > 0;
+
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        {table.getHeaderGroups().map((hg) => (
-          <tr key={hg.id}>
-            {hg.headers.map((h) => {
-              const grow = isGrow(h.column.id);
-              return (
-                <th
-                  key={h.id}
-                  style={{ minWidth: h.column.columnDef.minSize, width: grow ? "100%" : undefined }}
-                  className={cn(
-                    "sticky z-20 border-b bg-background px-3 py-2 text-left text-xs font-medium text-muted-foreground",
-                    STICKY_TOP,
-                    grow ? "" : "whitespace-nowrap",
-                  )}
-                >
-                  {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
-                </th>
-              );
-            })}
-          </tr>
-        ))}
-      </thead>
-      <tbody>
-        {data.length ? (
-          table.getRowModel().rows.map((row) => <MemoTableRow key={row.id} row={row} meta={meta} />)
-        ) : (
-          <tr>
-            <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-              No issues.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+    <div>
+      {hasFilters && (
+        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            Showing {rows.length} of {data.length}
+          </span>
+          <Button variant="ghost" size="sm" className="h-7" onClick={() => setColumnFilters([])}>
+            <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+          </Button>
+        </div>
+      )}
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          {table.getHeaderGroups().map((hg) => (
+            <tr key={hg.id}>
+              {hg.headers.map((h) => {
+                const grow = isGrow(h.column.id);
+                return (
+                  <th
+                    key={h.id}
+                    style={{ minWidth: h.column.columnDef.minSize, width: grow ? "100%" : undefined }}
+                    className={cn(
+                      "sticky z-20 border-b bg-background px-3 py-2 text-left text-xs font-medium text-muted-foreground",
+                      STICKY_TOP,
+                      grow ? "" : "whitespace-nowrap",
+                    )}
+                  >
+                    {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((row) => <MemoTableRow key={row.id} row={row} meta={meta} />)
+          ) : (
+            <tr>
+              <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                No issues match the current filters.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -70,3 +70,79 @@ export async function fetchConnectedTicketCount(keyOrUrl) {
   const value = data?.fields?.[field];
   return Number.isFinite(value) ? Number(value) : 0;
 }
+
+/** A Jira single/multi-select custom field → its option value (or ""). */
+function extractOptionValue(field) {
+  if (!field) return "";
+  if (Array.isArray(field)) return field[0]?.value || field[0]?.name || "";
+  return field.value || field.name || "";
+}
+
+/**
+ * From Jira's Sprint field (an array of sprint objects, or null) pick the most relevant
+ * sprint name: the active sprint if any, else the next future one, else the most recently
+ * started. Returns "" when there's no sprint.
+ */
+function pickSprintName(sprints) {
+  if (!Array.isArray(sprints) || sprints.length === 0) return "";
+  const start = (s) => new Date(s.startDate || 0).getTime();
+  const active = sprints.filter((s) => s.state === "active");
+  if (active.length) return [...active].sort((a, b) => start(b) - start(a))[0]?.name || "";
+  const future = sprints.filter((s) => s.state === "future");
+  if (future.length) return [...future].sort((a, b) => start(a) - start(b))[0]?.name || "";
+  return [...sprints].sort((a, b) => start(b) - start(a))[0]?.name || "";
+}
+
+/**
+ * Fetch the fields we can map onto a backlog row when a Jira ticket is first linked:
+ * summary (→ description), priority name, squad option, the most relevant sprint name, and
+ * the linked Zendesk count. Returns raw values; mapping to agendo's dropdown options (and
+ * skipping empties) happens in the service. Throws on config / parse / HTTP errors.
+ */
+export async function fetchIssueDetails(keyOrUrl) {
+  assertJiraConfig();
+
+  const issueKey = extractIssueKey(keyOrUrl);
+  if (!issueKey) {
+    throw new Error(`Could not parse a Jira issue key from "${keyOrUrl}".`);
+  }
+
+  const fields = [
+    "summary",
+    "priority",
+    jiraConfig.connectedTicketsField,
+    jiraConfig.squadField,
+    jiraConfig.sprintField,
+  ].join(",");
+  const url = `${jiraConfig.baseUrl}/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=${encodeURIComponent(fields)}`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: authHeader(), Accept: "application/json" },
+    });
+  } catch (err) {
+    throw new Error(`Jira request failed: ${err.message}`);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[jira-backlog] Jira ${res.status} for ${issueKey}: ${body.slice(0, 300)}`);
+    const detail = res.status === 404 ? `issue ${issueKey} not found` : `HTTP ${res.status}`;
+    throw new Error(`Jira returned an error (${detail}).`);
+  }
+
+  const data = await res.json();
+  const f = data?.fields || {};
+  const zd = f[jiraConfig.connectedTicketsField];
+
+  return {
+    issueKey,
+    summary: typeof f.summary === "string" ? f.summary : "",
+    priorityName: f.priority?.name || "",
+    squadValue: extractOptionValue(f[jiraConfig.squadField]),
+    sprintName: pickSprintName(f[jiraConfig.sprintField]),
+    zdCount: Number.isFinite(zd) ? Number(zd) : null,
+  };
+}

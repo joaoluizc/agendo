@@ -67,6 +67,63 @@ const refreshZd = async (req, res) => {
   }
 };
 
+// Pull as much as possible from the linked Jira ticket onto a row (summary, priority,
+// squad, sprint, Zendesk count). Same 409-when-unconfigured convention as refreshZd.
+const autofill = async (req, res) => {
+  if (!isJiraConfigured()) {
+    return res.status(409).json({ code: "JIRA_NOT_CONFIGURED", message: "Jira is not configured" });
+  }
+  try {
+    const issue = await jiraBacklogService.autofillFromJira(req.params.id);
+    if (!issue) return res.status(404).json({ message: "Issue not found" });
+    res.status(200).json(issue);
+  } catch (error) {
+    res.status(502).json({ message: error.message });
+  }
+};
+
+const listBugStatuses = async (_req, res) => {
+  try {
+    const statuses = await jiraBacklogService.getBugStatuses();
+    res.status(200).json(statuses);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const createBugStatus = async (req, res) => {
+  try {
+    const status = await jiraBacklogService.createBugStatus(req.body || {});
+    res.status(201).json(status);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res
+        .status(409)
+        .json({ code: "DUPLICATE_STATUS", message: "A status with that name already exists." });
+    }
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Deleting a status that issues still use is blocked (409) — same convention as the
+// task-status guard, so the UI can show a clear message.
+const deleteBugStatus = async (req, res) => {
+  try {
+    const result = await jiraBacklogService.deleteBugStatus(req.params.id);
+    if (result.ok) return res.status(200).json({ message: "Status deleted" });
+    if (result.code === "NOT_FOUND") return res.status(404).json({ message: "Status not found" });
+    if (result.code === "STATUS_IN_USE") {
+      return res.status(409).json({
+        code: "STATUS_IN_USE",
+        message: `This status is used by ${result.count} issue${result.count === 1 ? "" : "s"}. Reassign them first.`,
+      });
+    }
+    res.status(400).json({ message: "Could not delete status" });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 export default {
   getConfig,
   listIssues,
@@ -74,4 +131,8 @@ export default {
   updateIssue,
   deleteIssue,
   refreshZd,
+  autofill,
+  listBugStatuses,
+  createBugStatus,
+  deleteBugStatus,
 };

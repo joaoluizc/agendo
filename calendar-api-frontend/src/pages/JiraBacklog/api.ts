@@ -1,4 +1,4 @@
-import { IssuePatch, JiraIssue } from "./types";
+import { BugStatus, IssuePatch, JiraIssue, Task, TaskStatus, TaskWithIssue } from "./types";
 
 /**
  * Thin client for the /jira-backlog backend. Uses the same calling convention as the
@@ -55,6 +55,39 @@ export const jiraApi = {
   // The "Refresh ZD counts" toolbar action fans out over this per-row endpoint (a few at
   // a time) rather than one long batch request — see refreshVisible in JiraBacklog.tsx.
   refreshZd: (id: string) => request<JiraIssue>(`/issues/${id}/refresh-zd`, { method: "POST" }),
+  // Pull summary/priority/squad/sprint/ZD-count from the linked Jira ticket onto the row.
+  autofill: (id: string) => request<JiraIssue>(`/issues/${id}/autofill`, { method: "POST" }),
+};
+
+/** User-managed issue statuses (the backlog's status dropdown — add / delete). */
+export const bugStatusApi = {
+  list: () => request<BugStatus[]>("/bug-statuses"),
+  create: (name: string) => request<BugStatus>("/bug-statuses", { method: "POST", body: { name } }),
+  remove: (id: string) => request<{ message: string }>(`/bug-statuses/${id}`, { method: "DELETE" }),
+};
+
+/**
+ * Tasks + customizable statuses layer (same /jira-backlog backend, same calling
+ * convention). Reads are open to any signed-in user; mutations hit admin-gated endpoints.
+ */
+export const taskApi = {
+  // statuses (kanban columns)
+  getStatuses: () => request<TaskStatus[]>("/task-statuses"),
+  createStatus: (name: string) =>
+    request<TaskStatus>("/task-statuses", { method: "POST", body: { name } }),
+  updateStatus: (id: string, body: { name?: string; order?: number }) =>
+    request<TaskStatus>(`/task-statuses/${id}`, { method: "PATCH", body }),
+  deleteStatus: (id: string) =>
+    request<{ message: string }>(`/task-statuses/${id}`, { method: "DELETE" }),
+
+  // tasks
+  getAllTasks: () => request<TaskWithIssue[]>("/tasks"),
+  getTasksForIssue: (issueId: string) => request<Task[]>(`/issues/${issueId}/tasks`),
+  createTask: (issueId: string, body: { title: string; statusId?: string }) =>
+    request<Task>(`/issues/${issueId}/tasks`, { method: "POST", body }),
+  updateTask: (id: string, body: { title?: string; statusId?: string; order?: number }) =>
+    request<Task>(`/tasks/${id}`, { method: "PATCH", body }),
+  deleteTask: (id: string) => request<{ message: string }>(`/tasks/${id}`, { method: "DELETE" }),
 };
 
 /** Extract a Jira issue key (e.g. "SUP-6983") from a key or browse URL. */

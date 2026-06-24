@@ -77,10 +77,6 @@ const F: Record<string, ColumnDesc> = {
   frustration: { id: "frustration", field: "frustration", header: "Frustration", type: "select", options: DROPDOWN_OPTIONS.frustration, minWidth: 190 },
   scopeConf: { id: "scopeConf", field: "scopeConf", header: "Scope confidence", type: "select", options: DROPDOWN_OPTIONS.scopeConf, minWidth: 170 },
   workaroundQ: { id: "workaroundQ", field: "workaroundQ", header: "Workaround quality", type: "select", options: DROPDOWN_OPTIONS.workaroundQ, minWidth: 180 },
-  custFrust: { id: "custFrust", field: "custFrust", header: "Customer frustration", type: "text", minWidth: 150 },
-  custPlan: { id: "custPlan", field: "custPlan", header: "Customer plan", type: "text", minWidth: 150 },
-  spread: { id: "spread", field: "spread", header: "Spread", type: "text", minWidth: 130 },
-  tlUrg: { id: "tlUrg", field: "tlUrg", header: "TL urgency perception", type: "text", minWidth: 150 },
 };
 
 /**
@@ -120,7 +116,6 @@ export const DETAIL_GROUPS: { title: string; fields: ColumnDesc[] }[] = [
   { title: "Triage", fields: [F.priority, F.squad, F.client, F.sprint, F.complexity, F.bugType] },
   { title: "Details", fields: [F.desc, F.comment] },
   { title: "Urgency inputs", fields: [F.scope, F.planTier, F.workaround, F.frustration, F.scopeConf, F.workaroundQ] },
-  { title: "Customer signal", fields: [F.custFrust, F.custPlan, F.spread, F.tlUrg] },
 ];
 
 /**

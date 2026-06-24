@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { ListChecks, Loader2, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -14,13 +15,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
-import { ApiError, jiraApi } from "./api";
+import { ApiError, bugStatusApi, jiraApi } from "./api";
 import { computeUrgency, URGENCY_INPUT_FIELDS } from "./urgency";
 import { buildColumns } from "./columns";
 import { DataTable } from "./data-table";
 import { ToReviewView } from "./to-review-view";
 import { DetailPanel } from "./detail-panel";
-import { IssuePatch, JiraIssue, JiraTableMeta, ViewKey } from "./types";
+import { BugStatus, IssuePatch, JiraIssue, JiraTableMeta, ViewKey } from "./types";
+import { STATUS_OPTIONS } from "./constants";
+import { ManageStatusesDialog } from "./manage-statuses-dialog";
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -46,6 +49,13 @@ export default function JiraBacklog() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  const [bugStatuses, setBugStatuses] = useState<BugStatus[]>([]);
+  const [manageOpen, setManageOpen] = useState(false);
+
+  // Deep-link: a `?issue=<id>` param (e.g. from a Tasks-board card) opens that ticket's
+  // panel. The param only drives opening; in-page row clicks don't rewrite the URL.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const issueParam = searchParams.get("issue");
 
   // Collapse the big page header once the user scrolls into the list.
   useEffect(() => {
@@ -78,6 +88,41 @@ export default function JiraBacklog() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Bug statuses are user-managed; fetch them independently so a status-endpoint hiccup
+  // doesn't block the issues list. The dropdown falls back to STATUS_OPTIONS until loaded.
+  const reloadStatuses = useCallback(async () => {
+    try {
+      setBugStatuses(await bugStatusApi.list());
+    } catch {
+      // keep whatever we have
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadStatuses();
+  }, [reloadStatuses]);
+
+  // Open the deep-linked ticket once its id appears in the URL (selectedIssue resolves
+  // as soon as the list finishes loading).
+  useEffect(() => {
+    if (issueParam) setSelectedId(issueParam);
+  }, [issueParam]);
+
+  // Close the panel and drop the deep-link param so it doesn't immediately reopen.
+  const closeDetail = useCallback(() => {
+    setSelectedId(null);
+    if (issueParam) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("issue");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [issueParam, setSearchParams]);
 
   const updateField = useCallback(
     async (id: string, fieldPatch: IssuePatch) => {
@@ -158,6 +203,28 @@ export default function JiraBacklog() {
     [patchIssue],
   );
 
+  const autofill = useCallback(
+    async (id: string) => {
+      patchIssue(id, { _zdBusy: true, _zdError: false });
+      try {
+        const updated = await jiraApi.autofill(id);
+        setIssues((prev) =>
+          prev.map((it) => (it._id === id ? { ...updated, _zdBusy: false, _zdError: false } : it)),
+        );
+        toast.success("Filled details from Jira.");
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "JIRA_NOT_CONFIGURED") {
+          patchIssue(id, { _zdBusy: false });
+          toast.error("Jira isn't configured yet.");
+        } else {
+          patchIssue(id, { _zdBusy: false, _zdError: true });
+          toast.error(e instanceof Error ? e.message : "Jira autofill failed");
+        }
+      }
+    },
+    [patchIssue],
+  );
+
   const visibleIssues = useMemo(() => {
     if (view === "open") return issues.filter((i) => i.status !== "Fixed/Closed");
     if (view === "toReview") return issues.filter((i) => i.status === "Review with Squad");
@@ -209,10 +276,26 @@ export default function JiraBacklog() {
 
   const openDetail = useCallback((id: string) => setSelectedId(id), []);
 
+  // Status names for the dropdown + filter — user-managed, falling back to the built-in
+  // defaults until they load. Memoized so meta stays referentially stable.
+  const statusOptions = useMemo(
+    () => (bugStatuses.length ? bugStatuses.map((s) => s.name) : STATUS_OPTIONS),
+    [bugStatuses],
+  );
+
   // Referentially stable across refreshes (no volatile maps) so memoized rows hold.
   const meta: JiraTableMeta = useMemo(
-    () => ({ canEdit, jiraConfigured, updateField, deleteRow: setPendingDeleteId, refreshZd, openDetail }),
-    [canEdit, jiraConfigured, updateField, refreshZd, openDetail],
+    () => ({
+      canEdit,
+      jiraConfigured,
+      updateField,
+      deleteRow: setPendingDeleteId,
+      refreshZd,
+      autofill,
+      openDetail,
+      statusOptions,
+    }),
+    [canEdit, jiraConfigured, updateField, refreshZd, autofill, openDetail, statusOptions],
   );
 
   const columns = useMemo(() => buildColumns(), []);
@@ -258,6 +341,9 @@ export default function JiraBacklog() {
         </span>
         {canEdit && (
           <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
+              <ListChecks className="h-4 w-4" /> Manage statuses
+            </Button>
             <Button variant="outline" size="sm" onClick={addRow}>
               <Plus className="h-4 w-4" /> Add row
             </Button>
@@ -291,7 +377,7 @@ export default function JiraBacklog() {
       </div>
 
       {selectedIssue && (
-        <DetailPanel issue={selectedIssue} meta={meta} onClose={() => setSelectedId(null)} />
+        <DetailPanel issue={selectedIssue} meta={meta} onClose={closeDetail} />
       )}
 
       <AlertDialog open={!!pendingDeleteId} onOpenChange={(o) => !o && setPendingDeleteId(null)}>
@@ -313,6 +399,15 @@ export default function JiraBacklog() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {canEdit && (
+        <ManageStatusesDialog
+          open={manageOpen}
+          onOpenChange={setManageOpen}
+          statuses={bugStatuses}
+          reload={reloadStatuses}
+        />
+      )}
     </div>
   );
 }

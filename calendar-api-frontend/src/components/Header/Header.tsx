@@ -1,6 +1,7 @@
 import { Link, NavLink } from "react-router-dom";
 import { Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
+import { useUserSettings } from "@/providers/useUserSettings";
 import agendoLogoLight from "../../resources/agendo-logo.svg";
 import agendoLogoDark from "../../resources/agendo-logo-dark.svg";
 import agendoAudio from "../../resources/agendo.mp3";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
 
 const Header = () => {
   const { setTheme, theme } = useTheme();
+  const { type } = useUserSettings();
   const logoRef = useRef(null);
   const [nrOfLogoClicks, setNrOfLogoClicks] = useState<number>(0);
 
@@ -141,20 +143,38 @@ const Header = () => {
                   </NavigationMenuLink>
                 </NavLink>
               </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavLink
-                  to="/app/jira-backlog"
-                  className={({ isActive }) =>
-                    `${
-                      isActive ? "text-foreground" : "text-muted-foreground"
-                    } transition-colors hover:text-foreground`
-                  }
-                >
-                  <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                    Jira Backlog
-                  </NavigationMenuLink>
-                </NavLink>
-              </NavigationMenuItem>
+              {type === "admin" && (
+                <>
+                  <NavigationMenuItem>
+                    <NavLink
+                      to="/app/jira-backlog"
+                      className={({ isActive }) =>
+                        `${
+                          isActive ? "text-foreground" : "text-muted-foreground"
+                        } transition-colors hover:text-foreground`
+                      }
+                    >
+                      <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                        Jira Backlog
+                      </NavigationMenuLink>
+                    </NavLink>
+                  </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <NavLink
+                      to="/app/tasks"
+                      className={({ isActive }) =>
+                        `${
+                          isActive ? "text-foreground" : "text-muted-foreground"
+                        } transition-colors hover:text-foreground`
+                      }
+                    >
+                      <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                        Tasks
+                      </NavigationMenuLink>
+                    </NavLink>
+                  </NavigationMenuItem>
+                </>
+              )}
             </SignedIn>
           </NavigationMenuList>
         </NavigationMenu>
@@ -202,9 +222,16 @@ const Header = () => {
                 <NavLink to="/app/settings" className="hover:text-foreground">
                   Settings
                 </NavLink>
-                <NavLink to="/app/jira-backlog" className="text-muted-foreground hover:text-foreground">
-                  Jira Backlog
-                </NavLink>
+                {type === "admin" && (
+                  <>
+                    <NavLink to="/app/jira-backlog" className="text-muted-foreground hover:text-foreground">
+                      Jira Backlog
+                    </NavLink>
+                    <NavLink to="/app/tasks" className="text-muted-foreground hover:text-foreground">
+                      Tasks
+                    </NavLink>
+                  </>
+                )}
               </SignedIn>
             </nav>
           </SheetContent>

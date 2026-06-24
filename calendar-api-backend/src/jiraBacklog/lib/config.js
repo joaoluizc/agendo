@@ -32,6 +32,14 @@ export const jiraConfig = {
   get connectedTicketsField() {
     return process.env.JIRA_ZD_COUNT_FIELD || "customfield_13671";
   },
+  // Custom fields used by the new-row auto-fill from Jira. Overridable per instance;
+  // defaults match Duda's "Weekly Bugs" (SUP) project.
+  get squadField() {
+    return process.env.JIRA_SQUAD_FIELD || "customfield_13650";
+  },
+  get sprintField() {
+    return process.env.JIRA_SPRINT_FIELD || "customfield_11400";
+  },
 };
 
 /** True when the minimum needed to call Jira is present. */

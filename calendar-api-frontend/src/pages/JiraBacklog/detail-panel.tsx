@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta } from "./types";
 import { DETAIL_GROUPS, STATUS_FIELD } from "./constants";
+import { CollapsibleSection } from "./collapsible-section";
+import { TasksSection } from "./tasks-section";
 import { extractIssueKey } from "./api";
 import { urgencyCellClasses } from "./urgency";
 import { badgeClasses } from "./badges";
@@ -49,7 +51,18 @@ function TextField({ issue, desc, meta }: FieldProps) {
     return (
       <Field label={desc.header}>
         {value ? (
-          <p className={cn("text-sm", desc.wrap && "whitespace-pre-wrap break-words")}>{value}</p>
+          desc.badge ? (
+            <span
+              className={cn(
+                "inline-block rounded px-2 py-0.5 text-xs font-medium",
+                badgeClasses(desc.badge, value),
+              )}
+            >
+              {value}
+            </span>
+          ) : (
+            <p className={cn("text-sm", desc.wrap && "whitespace-pre-wrap break-words")}>{value}</p>
+          )
         ) : (
           <p className="text-sm text-muted-foreground">—</p>
         )}
@@ -85,7 +98,10 @@ function TextField({ issue, desc, meta }: FieldProps) {
         />
       ) : (
         <input
-          className={inputClass}
+          className={cn(
+            inputClass,
+            desc.badge && draft && cn(badgeClasses(desc.badge, draft), "border-transparent font-medium"),
+          )}
           value={draft}
           onFocus={onFocus}
           onChange={(e) => setDraft(e.target.value)}
@@ -106,6 +122,9 @@ function TextField({ issue, desc, meta }: FieldProps) {
 
 function SelectField({ issue, desc, meta }: FieldProps) {
   const value = (issue[desc.field] as string) || "";
+  // The status dropdown is user-managed (meta.statusOptions); other selects use the static
+  // option list from the column descriptor.
+  const options = desc.field === "status" ? meta.statusOptions : desc.options || [];
 
   if (!meta.canEdit) {
     return (
@@ -133,12 +152,16 @@ function SelectField({ issue, desc, meta }: FieldProps) {
     <Field label={desc.header}>
       <div className="relative">
         <select
-          className={cn(inputClass, "h-9 cursor-pointer appearance-none pr-8 dark:[color-scheme:dark]")}
+          className={cn(
+            inputClass,
+            "h-9 cursor-pointer appearance-none pr-8 dark:[color-scheme:dark]",
+            desc.badge && value && cn(badgeClasses(desc.badge, value), "border-transparent font-medium"),
+          )}
           value={value}
           onChange={(e) => meta.updateField(issue._id, patch(desc.field, e.target.value))}
         >
           <option value="">—</option>
-          {(desc.options || []).map((o) => (
+          {options.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
@@ -230,7 +253,7 @@ function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta })
     const issueKey = extractIssueKey(url);
     const empty = wasEmpty.current;
     await meta.updateField(issue._id, { url, issueKey });
-    if (empty && meta.jiraConfigured && issueKey) meta.refreshZd(issue._id);
+    if (empty && meta.jiraConfigured && issueKey) meta.autofill(issue._id);
   };
 
   return (
@@ -341,24 +364,25 @@ export function DetailPanel({
           </button>
         </header>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        <div className="flex-1 space-y-8 overflow-y-auto px-4 py-5">
           <JiraSection issue={issue} meta={meta} />
 
-          <div className="grid gap-4 border-t pt-4">
+          <div className="grid gap-4 border-t pt-6">
             <SelectField issue={issue} desc={STATUS_FIELD} meta={meta} />
             <UrgencyField issue={issue} meta={meta} />
           </div>
 
           {DETAIL_GROUPS.map((group) => (
-            <section key={group.title} className="space-y-3 border-t pt-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</h3>
-              <div className="grid gap-3">
+            <CollapsibleSection key={group.title} title={group.title}>
+              <div className="grid gap-4">
                 {group.fields.map((f) => (
                   <FieldEditor key={f.id} issue={issue} desc={f} meta={meta} />
                 ))}
               </div>
-            </section>
+            </CollapsibleSection>
           ))}
+
+          <TasksSection issue={issue} meta={meta} />
         </div>
 
         {meta.canEdit && (

@@ -35,10 +35,6 @@ const JiraIssueSchema = new Schema(
     frustration: { type: String, default: "" },
     scopeConf: { type: String, default: "" },
     workaroundQ: { type: String, default: "" },
-    custFrust: { type: String, default: "" },
-    custPlan: { type: String, default: "" },
-    spread: { type: String, default: "" },
-    tlUrg: { type: String, default: "" },
     zdCount: { type: Number, default: null }, // linked Zendesk ticket count
     zdCountFetchedAt: { type: Date, default: null },
     order: { type: Number, default: 0 }, // insertion order ("All" view)
