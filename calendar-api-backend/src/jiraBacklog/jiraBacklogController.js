@@ -25,6 +25,11 @@ const createIssue = async (req, res) => {
     const issue = await jiraBacklogService.createIssue(req.body || {});
     res.status(201).json(issue);
   } catch (error) {
+    if (error.code === "DUPLICATE_ISSUE") {
+      return res
+        .status(409)
+        .json({ code: "DUPLICATE_ISSUE", message: error.message, existingId: error.existingId });
+    }
     res.status(400).json({ message: error.message });
   }
 };
@@ -35,6 +40,11 @@ const updateIssue = async (req, res) => {
     if (!issue) return res.status(404).json({ message: "Issue not found" });
     res.status(200).json(issue);
   } catch (error) {
+    if (error.code === "DUPLICATE_ISSUE") {
+      return res
+        .status(409)
+        .json({ code: "DUPLICATE_ISSUE", message: error.message, existingId: error.existingId });
+    }
     res.status(400).json({ message: error.message });
   }
 };

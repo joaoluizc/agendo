@@ -51,6 +51,7 @@ export default function JiraBacklog() {
   const [scrolled, setScrolled] = useState(false);
   const [bugStatuses, setBugStatuses] = useState<BugStatus[]>([]);
   const [manageOpen, setManageOpen] = useState(false);
+  const [dup, setDup] = useState<{ existingId: string; issueKey: string } | null>(null);
 
   // Deep-link: a `?issue=<id>` param (e.g. from a Tasks-board card) opens that ticket's
   // panel. The param only drives opening; in-page row clicks don't rewrite the URL.
@@ -125,7 +126,7 @@ export default function JiraBacklog() {
   }, [issueParam, setSearchParams]);
 
   const updateField = useCallback(
-    async (id: string, fieldPatch: IssuePatch) => {
+    async (id: string, fieldPatch: IssuePatch): Promise<boolean> => {
       // Optimistic: apply locally (mirroring the server's urgency recalc for instant
       // feedback), then reconcile with the server's authoritative row on response.
       setIssues((prev) =>
@@ -142,7 +143,14 @@ export default function JiraBacklog() {
       try {
         const updated = await jiraApi.updateIssue(id, fieldPatch);
         setIssues((prev) => prev.map((it) => (it._id === id ? updated : it)));
+        return true;
       } catch (e) {
+        load(); // revert optimistic change
+        if (e instanceof ApiError && e.code === "DUPLICATE_ISSUE") {
+          // The Jira key already exists — offer to jump to the existing row instead.
+          setDup({ existingId: e.existingId || "", issueKey: String(fieldPatch.issueKey || "") });
+          return false;
+        }
         const msg =
           e instanceof ApiError && e.status === 403
             ? "Only admins can edit."
@@ -150,7 +158,7 @@ export default function JiraBacklog() {
               ? e.message
               : "Update failed";
         toast.error(msg);
-        load(); // revert optimistic change
+        return false;
       }
     },
     [load],
@@ -395,6 +403,32 @@ export default function JiraBacklog() {
               onClick={confirmDelete}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!dup} onOpenChange={(o) => !o && setDup(null)}>
+        <AlertDialogContent className="z-[70]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>This bug is already on the backlog</AlertDialogTitle>
+            <AlertDialogDescription>
+              {dup?.issueKey ? `${dup.issueKey} is` : "This bug is"} already tracked on the backlog.
+              Do you want to open the existing one?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (dup?.existingId) {
+                  setView("all");
+                  setSelectedId(dup.existingId);
+                }
+                setDup(null);
+              }}
+            >
+              Go to existing bug
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -40,6 +40,10 @@ export const jiraConfig = {
   get sprintField() {
     return process.env.JIRA_SPRINT_FIELD || "customfield_11400";
   },
+  // Jira "Partners" field — mapped onto the row's free-text `client` on auto-fill.
+  get partnerField() {
+    return process.env.JIRA_PARTNER_FIELD || "customfield_11200";
+  },
 };
 
 /** True when the minimum needed to call Jira is present. */

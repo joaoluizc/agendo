@@ -113,6 +113,7 @@ export async function fetchIssueDetails(keyOrUrl) {
     jiraConfig.connectedTicketsField,
     jiraConfig.squadField,
     jiraConfig.sprintField,
+    jiraConfig.partnerField,
   ].join(",");
   const url = `${jiraConfig.baseUrl}/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=${encodeURIComponent(fields)}`;
 
@@ -143,6 +144,7 @@ export async function fetchIssueDetails(keyOrUrl) {
     priorityName: f.priority?.name || "",
     squadValue: extractOptionValue(f[jiraConfig.squadField]),
     sprintName: pickSprintName(f[jiraConfig.sprintField]),
+    partnerValue: extractOptionValue(f[jiraConfig.partnerField]),
     zdCount: Number.isFinite(zd) ? Number(zd) : null,
   };
 }

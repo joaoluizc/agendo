@@ -1,9 +1,10 @@
 import { JiraIssue } from "./jiraBacklogModel.js";
 import { computeUrgency, URGENCY_INPUT_FIELDS } from "./lib/urgency.js";
 import { DROPDOWN_OPTIONS } from "./lib/dropdowns.js";
-import { deriveStatus, STATUS_OPTIONS } from "./lib/status.js";
+import { STATUS_OPTIONS } from "./lib/status.js";
 import { fetchConnectedTicketCount, fetchIssueDetails } from "./lib/jiraClient.js";
 import { JIRA_BACKLOG_SEED } from "./seed/jiraBacklogSeed.js";
+import { mapSeedRecord } from "./seed/mapSeedRecord.js";
 import { BugStatus } from "./bugStatusModel.js";
 import taskService from "./taskService.js";
 
@@ -51,33 +52,6 @@ async function nextOrder() {
   return (last?.order ?? -1) + 1;
 }
 
-function mapSeedRecord(rec, index) {
-  return {
-    issueKey: rec.id || "",
-    url: rec.url || "",
-    status: deriveStatus(rec),
-    desc: rec.desc || "",
-    client: rec.client || "",
-    priority: rec.priority || "",
-    squad: rec.squad || "",
-    sprint: rec.sprint || "",
-    complexity: rec.complexity || "",
-    urgency: typeof rec.urgency === "number" ? rec.urgency : null,
-    urgencyOverridden: false,
-    comment: rec.comment || "",
-    bugType: rec.bugType || "",
-    scope: rec.scope || "",
-    planTier: rec.planTier || "",
-    workaround: rec.workaround || "",
-    frustration: rec.frustration || "",
-    scopeConf: rec.scopeConf || "",
-    workaroundQ: rec.workaroundQ || "",
-    zdCount: typeof rec.zdCount === "number" ? rec.zdCount : null,
-    zdCountFetchedAt: rec.zdCountFetchedAt ? new Date(rec.zdCountFetchedAt) : null,
-    order: index,
-  };
-}
-
 // Memoised so concurrent first-requests in one process can't double-seed.
 let seedPromise = null;
 function seedIfEmpty() {
@@ -93,11 +67,32 @@ async function doSeed() {
 
 async function getAllIssues() {
   await seedIfEmpty();
-  return JiraIssue.find().sort({ order: 1, createdAt: 1 }).lean();
+  // Default order: most urgent first. Null urgency (regressions / incomplete rows) sorts
+  // last in a descending sort; `order` is a stable insertion-order tiebreaker.
+  return JiraIssue.find().sort({ urgency: -1, order: 1 }).lean();
+}
+
+/**
+ * Bugs are unique by Jira key — refuse to create/link a row whose issueKey already exists.
+ * Throws a typed error the controller maps to 409 with the existing row's id (so the UI can
+ * offer to jump to it). Only meaningful for non-empty keys.
+ */
+async function assertNoDuplicateKey(issueKey, excludeId) {
+  const query = { issueKey };
+  if (excludeId) query._id = { $ne: excludeId };
+  const existing = await JiraIssue.findOne(query).select("_id").lean();
+  if (existing) {
+    throw Object.assign(new Error(`${issueKey} is already on the backlog.`), {
+      code: "DUPLICATE_ISSUE",
+      existingId: String(existing._id),
+    });
+  }
 }
 
 async function createIssue(body = {}) {
-  const issue = new JiraIssue({ ...sanitizeWritable(body), order: await nextOrder() });
+  const writable = sanitizeWritable(body);
+  if (writable.issueKey) await assertNoDuplicateKey(writable.issueKey, null);
+  const issue = new JiraIssue({ ...writable, order: await nextOrder() });
 
   if (has(body, "urgency")) {
     const u = normalizeUrgencyInput(body.urgency);
@@ -121,6 +116,7 @@ async function updateIssue(id, body = {}) {
   if (!doc) return null;
 
   const writable = sanitizeWritable(body);
+  if (writable.issueKey) await assertNoDuplicateKey(writable.issueKey, doc._id);
   Object.assign(doc, writable);
 
   if (has(body, "urgency")) {
@@ -193,6 +189,7 @@ async function autofillFromJira(id) {
   const squad = matchSquad(details.squadValue);
   if (squad) patch.squad = squad;
   if (details.sprintName) patch.sprint = details.sprintName;
+  if (details.partnerValue) patch.client = details.partnerValue; // Jira "Partners" → client
 
   Object.assign(doc, sanitizeWritable(patch));
 

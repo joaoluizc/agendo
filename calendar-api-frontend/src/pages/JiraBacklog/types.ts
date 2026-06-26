@@ -110,7 +110,7 @@ export interface JiraTableMeta {
   canEdit: boolean;
   jiraConfigured: boolean;
   /** Persist a field change; resolves once the server has confirmed. */
-  updateField: (id: string, patch: IssuePatch) => Promise<void>;
+  updateField: (id: string, patch: IssuePatch) => Promise<boolean>;
   deleteRow: (id: string) => void;
   refreshZd: (id: string) => void;
   /** Pull as much as possible from the linked Jira ticket onto the row (new-row autofill). */

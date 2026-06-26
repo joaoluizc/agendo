@@ -10,10 +10,13 @@ const BASE = "/api/jira-backlog";
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  /** For DUPLICATE_ISSUE: the _id of the existing row, so the UI can offer to open it. */
+  existingId?: string;
+  constructor(message: string, status: number, code?: string, existingId?: string) {
     super(message);
     this.status = status;
     this.code = code;
+    this.existingId = existingId;
   }
 }
 
@@ -34,8 +37,8 @@ async function request<T>(path: string, options: { method?: string; body?: unkno
   }
 
   if (!res.ok) {
-    const p = payload as { message?: string; code?: string } | null;
-    throw new ApiError(p?.message || `Request failed (${res.status})`, res.status, p?.code);
+    const p = payload as { message?: string; code?: string; existingId?: string } | null;
+    throw new ApiError(p?.message || `Request failed (${res.status})`, res.status, p?.code, p?.existingId);
   }
   return payload as T;
 }

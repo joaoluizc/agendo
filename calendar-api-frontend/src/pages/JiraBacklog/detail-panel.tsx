@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
+import { ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta } from "./types";
 import { DETAIL_GROUPS, STATUS_FIELD } from "./constants";
 import { CollapsibleSection } from "./collapsible-section";
+import { PrettySelect } from "./pretty-select";
 import { TasksSection } from "./tasks-section";
 import { extractIssueKey } from "./api";
 import { urgencyCellClasses } from "./urgency";
@@ -144,31 +145,22 @@ function SelectField({ issue, desc, meta }: FieldProps) {
     );
   }
 
-  // Native <select> on purpose: a Radix Select locks body scroll while open
-  // (react-remove-scroll), which on classic (non-overlay) scrollbars shifts the layout —
-  // showing a "second scrollbar" and offsetting the options so they can't be clicked.
-  // Native selects have no scroll-lock/portal, so they're robust inside this fixed panel.
+  // A Popover-based select (see pretty-select.tsx) — matches the app's dropdowns without the
+  // body-scroll-lock a Radix Select would impose inside this fixed panel. Status / priority /
+  // client keep their badge tint on the trigger.
   return (
     <Field label={desc.header}>
-      <div className="relative">
-        <select
-          className={cn(
-            inputClass,
-            "h-9 cursor-pointer appearance-none pr-8 dark:[color-scheme:dark]",
-            desc.badge && value && cn(badgeClasses(desc.badge, value), "border-transparent font-medium"),
-          )}
-          value={value}
-          onChange={(e) => meta.updateField(issue._id, patch(desc.field, e.target.value))}
-        >
-          <option value="">—</option>
-          {options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-      </div>
+      <PrettySelect
+        value={value}
+        options={options}
+        clearable
+        onChange={(v) => meta.updateField(issue._id, patch(desc.field, v))}
+        triggerClassName={
+          desc.badge && value
+            ? cn(badgeClasses(desc.badge, value), "border-transparent font-medium")
+            : undefined
+        }
+      />
     </Field>
   );
 }
@@ -252,8 +244,8 @@ function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta })
     if (url === issue.url) return;
     const issueKey = extractIssueKey(url);
     const empty = wasEmpty.current;
-    await meta.updateField(issue._id, { url, issueKey });
-    if (empty && meta.jiraConfigured && issueKey) meta.autofill(issue._id);
+    const ok = await meta.updateField(issue._id, { url, issueKey });
+    if (ok && empty && meta.jiraConfigured && issueKey) meta.autofill(issue._id);
   };
 
   return (

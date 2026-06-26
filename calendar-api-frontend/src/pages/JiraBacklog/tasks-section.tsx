@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { ApiError, taskApi } from "./api";
 import { CollapsibleSection } from "./collapsible-section";
+import { PrettySelect } from "./pretty-select";
 import { JiraIssue, JiraTableMeta, Task, TaskStatus } from "./types";
 
 /**
@@ -120,23 +120,12 @@ export function TasksSection({ issue, meta }: { issue: JiraIssue; meta: JiraTabl
               <span className="flex-1 break-words text-sm">{task.title}</span>
               {meta.canEdit ? (
                 <>
-                  <div className="relative">
-                    <select
-                      className={cn(
-                        inputClass,
-                        "h-8 w-32 cursor-pointer appearance-none pr-7 dark:[color-scheme:dark]",
-                      )}
-                      value={task.statusId}
-                      onChange={(e) => changeStatus(task._id, e.target.value)}
-                    >
-                      {statuses.map((s) => (
-                        <option key={s._id} value={s._id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-                  </div>
+                  <PrettySelect
+                    value={task.statusId}
+                    options={statuses.map((s) => ({ value: s._id, label: s.name }))}
+                    onChange={(v) => changeStatus(task._id, v)}
+                    triggerClassName="h-8 w-36"
+                  />
                   <button
                     onClick={() => removeTask(task._id)}
                     className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"

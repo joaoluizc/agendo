@@ -60,7 +60,7 @@ export const DROPDOWN_OPTIONS: Record<string, readonly string[]> = {
 const F: Record<string, ColumnDesc> = {
   jiraUrl: { id: "jiraUrl", field: "url", header: "Jira", type: "jiraUrl", minWidth: 92 },
   status: { id: "status", field: "status", header: "Status", type: "select", options: DROPDOWN_OPTIONS.status, badge: "status", minWidth: 150 },
-  desc: { id: "desc", field: "desc", header: "Description", type: "text", minWidth: 240, wrap: true, grow: true },
+  desc: { id: "desc", field: "desc", header: "Title", type: "text", minWidth: 240, wrap: true, grow: true },
   client: { id: "client", field: "client", header: "Client", type: "text", badge: "client", minWidth: 110 },
   priority: { id: "priority", field: "priority", header: "Priority", type: "select", options: DROPDOWN_OPTIONS.priority, badge: "priority", minWidth: 100 },
   squad: { id: "squad", field: "squad", header: "Squad", type: "select", options: DROPDOWN_OPTIONS.squad, minWidth: 150 },
