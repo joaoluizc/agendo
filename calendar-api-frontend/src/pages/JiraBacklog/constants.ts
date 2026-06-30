@@ -16,11 +16,11 @@ export const STATUS_OPTIONS = [
 ] as const;
 
 /**
- * Statuses shown by default in the "To Review" view. Matches the original fixed rule
- * (only "Review with Squad"); the view's status picker lets the user widen it to pull in
- * bugs from other statuses when relevant.
+ * Statuses shown by default in the "To Review" view, in the order they should appear within
+ * a squad group: "In a Sprint" first, then "Review with Squad". The view's status picker lets
+ * the user widen it to pull in bugs from other statuses when relevant.
  */
-export const DEFAULT_TO_REVIEW_STATUSES: string[] = ["Review with Squad"];
+export const DEFAULT_TO_REVIEW_STATUSES: string[] = ["In a Sprint", "Review with Squad"];
 
 /**
  * The two "No-ETA" workflow statuses. Setting a bug to POSSIBLE_NO_ETA_STATUS prompts the
@@ -135,10 +135,26 @@ export const DETAIL_GROUPS: { title: string; fields: ColumnDesc[] }[] = [
 ];
 
 /**
- * Sort within a To-Review squad group: Regressions first, then urgency descending,
- * with null/empty urgency at the bottom. Stable for equal keys.
+ * Status ordering within a To-Review squad group: "In a Sprint" first, then
+ * "Review with Squad". Any other status the user has widened the filter to include sorts
+ * after these, keeping its relative input order.
+ */
+const TO_REVIEW_STATUS_ORDER: string[] = ["In a Sprint", "Review with Squad"];
+
+function statusRank(status: string): number {
+  const i = TO_REVIEW_STATUS_ORDER.indexOf(status);
+  return i === -1 ? TO_REVIEW_STATUS_ORDER.length : i;
+}
+
+/**
+ * Sort within a To-Review squad group: by status ("In a Sprint" before "Review with Squad"),
+ * then Regressions first, then urgency descending, with null/empty urgency at the bottom.
+ * Stable for equal keys.
  */
 export function compareToReview(a: JiraIssue, b: JiraIssue): number {
+  const statusDiff = statusRank(a.status) - statusRank(b.status);
+  if (statusDiff !== 0) return statusDiff;
+
   const aReg = a.bugType === "Regression";
   const bReg = b.bugType === "Regression";
   if (aReg !== bReg) return aReg ? -1 : 1;
