@@ -10,8 +10,24 @@ export const STATUS_OPTIONS = [
   "Review with Squad",
   "Delayed",
   "In a Sprint",
+  "Possible No-ETA",
+  "No-ETA",
   "Fixed/Closed",
 ] as const;
+
+/**
+ * Statuses shown by default in the "To Review" view. Matches the original fixed rule
+ * (only "Review with Squad"); the view's status picker lets the user widen it to pull in
+ * bugs from other statuses when relevant.
+ */
+export const DEFAULT_TO_REVIEW_STATUSES: string[] = ["Review with Squad"];
+
+/**
+ * The two "No-ETA" workflow statuses. Setting a bug to POSSIBLE_NO_ETA_STATUS prompts the
+ * 30-day re-evaluation task; NO_ETA_STATUS is the terminal decision made from that task.
+ */
+export const POSSIBLE_NO_ETA_STATUS = "Possible No-ETA";
+export const NO_ETA_STATUS = "No-ETA";
 
 /**
  * Canonical dropdown options — identical to the backend
@@ -145,4 +161,38 @@ export function groupBySquadForReview(issues: JiraIssue[]): { squad: string; iss
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([squad, list]) => ({ squad, issues: [...list].sort(compareToReview) }));
+}
+
+// Matches a Jira issue key anywhere in a string (a typed key or one inside a pasted
+// browse URL, e.g. https://dudamobile.atlassian.net/browse/SUP-6983).
+const ISSUE_KEY_RE = /[A-Za-z]+-\d+/;
+
+/**
+ * Normalise a search query into a lowercase term. If the query contains a Jira key —
+ * the common case where someone pastes a Jira link — reduce it to just that key so the
+ * URL's domain/path doesn't get in the way of matching the row by its `issueKey`.
+ */
+export function normalizeQuery(raw: string): string {
+  const key = raw.match(ISSUE_KEY_RE);
+  return (key ? key[0] : raw).trim().toLowerCase();
+}
+
+/**
+ * Case-insensitive match of a normalised term (see normalizeQuery) against an issue's
+ * searchable text. `term` is assumed already normalised + lowercased; "" matches all.
+ */
+export function matchesQuery(issue: JiraIssue, term: string): boolean {
+  if (!term) return true;
+  const fields = [
+    issue.issueKey,
+    issue.desc,
+    issue.client,
+    issue.comment,
+    issue.squad,
+    issue.sprint,
+    issue.priority,
+    issue.status,
+    issue.bugType,
+  ];
+  return fields.some((f) => (f || "").toLowerCase().includes(term));
 }

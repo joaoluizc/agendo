@@ -52,24 +52,42 @@ export interface TaskStatus {
   updatedAt?: string;
 }
 
-/** A task linked to one ticket, as returned by GET /issues/:id/tasks. */
+/**
+ * Marks a task as a "Possible No-ETA" re-evaluation reminder. `flaggedAt` is when the bug
+ * was first flagged (fixed across re-evaluations, so the UI can show how long it has been
+ * waiting); `cycles` counts the 30-day re-evaluations so far. null on ordinary tasks.
+ */
+export interface NoEtaReview {
+  flaggedAt: string;
+  cycles: number;
+}
+
+/** A task, as returned by GET /issues/:id/tasks. `issueId` is null for standalone tasks. */
 export interface Task {
   _id: string;
-  issueId: string;
+  issueId: string | null;
   title: string;
   statusId: string;
   order: number;
+  /** Optional due date (ISO). The UI shows a red dot once it's reached. */
+  deadline?: string | null;
+  noEtaReview?: NoEtaReview | null;
   createdAt?: string;
   updatedAt?: string;
 }
 
-/** A task flattened with its parent ticket's key + description — for the kanban cards. */
+/**
+ * A task flattened with its parent ticket's key + description — for the kanban cards.
+ * Standalone tasks carry a null issueId and empty issueKey/issueDesc.
+ */
 export interface TaskWithIssue {
   _id: string;
   title: string;
   statusId: string;
   order: number;
-  issueId: string;
+  deadline?: string | null;
+  noEtaReview?: NoEtaReview | null;
+  issueId: string | null;
   issueKey: string;
   issueDesc: string;
   createdAt?: string;
@@ -117,6 +135,13 @@ export interface JiraTableMeta {
   autofill: (id: string) => void;
   /** Open the Notion-style detail panel for a row. */
   openDetail: (id: string) => void;
+  /**
+   * Change a row's status. Routed separately from updateField so the page can intercept
+   * "Possible No-ETA" and offer to create a 30-day re-evaluation task.
+   */
+  onStatusChange: (id: string, status: string) => void;
+  /** Apply a server-returned issue to local state (e.g. after a task resolves it to No-ETA). */
+  onIssueUpdated: (issue: JiraIssue) => void;
   /** Current bug-status names (user-managed) — drives the status dropdown + filter. */
   statusOptions: readonly string[];
 }

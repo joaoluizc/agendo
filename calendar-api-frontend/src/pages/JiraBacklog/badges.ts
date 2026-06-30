@@ -30,6 +30,10 @@ export function badgeClasses(kind: BadgeKind, value: string): string {
           return "bg-orange-500/20 text-orange-700 dark:text-orange-300";
         case "In a Sprint":
           return "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300";
+        case "Possible No-ETA":
+          return "bg-rose-500/15 text-rose-700 dark:text-rose-300";
+        case "No-ETA":
+          return "bg-rose-600/30 text-rose-800 ring-1 ring-rose-500/40 dark:text-rose-200";
         case "Fixed/Closed":
           return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
         default:

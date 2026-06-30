@@ -86,11 +86,22 @@ export const taskApi = {
   // tasks
   getAllTasks: () => request<TaskWithIssue[]>("/tasks"),
   getTasksForIssue: (issueId: string) => request<Task[]>(`/issues/${issueId}/tasks`),
-  createTask: (issueId: string, body: { title: string; statusId?: string }) =>
+  createTask: (issueId: string, body: { title: string; statusId?: string; deadline?: string | null }) =>
     request<Task>(`/issues/${issueId}/tasks`, { method: "POST", body }),
-  updateTask: (id: string, body: { title?: string; statusId?: string; order?: number }) =>
-    request<Task>(`/tasks/${id}`, { method: "PATCH", body }),
+  // Standalone task (no parent issue) — created from the Tasks page.
+  createStandaloneTask: (body: { title: string; statusId?: string; deadline?: string | null }) =>
+    request<Task>("/tasks", { method: "POST", body }),
+  updateTask: (
+    id: string,
+    body: { title?: string; statusId?: string; order?: number; deadline?: string | null },
+  ) => request<Task>(`/tasks/${id}`, { method: "PATCH", body }),
   deleteTask: (id: string) => request<{ message: string }>(`/tasks/${id}`, { method: "DELETE" }),
+
+  // "Possible No-ETA" review lifecycle.
+  createNoEtaTask: (issueId: string) =>
+    request<Task>(`/issues/${issueId}/no-eta-task`, { method: "POST" }),
+  noEtaAction: (taskId: string, action: "reevaluate" | "resolve") =>
+    request<Task>(`/tasks/${taskId}/no-eta`, { method: "POST", body: { action } }),
 };
 
 /** Extract a Jira issue key (e.g. "SUP-6983") from a key or browse URL. */

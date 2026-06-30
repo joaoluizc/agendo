@@ -154,7 +154,11 @@ function SelectField({ issue, desc, meta }: FieldProps) {
         value={value}
         options={options}
         clearable
-        onChange={(v) => meta.updateField(issue._id, patch(desc.field, v))}
+        onChange={(v) =>
+          desc.field === "status"
+            ? meta.onStatusChange(issue._id, v)
+            : meta.updateField(issue._id, patch(desc.field, v))
+        }
         triggerClassName={
           desc.badge && value
             ? cn(badgeClasses(desc.badge, value), "border-transparent font-medium")

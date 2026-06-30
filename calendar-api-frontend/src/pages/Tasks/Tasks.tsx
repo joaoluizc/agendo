@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { ApiError, taskApi } from "@/pages/JiraBacklog/api";
+import { TaskEditDialog } from "@/pages/JiraBacklog/task-edit-dialog";
+import { formatDeadline, isDeadlineReached, isPastDue } from "@/pages/JiraBacklog/dates";
 import { TaskStatus, TaskWithIssue } from "@/pages/JiraBacklog/types";
 
 /**
@@ -39,6 +41,9 @@ function CardContent({
   statusName: string;
   dragging?: boolean;
 }) {
+  const done = /^done$/i.test(statusName);
+  const pastDue = !done && isPastDue(task.deadline);
+  const reached = !done && isDeadlineReached(task.deadline);
   return (
     <div
       className={cn(
@@ -46,18 +51,38 @@ function CardContent({
         dragging && "shadow-lg ring-1 ring-ring",
       )}
     >
-      <p className="text-sm font-medium leading-snug break-words">{task.title}</p>
+      <div className="flex items-start gap-2">
+        {pastDue && (
+          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" title="Past due" />
+        )}
+        <p className="text-sm font-medium leading-snug break-words">{task.title}</p>
+      </div>
       {task.issueDesc && (
         <p className="line-clamp-2 text-xs text-muted-foreground break-words">{task.issueDesc}</p>
       )}
-      <div className="flex items-center justify-between gap-2 pt-0.5">
-        <Link
-          to={`/app/jira-backlog?issue=${task.issueId}`}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      {task.deadline && (
+        <p
+          className={cn(
+            "text-xs",
+            reached ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground",
+          )}
         >
-          {task.issueKey || "—"} <ExternalLink className="h-3 w-3" />
-        </Link>
+          Due {formatDeadline(task.deadline)}
+        </p>
+      )}
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        {task.issueId ? (
+          <Link
+            to={`/app/jira-backlog?issue=${task.issueId}`}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            {task.issueKey || "—"} <ExternalLink className="h-3 w-3" />
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">No bug</span>
+        )}
         <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
           {statusName}
         </span>
@@ -70,21 +95,26 @@ function TaskCard({
   task,
   statusName,
   canEdit,
+  onOpen,
 }: {
   task: TaskWithIssue;
   statusName: string;
   canEdit: boolean;
+  onOpen: (task: TaskWithIssue) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${CARD_PREFIX}${task._id}`,
     disabled: !canEdit,
     data: { task },
   });
+  // A click without a ≥5px drag (PointerSensor activationConstraint) opens the editor; the
+  // issue link inside stops propagation so it still navigates to the bug.
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      onClick={() => canEdit && onOpen(task)}
       className={cn(canEdit && "cursor-grab active:cursor-grabbing", isDragging && "opacity-40")}
     >
       <CardContent task={task} statusName={statusName} />
@@ -97,11 +127,13 @@ function Column({
   tasks,
   canEdit,
   onDelete,
+  onOpen,
 }: {
   status: TaskStatus;
   tasks: TaskWithIssue[];
   canEdit: boolean;
   onDelete: (id: string) => void;
+  onOpen: (task: TaskWithIssue) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${COL_PREFIX}${status._id}` });
   return (
@@ -127,7 +159,7 @@ function Column({
           <p className="px-1 py-6 text-center text-xs text-muted-foreground">No tasks</p>
         ) : (
           tasks.map((t) => (
-            <TaskCard key={t._id} task={t} statusName={status.name} canEdit={canEdit} />
+            <TaskCard key={t._id} task={t} statusName={status.name} canEdit={canEdit} onOpen={onOpen} />
           ))
         )}
       </div>
@@ -146,6 +178,20 @@ export default function Tasks() {
   const [activeTask, setActiveTask] = useState<TaskWithIssue | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [addingStatus, setAddingStatus] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
+  const [editing, setEditing] = useState<TaskWithIssue | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setEditorMode("create");
+    setEditorOpen(true);
+  };
+  const openEdit = (task: TaskWithIssue) => {
+    setEditing(task);
+    setEditorMode("edit");
+    setEditorOpen(true);
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -251,7 +297,11 @@ export default function Tasks() {
       </div>
 
       {canEdit && (
-        <div className="flex items-center gap-2 py-2">
+        <div className="flex flex-wrap items-center gap-2 py-2">
+          <Button variant="outline" size="sm" onClick={openCreate}>
+            <Plus className="h-4 w-4" /> New task
+          </Button>
+          <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
           <input
             className="h-9 w-56 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             placeholder="New status name…"
@@ -295,6 +345,7 @@ export default function Tasks() {
                   tasks={tasksByStatus.get(s._id) || []}
                   canEdit={canEdit}
                   onDelete={removeStatus}
+                  onOpen={openEdit}
                 />
               ))}
             </div>
@@ -310,6 +361,17 @@ export default function Tasks() {
           </DndContext>
         )}
       </div>
+
+      {canEdit && (
+        <TaskEditDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          mode={editorMode}
+          task={editing}
+          statuses={statuses}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }

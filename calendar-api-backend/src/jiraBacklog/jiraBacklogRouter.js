@@ -37,10 +37,16 @@ jiraBacklogRouter.delete("/bug-statuses/:id", adminOnly, jiraBacklogController.d
  */
 // Tasks
 jiraBacklogRouter.get("/tasks", adminOnly, taskController.listAllTasks);
+jiraBacklogRouter.post("/tasks", adminOnly, taskController.createStandaloneTask); // standalone (no issue)
 jiraBacklogRouter.get("/issues/:id/tasks", adminOnly, taskController.listIssueTasks);
 jiraBacklogRouter.post("/issues/:id/tasks", adminOnly, taskController.createTask);
 jiraBacklogRouter.patch("/tasks/:taskId", adminOnly, taskController.updateTask);
 jiraBacklogRouter.delete("/tasks/:taskId", adminOnly, taskController.deleteTask);
+
+// "Possible No-ETA" review lifecycle: create the 30-day reminder for a bug, then
+// re-evaluate / resolve it (see taskService).
+jiraBacklogRouter.post("/issues/:id/no-eta-task", adminOnly, taskController.createNoEtaTask);
+jiraBacklogRouter.post("/tasks/:taskId/no-eta", adminOnly, taskController.noEtaTransition);
 
 // Task statuses (kanban columns)
 jiraBacklogRouter.get("/task-statuses", adminOnly, taskController.listStatuses);

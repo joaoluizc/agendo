@@ -11,6 +11,8 @@ export const STATUS_OPTIONS = [
   "Review with Squad",
   "Delayed",
   "In a Sprint",
+  "Possible No-ETA",
+  "No-ETA",
   "Fixed/Closed",
 ];
 

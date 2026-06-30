@@ -52,6 +52,39 @@ const deleteTask = async (req, res) => {
   }
 };
 
+// POST /jira-backlog/tasks — create a standalone task (no parent issue).
+const createStandaloneTask = async (req, res) => {
+  try {
+    const task = await taskService.createTask(null, req.body || {});
+    res.status(201).json(task);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// POST /jira-backlog/issues/:id/no-eta-task — create (or return the existing) 30-day
+// re-evaluation reminder for a bug flagged "Possible No-ETA".
+const createNoEtaTask = async (req, res) => {
+  try {
+    const task = await taskService.createNoEtaReviewTask(req.params.id);
+    if (!task) return res.status(404).json({ message: "Issue not found" });
+    res.status(201).json(task);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// POST /jira-backlog/tasks/:taskId/no-eta — advance a review task: body { action: "reevaluate" | "resolve" }.
+const noEtaTransition = async (req, res) => {
+  try {
+    const task = await taskService.noEtaTransition(req.params.taskId, (req.body || {}).action);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+    res.status(200).json(task);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 /* ------------------------------- statuses -------------------------------- */
 
 const listStatuses = async (_req, res) => {
@@ -116,6 +149,9 @@ export default {
   listAllTasks,
   listIssueTasks,
   createTask,
+  createStandaloneTask,
+  createNoEtaTask,
+  noEtaTransition,
   updateTask,
   deleteTask,
   listStatuses,

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ApiError, taskApi } from "./api";
 import { CollapsibleSection } from "./collapsible-section";
-import { PrettySelect } from "./pretty-select";
+import { TaskEditDialog } from "./task-edit-dialog";
+import { formatDeadline, isDeadlineReached, isPastDue } from "./dates";
 import { JiraIssue, JiraTableMeta, Task, TaskStatus } from "./types";
 
 /**
- * Tasks area for the detail panel — rendered only inside DetailPanel, so it shows only
- * when a ticket is expanded. Admins can add unlimited tasks and set each task's status
- * from the shared, customizable status set; non-admins see a read-only list. Native
- * <select> (like SelectField) avoids the Radix scroll-lock issue inside the fixed panel.
+ * Tasks area for the detail panel — rendered only inside DetailPanel, so it shows only when
+ * a ticket is expanded. Admins quick-add tasks and click any task to open the full editor
+ * (title / status / deadline / delete, plus the No-ETA card when applicable); non-admins see
+ * a read-only list. A red dot marks tasks whose deadline has been reached.
  */
 
 const inputClass =
@@ -25,6 +27,8 @@ export function TasksSection({ issue, meta }: { issue: JiraIssue; meta: JiraTabl
   const [error, setError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,33 +74,10 @@ export function TasksSection({ issue, meta }: { issue: JiraIssue; meta: JiraTabl
     }
   }, [issueId, newTitle]);
 
-  const changeStatus = useCallback(
-    async (taskId: string, statusId: string) => {
-      const prev = tasks;
-      setTasks((cur) => cur.map((t) => (t._id === taskId ? { ...t, statusId } : t)));
-      try {
-        await taskApi.updateTask(taskId, { statusId });
-      } catch (e) {
-        setTasks(prev); // revert
-        toast.error(e instanceof Error ? e.message : "Could not update task");
-      }
-    },
-    [tasks],
-  );
-
-  const removeTask = useCallback(
-    async (taskId: string) => {
-      const prev = tasks;
-      setTasks((cur) => cur.filter((t) => t._id !== taskId));
-      try {
-        await taskApi.deleteTask(taskId);
-      } catch (e) {
-        setTasks(prev); // revert
-        toast.error(e instanceof Error ? e.message : "Could not delete task");
-      }
-    },
-    [tasks],
-  );
+  const openEditor = (task: Task) => {
+    setEditing(task);
+    setEditorOpen(true);
+  };
 
   return (
     <CollapsibleSection title="Tasks">
@@ -112,35 +93,45 @@ export function TasksSection({ issue, meta }: { issue: JiraIssue; meta: JiraTabl
           </Button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {tasks.length === 0 && <p className="text-sm text-muted-foreground">No tasks yet.</p>}
 
-          {tasks.map((task) => (
-            <div key={task._id} className="flex items-center gap-2">
-              <span className="flex-1 break-words text-sm">{task.title}</span>
-              {meta.canEdit ? (
-                <>
-                  <PrettySelect
-                    value={task.statusId}
-                    options={statuses.map((s) => ({ value: s._id, label: s.name }))}
-                    onChange={(v) => changeStatus(task._id, v)}
-                    triggerClassName="h-8 w-36"
-                  />
-                  <button
-                    onClick={() => removeTask(task._id)}
-                    className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
-                    aria-label="Delete task"
+          {tasks.map((task) => {
+            const sName = statusName(task.statusId);
+            const done = /^done$/i.test(sName);
+            const pastDue = !done && isPastDue(task.deadline);
+            const reached = !done && isDeadlineReached(task.deadline);
+            return (
+              <button
+                key={task._id}
+                type="button"
+                onClick={() => meta.canEdit && openEditor(task)}
+                disabled={!meta.canEdit}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left",
+                  meta.canEdit && "hover:bg-muted/50",
+                )}
+              >
+                {pastDue && (
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" title="Past due" />
+                )}
+                <span className="flex-1 break-words text-sm">{task.title}</span>
+                {task.deadline && (
+                  <span
+                    className={cn(
+                      "shrink-0 text-xs",
+                      reached ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground",
+                    )}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </>
-              ) : (
-                <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  {statusName(task.statusId)}
+                    {formatDeadline(task.deadline)}
+                  </span>
+                )}
+                <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  {sName}
                 </span>
-              )}
-            </div>
-          ))}
+              </button>
+            );
+          })}
 
           {meta.canEdit && (
             <div className="flex items-center gap-2 pt-1">
@@ -168,6 +159,18 @@ export function TasksSection({ issue, meta }: { issue: JiraIssue; meta: JiraTabl
             </div>
           )}
         </div>
+      )}
+
+      {meta.canEdit && (
+        <TaskEditDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          mode="edit"
+          task={editing}
+          statuses={statuses}
+          onChanged={load}
+          onIssueUpdated={meta.onIssueUpdated}
+        />
       )}
     </CollapsibleSection>
   );

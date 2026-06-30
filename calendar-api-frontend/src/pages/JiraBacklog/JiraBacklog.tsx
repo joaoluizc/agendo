@@ -15,15 +15,23 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
-import { ApiError, bugStatusApi, jiraApi } from "./api";
+import { ApiError, bugStatusApi, jiraApi, taskApi } from "./api";
 import { computeUrgency, URGENCY_INPUT_FIELDS } from "./urgency";
 import { buildColumns } from "./columns";
 import { DataTable } from "./data-table";
 import { ToReviewView } from "./to-review-view";
 import { DetailPanel } from "./detail-panel";
 import { BugStatus, IssuePatch, JiraIssue, JiraTableMeta, ViewKey } from "./types";
-import { STATUS_OPTIONS } from "./constants";
+import {
+  DEFAULT_TO_REVIEW_STATUSES,
+  matchesQuery,
+  normalizeQuery,
+  POSSIBLE_NO_ETA_STATUS,
+  STATUS_OPTIONS,
+} from "./constants";
 import { ManageStatusesDialog } from "./manage-statuses-dialog";
+import { SearchBox } from "./search-box";
+import { StatusMultiSelect } from "./status-multi-select";
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -44,6 +52,11 @@ export default function JiraBacklog() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<ViewKey>("all");
+  // Free-text search, applied in every view (accepts a pasted Jira link — see normalizeQuery).
+  const [query, setQuery] = useState("");
+  // Which statuses the "To Review" view shows; defaults to the legacy "Review with Squad"
+  // but the user can widen it to surface bugs from other statuses too.
+  const [toReviewStatuses, setToReviewStatuses] = useState<string[]>(DEFAULT_TO_REVIEW_STATUSES);
   const [jiraConfigured, setJiraConfigured] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -52,6 +65,8 @@ export default function JiraBacklog() {
   const [bugStatuses, setBugStatuses] = useState<BugStatus[]>([]);
   const [manageOpen, setManageOpen] = useState(false);
   const [dup, setDup] = useState<{ existingId: string; issueKey: string } | null>(null);
+  // When a bug is set to "Possible No-ETA", offer to create the 30-day re-evaluation task.
+  const [noEtaPrompt, setNoEtaPrompt] = useState<{ issueId: string } | null>(null);
 
   // Deep-link: a `?issue=<id>` param (e.g. from a Tasks-board card) opens that ticket's
   // panel. The param only drives opening; in-page row clicks don't rewrite the URL.
@@ -164,11 +179,40 @@ export default function JiraBacklog() {
     [load],
   );
 
+  // Status changes route through here (from the detail panel) so we can intercept
+  // "Possible No-ETA" and offer to create a 30-day re-evaluation task. The status itself
+  // always changes, regardless of the prompt's answer.
+  const onStatusChange = useCallback(
+    (id: string, status: string) => {
+      updateField(id, { status });
+      if (status === POSSIBLE_NO_ETA_STATUS) setNoEtaPrompt({ issueId: id });
+    },
+    [updateField],
+  );
+
+  // Apply a server-returned issue to local state (e.g. after a review task flips it to No-ETA).
+  const onIssueUpdated = useCallback((issue: JiraIssue) => {
+    setIssues((prev) => prev.map((it) => (it._id === issue._id ? issue : it)));
+  }, []);
+
+  const confirmNoEtaTask = useCallback(async () => {
+    const id = noEtaPrompt?.issueId;
+    setNoEtaPrompt(null);
+    if (!id) return;
+    try {
+      await taskApi.createNoEtaTask(id);
+      toast.success("Re-evaluation task created — due in 30 days.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create the task");
+    }
+  }, [noEtaPrompt]);
+
   const addRow = useCallback(async () => {
     try {
       const created = await jiraApi.createIssue({});
       setIssues((prev) => [...prev, created]);
       setView("all"); // new row has no status filter signal yet
+      setQuery(""); // an active search would otherwise hide the empty new row
       setSelectedId(created._id); // open the panel so it can be filled in
       toast.success("Row added — fill in its details in the panel.");
     } catch (e) {
@@ -233,11 +277,20 @@ export default function JiraBacklog() {
     [patchIssue],
   );
 
-  const visibleIssues = useMemo(() => {
+  // Rows for the current view, before search. "To Review" now shows the user-selected
+  // statuses (was a fixed "Review with Squad").
+  const viewIssues = useMemo(() => {
     if (view === "open") return issues.filter((i) => i.status !== "Fixed/Closed");
-    if (view === "toReview") return issues.filter((i) => i.status === "Review with Squad");
+    if (view === "toReview") return issues.filter((i) => toReviewStatuses.includes(i.status));
     return issues;
-  }, [issues, view]);
+  }, [issues, view, toReviewStatuses]);
+
+  // Search term (normalised once per keystroke), then the visible rows = view ∩ search.
+  const term = useMemo(() => normalizeQuery(query), [query]);
+  const visibleIssues = useMemo(
+    () => (term ? viewIssues.filter((i) => matchesQuery(i, term)) : viewIssues),
+    [viewIssues, term],
+  );
 
   const refreshVisible = useCallback(async () => {
     const ids = visibleIssues.map((i) => i._id);
@@ -301,9 +354,11 @@ export default function JiraBacklog() {
       refreshZd,
       autofill,
       openDetail,
+      onStatusChange,
+      onIssueUpdated,
       statusOptions,
     }),
-    [canEdit, jiraConfigured, updateField, refreshZd, autofill, openDetail, statusOptions],
+    [canEdit, jiraConfigured, updateField, refreshZd, autofill, openDetail, onStatusChange, onIssueUpdated, statusOptions],
   );
 
   const columns = useMemo(() => buildColumns(), []);
@@ -344,25 +399,36 @@ export default function JiraBacklog() {
             </Button>
           ))}
         </div>
-        <span className="text-sm text-muted-foreground">
-          {visibleIssues.length} issue{visibleIssues.length === 1 ? "" : "s"}
-        </span>
-        {canEdit && (
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
-              <ListChecks className="h-4 w-4" /> Manage statuses
-            </Button>
-            <Button variant="outline" size="sm" onClick={addRow}>
-              <Plus className="h-4 w-4" /> Add row
-            </Button>
-            {jiraConfigured && (
-              <Button variant="outline" size="sm" onClick={refreshVisible} disabled={bulkBusy}>
-                {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Refresh ZD counts
-              </Button>
-            )}
-          </div>
+        {view === "toReview" && (
+          <StatusMultiSelect
+            options={statusOptions}
+            selected={toReviewStatuses}
+            onChange={setToReviewStatuses}
+          />
         )}
+        <span className="hidden text-sm text-muted-foreground sm:inline">
+          {visibleIssues.length}
+          {term ? ` of ${viewIssues.length}` : ""} issue{visibleIssues.length === 1 ? "" : "s"}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <SearchBox value={query} onChange={setQuery} className="w-40 sm:w-52 lg:w-64" />
+          {canEdit && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
+                <ListChecks className="h-4 w-4" /> Manage statuses
+              </Button>
+              <Button variant="outline" size="sm" onClick={addRow}>
+                <Plus className="h-4 w-4" /> Add row
+              </Button>
+              {jiraConfigured && (
+                <Button variant="outline" size="sm" onClick={refreshVisible} disabled={bulkBusy}>
+                  {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh ZD counts
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="pt-4">
@@ -423,6 +489,7 @@ export default function JiraBacklog() {
               onClick={() => {
                 if (dup?.existingId) {
                   setView("all");
+                  setQuery(""); // ensure the existing row isn't hidden by an active search
                   setSelectedId(dup.existingId);
                 }
                 setDup(null);
@@ -430,6 +497,22 @@ export default function JiraBacklog() {
             >
               Go to existing bug
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!noEtaPrompt} onOpenChange={(o) => !o && setNoEtaPrompt(null)}>
+        <AlertDialogContent className="z-[70]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Track as a No-ETA candidate?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The bug is now “Possible No-ETA”. Create a task to re-evaluate it in 30 days? You
+              can keep deferring it, or commit to “No-ETA” once the task comes due.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, just set the status</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmNoEtaTask}>Create the task</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

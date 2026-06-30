@@ -26,13 +26,28 @@ const TaskStatusSchema = new Schema(
   { timestamps: true },
 );
 
-// A single task linked to one ticket. `order` preserves within-column ordering.
+// Marks a task as a "Possible No-ETA" re-evaluation reminder. `flaggedAt` is when the bug
+// was first flagged (stays fixed across re-evaluations, so the UI can show how long it has
+// been waiting); `cycles` counts the 30-day re-evaluations so far. null on ordinary tasks.
+const NoEtaReviewSchema = new Schema(
+  {
+    flaggedAt: { type: Date, required: true },
+    cycles: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
+// A single task. `issueId` links it to a ticket — optional, since tasks can also be
+// standalone (created from the Tasks page). `order` preserves within-column ordering;
+// `deadline` is an optional due date (the UI shows a red dot once it's reached).
 const JiraTaskSchema = new Schema(
   {
-    issueId: { type: Schema.Types.ObjectId, ref: "JiraIssue", required: true, index: true },
+    issueId: { type: Schema.Types.ObjectId, ref: "JiraIssue", default: null, index: true },
     title: { type: String, required: true, trim: true },
     statusId: { type: Schema.Types.ObjectId, ref: "TaskStatus", required: true, index: true },
     order: { type: Number, default: 0 }, // within-column order
+    deadline: { type: Date, default: null },
+    noEtaReview: { type: NoEtaReviewSchema, default: null },
   },
   { timestamps: true },
 );

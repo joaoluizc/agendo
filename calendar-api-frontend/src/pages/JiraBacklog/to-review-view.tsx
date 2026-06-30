@@ -8,10 +8,12 @@ import { FieldCell } from "./cells";
 const isGrow = (id: string) => id === "desc";
 
 /**
- * "To Review" view: issues with status "Review with Squad", grouped into collapsible squad
- * sections (squads alphabetical). Within a group: Regressions first, then urgency
- * descending, nulls last (compareToReview). Rows open the detail panel, same as the main
- * table. No horizontal scroll — the reduced column set fits the page width.
+ * "To Review" view: the issues the page passes in (those whose status is selected in the
+ * toolbar's status filter — "Review with Squad" by default — intersected with the search),
+ * grouped into collapsible squad sections (squads alphabetical). Within a group:
+ * Regressions first, then urgency descending, nulls last (compareToReview). Rows open the
+ * detail panel, same as the main table. No horizontal scroll — the reduced column set fits
+ * the page width.
  */
 export function ToReviewView({ issues, meta }: { issues: JiraIssue[]; meta: JiraTableMeta }) {
   const groups = groupBySquadForReview(issues);
@@ -20,7 +22,8 @@ export function ToReviewView({ issues, meta }: { issues: JiraIssue[]; meta: Jira
   if (!issues.length) {
     return (
       <div className="rounded-md border py-12 text-center text-muted-foreground">
-        Nothing flagged for review. (Issues with status “Review with Squad” show up here.)
+        No issues to review. Adjust the status filter or search in the toolbar to widen what
+        shows here.
       </div>
     );
   }
