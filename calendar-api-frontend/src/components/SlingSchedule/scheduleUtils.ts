@@ -221,13 +221,22 @@ export const prettyTimeRange = (startRaw: string, endRaw: string) => {
   return `${start} - ${end}`;
 };
 
+/** Local midnight of the day being rendered.
+ * `dateToRender` is either the `startOfDayISO/endOfDayISO` range produced by
+ * getLocalTimeframeISOld (shifts) or a plain Date string (GCal events); in both
+ * cases the first `/`-segment is the start of the rendered day. Comparing full
+ * timestamps here (instead of day-of-month via getDate) is what makes month and
+ * year boundaries work — e.g. a Jun 30 shift rendered on Jul 1.
+ */
+const startOfRenderedDay = (dateToRender: string) =>
+  new Date(dateToRender.split("/")[0]);
+
 export const calculateGridColumnStart = (
   start: string,
   dateToRender: string
 ) => {
   const startAsDate = new Date(start);
-  const dateToRenderAsDate = new Date(dateToRender!.split("/")[1]);
-  if (startAsDate.getDate() < dateToRenderAsDate.getDate()) return 0; // Shift starts on previous day
+  if (startAsDate < startOfRenderedDay(dateToRender)) return 1; // Shift started on a previous day → begins at midnight
   const startHour = startAsDate.getHours();
   const startMinutes = startAsDate.getMinutes();
   return startHour * 4 + Math.floor(startMinutes / 15) + 1; // Assuming each column represents 15 minutes
@@ -240,11 +249,12 @@ export const calculateGridColumnSpan = (
 ) => {
   const startAsDate = new Date(start);
   const endAdDate = new Date(end);
-  const dateRenderedAsDate = new Date(dateToRender!.split("/")[1]);
-  if (startAsDate.getDate() < dateRenderedAsDate.getDate())
-    return endAdDate.getHours() * 2;
+  const dayStart = startOfRenderedDay(dateToRender);
+  // Clamp a shift that began on a previous day to the rendered day's midnight so
+  // its visible width covers only the portion falling within this day.
+  const effectiveStart = startAsDate < dayStart ? dayStart : startAsDate;
   const durationInMinutes =
-    (endAdDate.getTime() - startAsDate.getTime()) / (1000 * 60);
+    (endAdDate.getTime() - effectiveStart.getTime()) / (1000 * 60);
   return Math.ceil(durationInMinutes / 15); // Assuming each column represents 15 minutes
 };
 
