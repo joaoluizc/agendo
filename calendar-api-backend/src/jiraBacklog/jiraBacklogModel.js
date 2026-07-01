@@ -37,6 +37,10 @@ const JiraIssueSchema = new Schema(
     workaroundQ: { type: String, default: "" },
     zdCount: { type: Number, default: null }, // linked Zendesk ticket count
     zdCountFetchedAt: { type: Date, default: null },
+    // Archival lifecycle: set when the status becomes "Archived" (via Fixed/Closed). Once
+    // archiveExpiresAt passes, getAllIssues purges the row. Both cleared on un-archive.
+    archivedAt: { type: Date, default: null },
+    archiveExpiresAt: { type: Date, default: null },
     order: { type: Number, default: 0 }, // insertion order ("All" view)
   },
   { timestamps: true },

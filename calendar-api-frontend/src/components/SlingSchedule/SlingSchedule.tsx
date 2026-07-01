@@ -213,12 +213,12 @@ const SlingSchedule = () => {
                   {user.shifts.map((shift, idx) => {
                     const start = calculateGridColumnStart(
                       shift.dtstart,
-                      shift.dateRequested!
+                      dateKey
                     );
                     const span = calculateGridColumnSpan(
                       shift.dtstart,
                       shift.dtend,
-                      shift.dateRequested!
+                      dateKey
                     );
 
                     return (
@@ -256,12 +256,12 @@ const SlingSchedule = () => {
                       ?.events.map((event, idx) => {
                         const start = calculateGridColumnStart(
                           event.start.dateTime,
-                          selectedDate.toString()
+                          dateKey
                         );
                         const span = calculateGridColumnSpan(
                           event.start.dateTime,
                           event.end.dateTime,
-                          selectedDate.toString()
+                          dateKey
                         );
                         return (
                           <HoverCard key={idx}>

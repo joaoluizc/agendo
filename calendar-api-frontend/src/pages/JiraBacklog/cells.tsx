@@ -53,15 +53,18 @@ function SelectDisplay({ issue, desc }: CellProps) {
 
 function UrgencyDisplay({ issue }: CellProps) {
   const value = issue.urgency;
+  // Regressions don't get a numeric urgency (they bypass the formula) — show "REG" instead
+  // of a bare dash so the row reads as "regression", not "not yet scored".
+  const isReg = value == null && issue.bugType === "Regression";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold tabular-nums",
         urgencyCellClasses(value),
       )}
-      title={issue.urgencyOverridden ? "Manually overridden" : "Auto-calculated"}
+      title={isReg ? "Regression" : issue.urgencyOverridden ? "Manually overridden" : "Auto-calculated"}
     >
-      {value == null ? "—" : value}
+      {value != null ? value : isReg ? "REG" : "—"}
       {issue.urgencyOverridden && <Pencil className="h-3 w-3 opacity-60" aria-label="overridden" />}
     </span>
   );

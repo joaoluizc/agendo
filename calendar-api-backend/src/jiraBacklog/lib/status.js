@@ -14,9 +14,18 @@ export const STATUS_OPTIONS = [
   "Possible No-ETA",
   "No-ETA",
   "Fixed/Closed",
+  "Archived",
 ];
 
 export const DEFAULT_STATUS = "Backlog";
+
+/**
+ * Terminal statuses. Setting a bug to "Fixed/Closed" archives it: the service rewrites the
+ * status to "Archived" and stamps a 30-day expiry, after which the row is auto-deleted (see
+ * jiraBacklogService). They're kept as distinct constants so that logic reads clearly.
+ */
+export const FIXED_CLOSED_STATUS = "Fixed/Closed";
+export const ARCHIVED_STATUS = "Archived";
 
 /**
  * Decision tree for the one-time migration off the three legacy booleans

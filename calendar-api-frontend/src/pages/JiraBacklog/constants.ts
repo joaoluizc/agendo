@@ -13,6 +13,7 @@ export const STATUS_OPTIONS = [
   "Possible No-ETA",
   "No-ETA",
   "Fixed/Closed",
+  "Archived",
 ] as const;
 
 /**

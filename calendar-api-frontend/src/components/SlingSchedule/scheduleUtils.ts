@@ -222,14 +222,19 @@ export const prettyTimeRange = (startRaw: string, endRaw: string) => {
 };
 
 /** Local midnight of the day being rendered.
- * `dateToRender` is either the `startOfDayISO/endOfDayISO` range produced by
- * getLocalTimeframeISOld (shifts) or a plain Date string (GCal events); in both
- * cases the first `/`-segment is the start of the rendered day. Comparing full
- * timestamps here (instead of day-of-month via getDate) is what makes month and
- * year boundaries work — e.g. a Jun 30 shift rendered on Jul 1.
+ * `dateToRender` is the selected day's local calendar date as `YYYY-MM-DD`
+ * (`dateKey`). We build local midnight from its parts rather than parsing it as
+ * an instant: the timeframe strings elsewhere encode local midnight *relabeled*
+ * as `Z`, so `new Date(...)` would land `timezoneOffset` hours off (e.g. a
+ * UTC-3 browser reads "2026-07-01T00:00:00Z" as Jun 30 21:00 local). Comparing
+ * local calendar days this way is correct across timezones and month/year
+ * boundaries — e.g. a Jun 30 shift rendered on Jul 1.
+ * `slice(0, 10)` tolerates a full ISO/range string being passed by mistake.
  */
-const startOfRenderedDay = (dateToRender: string) =>
-  new Date(dateToRender.split("/")[0]);
+const startOfRenderedDay = (dateToRender: string) => {
+  const [year, month, day] = dateToRender.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
 
 export const calculateGridColumnStart = (
   start: string,

@@ -22,6 +22,9 @@ export interface JiraIssue {
   workaroundQ: string;
   zdCount: number | null;
   zdCountFetchedAt: string | null;
+  /** Archival stamps — set while status is "Archived"; the row auto-deletes after expiry. */
+  archivedAt?: string | null;
+  archiveExpiresAt?: string | null;
   order: number;
   createdAt?: string;
   updatedAt?: string;

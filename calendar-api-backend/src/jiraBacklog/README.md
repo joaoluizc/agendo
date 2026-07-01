@@ -17,23 +17,39 @@ that prompt conflicted with how agendo already works, agendo wins:
 | Google Sign-In, `@duda.co` gate, `ADMIN_EMAILS` env var | Nothing — auth is Clerk (mounted behind `requireAuth()`); admin vs. normal comes from agendo's existing `UserModel.type`, enforced by the shared `adminOnly` middleware |
 | In-app user-management screen (promote/demote) | Dropped — agendo manages roles through Clerk |
 | Store issues as JSON records in an "internal DB" | MongoDB via Mongoose, with the same dev/prod collection split agendo uses elsewhere |
-| Parse the seed `jiras_seed.pdf` at runtime | Seed was extracted + cleaned once into `seed/jiraBacklogSeed.js`, so the backend ships no PDF parser |
+| Parse the seed `jiras_seed.pdf` at runtime | Seed is exported + cleaned from the live "SUP Jiras Backlog" Google Sheet into `seed/jiraBacklogSeed.js`, so the backend ships no parser |
 
 ## Status (triage state)
 
 A single `status` field replaces the original `closed` / `checkedSquad` / `reviewSquad`
 booleans — one of `lib/status.js` `STATUS_OPTIONS`: `Backlog`, `Review with Squad`,
-`Delayed`, `In a Sprint`, `Fixed/Closed`. It's a normal dropdown field (validated in
-`sanitizeWritable`, returned in `/config` `dropdownOptions.status`); the frontend's three
-views derive from it (Open = not `Fixed/Closed`, To Review = `Review with Squad`).
+`Delayed`, `In a Sprint`, `Possible No-ETA`, `No-ETA`, `Fixed/Closed`, `Archived`. It's a
+normal dropdown field (validated in `sanitizeWritable`, returned in `/config`
+`dropdownOptions.status`); the frontend's three views derive from it (Open = not
+`Fixed/Closed` and not `Archived`, To Review = the statuses picked in its toolbar filter).
+
+**Archival / auto-delete.** Setting a bug to `Fixed/Closed` archives it: `reconcileArchival`
+(in `jiraBacklogService.js`) rewrites the status to `Archived` and stamps `archivedAt` +
+`archiveExpiresAt` (now + 30 days). Editing other fields never resets that countdown; moving
+the bug out of `Archived` clears both stamps. `getAllIssues` lazily purges rows whose
+`archiveExpiresAt` has passed (cascading their tasks) — no separate scheduler, so a row is
+deleted the next time the backlog loads after its 30 days are up. Existing `Fixed/Closed`
+rows are left untouched (not auto-migrated), so they never start the countdown.
+
+`Possible No-ETA` / `No-ETA` drive the No-ETA review workflow (see "Tasks" below). New
+statuses don't appear in databases seeded before they were added (seeding only fires on an
+empty collection), so `scripts/add-bug-statuses.js` back-fills any missing `STATUS_OPTIONS`
+into the `BugStatus` collection — idempotent, `--prod` / `--dev` / `--dry-run` flags
+(PowerShell-friendly). Run once per env, e.g. `node src/jiraBacklog/scripts/add-bug-statuses.js --prod`.
 
 `deriveStatus()` is the migration decision tree (first match wins): `closed →
 Fixed/Closed`, else `reviewSquad → Review with Squad`, else `checkedSquad → In a Sprint`,
 else `Backlog`. `Delayed` has no legacy signal, so it is only ever set by hand. The seed
-import maps the seed export's booleans through `deriveStatus()` (the seed file is
-unchanged), and existing rows are migrated by `scripts/migrate-status.js` — idempotent,
-`$set status` + `$unset` the booleans, targeting `dev-jira-issues` / `jira-issues` by
-`NODE_ENV`. For prod, run once: `NODE_ENV=production node src/jiraBacklog/scripts/migrate-status.js`.
+export keeps the three booleans and the import maps them through `deriveStatus()`, and
+existing rows that still carry the booleans are migrated by `scripts/migrate-status.js` —
+idempotent, `$set status` + `$unset` the booleans, targeting `dev-jira-issues` /
+`jira-issues` by `NODE_ENV`. For prod, run once:
+`NODE_ENV=production node src/jiraBacklog/scripts/migrate-status.js`.
 
 ## Endpoints
 
@@ -60,17 +76,63 @@ read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
 
 Auto-calculated (0–100) from `scope`, `planTier`, `workaround`, `frustration`,
 `scopeConf`, `workaroundQ`; `null` for Regressions or when any input is blank. The
-formula and its **half-to-even rounding** reproduce all 53 seed scores exactly — see the
-header comment in `lib/urgency.js`. Admins can override the value by hand (the row then
+formula and its **half-to-even rounding** reproduce all 89 seed scores exactly (the seed
+stores the computed value, not the sheet's own "Urgency score" column — 14 `.5`-cases
+differ by 1 because the sheet rounds half up) — see the header comment in `lib/urgency.js`. Admins can override the value by hand (the row then
 carries `urgencyOverridden: true` and stops auto-recalculating until the value is
 cleared). The frontend keeps an identical mirror in `pages/JiraBacklog/urgency.ts` for
 instant feedback; the server is authoritative on save.
 
+## Tasks & the No-ETA workflow
+
+Tasks (`taskModel.js`, `taskService.js`) are first-class: a task may be **linked to a bug or
+standalone** (`issueId` is optional), carries an optional **`deadline`**, and is fully
+editable. `getAllTasks` keeps standalone tasks (only true orphans — a linked issue that was
+deleted — are dropped). Task routes (all `adminOnly`): `POST /tasks` (standalone create),
+`POST /issues/:id/tasks` (linked create), `PATCH /tasks/:taskId`, `DELETE /tasks/:taskId`,
+plus the kanban `task-statuses` CRUD.
+
+**No-ETA review.** When a bug is set to `Possible No-ETA`, the UI offers to create a 30-day
+re-evaluation reminder via `POST /issues/:id/no-eta-task` → `createNoEtaReviewTask`: a task
+linked to the bug, `deadline = now + 30d`, and a `noEtaReview { flaggedAt, cycles }` marker.
+Idempotent per bug (an existing unresolved review task is returned, not duplicated). The task
+then advances via `POST /tasks/:taskId/no-eta` (`{ action }`):
+
+- `reevaluate` → push the deadline another 30 days, `cycles++` (recursive, indefinitely).
+- `resolve` → clear the marker and park the task in the **Done** column (a column named "Done",
+  else the highest-`order` one). The UI separately sets the bug to `No-ETA`.
+
+`NO_ETA_REVIEW_DAYS` (30) lives in `taskService.js`. The `noEtaReview` marker is managed only
+by these endpoints — never writable through the generic `PATCH /tasks/:taskId`.
+
 ## Persistence
 
 One Mongoose collection: `jira-issues` (or `dev-jira-issues` when
-`NODE_ENV=development`). On the first `GET /issues` where the collection is empty, the 53
-seed rows are imported once; subsequent runs never re-import.
+`NODE_ENV=development`). On the first `GET /issues` where the collection is empty, the 89
+seed rows are imported once; subsequent runs never re-import. To refresh a database that
+already holds rows (first-run seeding only fires on an empty collection), use the import
+script below.
+
+## Refreshing the backlog from the sheet
+
+`seed/jiraBacklogSeed.js` is regenerated from the "SUP Jiras Backlog" Google Sheet (JIRAs
+tab). To push that data into a database that isn't empty, run `scripts/import-sheet-data.js`:
+it upserts every row by `issueKey` through the same `mapSeedRecord()` the seeding uses, so
+existing rows are overwritten field-for-field (incl. `status`/`urgency`/`order`) and new
+ones inserted. `_id`s are preserved (linked tasks stay attached); it is idempotent. The
+target collection is chosen by flag, so the commands are identical in PowerShell, cmd, and
+bash (no POSIX `NODE_ENV=… node …` prefix). Run from `calendar-api-backend/`:
+
+```
+node src/jiraBacklog/scripts/import-sheet-data.js            # dev (default)
+node src/jiraBacklog/scripts/import-sheet-data.js --prod     # production (jira-issues)
+node src/jiraBacklog/scripts/import-sheet-data.js --dry-run  # preview only, writes nothing
+```
+
+With no flag it targets dev (falling back to `NODE_ENV`, then development) — it never hits
+prod by accident. There are no stale rows to remove (every key in the DB also exists in the
+sheet); if you ever need a guaranteed-clean collection, add `--wipe` (note: wiping changes
+`_id`s and orphans any linked tasks).
 
 ## Jira integration — # Connected tickets (optional)
 
@@ -98,8 +160,12 @@ jiraBacklog/
 ├── jiraBacklogController.js    req/res handlers
 ├── jiraBacklogService.js       DB ops, seeding, urgency-override rules, ZD orchestration
 ├── jiraBacklogModel.js         Mongoose schema (dev/prod collection split)
-├── seed/jiraBacklogSeed.js     53 cleaned seed issues (auto-generated, do not edit)
+├── seed/jiraBacklogSeed.js     89 cleaned seed issues from the sheet (auto-generated, do not edit)
+├── seed/mapSeedRecord.js       seed-record → JiraIssue doc mapping (shared by seeding + import)
+├── taskModel.js / taskService.js / taskController.js  tasks + kanban statuses (+ No-ETA review)
 ├── scripts/migrate-status.js   one-time booleans→status migration (idempotent)
+├── scripts/import-sheet-data.js  refresh an existing DB from the sheet (upsert by key)
+├── scripts/add-bug-statuses.js  back-fill missing STATUS_OPTIONS into existing DBs (idempotent)
 └── lib/
     ├── urgency.js              computeUrgency() — verified against the seed
     ├── status.js               STATUS_OPTIONS + deriveStatus() decision tree

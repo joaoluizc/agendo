@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
+import { Archive, ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta } from "./types";
@@ -175,6 +175,8 @@ function FieldEditor(props: FieldProps) {
 
 function UrgencyField({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }) {
   const value = issue.urgency;
+  // Regressions show "REG" rather than a dash (they bypass the urgency formula).
+  const isReg = value == null && issue.bugType === "Regression";
   const [draft, setDraft] = useState(value == null ? "" : String(value));
   const focused = useRef(false);
   useEffect(() => {
@@ -199,7 +201,7 @@ function UrgencyField({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }
             urgencyCellClasses(value),
           )}
         >
-          {value == null ? "—" : value}
+          {value != null ? value : isReg ? "REG" : "—"}
           {issue.urgencyOverridden && <Pencil className="h-3 w-3 opacity-60" />}
         </span>
         {meta.canEdit && (
@@ -317,6 +319,29 @@ function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta })
   );
 }
 
+/** Whole days from now until an ISO timestamp, floored at 0. */
+function daysUntil(iso: string): number {
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
+}
+
+/** Banner shown for archived bugs, counting down to their automatic deletion. */
+function ArchivedCard({ issue }: { issue: JiraIssue }) {
+  if (issue.status !== "Archived" || !issue.archiveExpiresAt) return null;
+  const days = daysUntil(issue.archiveExpiresAt);
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-200">
+      <Archive className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>
+        This bug is archived and will be automatically deleted{" "}
+        <span className="font-semibold">
+          {days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}
+        </span>
+        . Change its status to keep it on the backlog.
+      </p>
+    </div>
+  );
+}
+
 export function DetailPanel({
   issue,
   meta,
@@ -361,6 +386,7 @@ export function DetailPanel({
         </header>
 
         <div className="flex-1 space-y-8 overflow-y-auto px-4 py-5">
+          <ArchivedCard issue={issue} />
           <JiraSection issue={issue} meta={meta} />
 
           <div className="grid gap-4 border-t pt-6">

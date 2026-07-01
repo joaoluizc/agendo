@@ -36,6 +36,8 @@ export function badgeClasses(kind: BadgeKind, value: string): string {
           return "bg-rose-600/30 text-rose-800 ring-1 ring-rose-500/40 dark:text-rose-200";
         case "Fixed/Closed":
           return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+        case "Archived":
+          return "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400";
         default:
           return "bg-slate-500/15 text-slate-600 dark:text-slate-300";
       }

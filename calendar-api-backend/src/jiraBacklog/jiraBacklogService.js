@@ -1,7 +1,7 @@
 import { JiraIssue } from "./jiraBacklogModel.js";
 import { computeUrgency, URGENCY_INPUT_FIELDS } from "./lib/urgency.js";
 import { DROPDOWN_OPTIONS } from "./lib/dropdowns.js";
-import { STATUS_OPTIONS } from "./lib/status.js";
+import { STATUS_OPTIONS, FIXED_CLOSED_STATUS, ARCHIVED_STATUS } from "./lib/status.js";
 import { fetchConnectedTicketCount, fetchIssueDetails } from "./lib/jiraClient.js";
 import { JIRA_BACKLOG_SEED } from "./seed/jiraBacklogSeed.js";
 import { mapSeedRecord } from "./seed/mapSeedRecord.js";
@@ -19,6 +19,52 @@ const STRING_FIELDS = [
 const DROPDOWN_FIELDS = Object.keys(DROPDOWN_OPTIONS); // status, priority, squad, complexity, ...
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+// Days an archived bug is retained before it's automatically deleted.
+const ARCHIVE_RETENTION_DAYS = 30;
+
+const addDays = (date, days) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+
+/**
+ * Reconcile a doc's archival fields with its (possibly just-changed) status. Selecting
+ * "Fixed/Closed" archives the bug: the status is stored as "Archived" and an expiry is
+ * stamped 30 days out, after which getAllIssues purges the row. The expiry is only set once
+ * (so editing other fields on an archived bug never resets its countdown); moving a bug back
+ * out of "Archived" clears both stamps. Mutates the doc in place.
+ */
+function reconcileArchival(doc) {
+  if (doc.status === FIXED_CLOSED_STATUS) doc.status = ARCHIVED_STATUS;
+  if (doc.status === ARCHIVED_STATUS) {
+    if (!doc.archiveExpiresAt) {
+      const now = new Date();
+      doc.archivedAt = now;
+      doc.archiveExpiresAt = addDays(now, ARCHIVE_RETENTION_DAYS);
+    }
+  } else if (doc.archivedAt || doc.archiveExpiresAt) {
+    doc.archivedAt = null;
+    doc.archiveExpiresAt = null;
+  }
+}
+
+/**
+ * Delete archived issues whose retention window has passed (cascading their tasks, like a
+ * manual delete). Runs lazily on every list load — no separate scheduler — so a row is
+ * removed the next time anyone opens the backlog after its 30 days are up.
+ */
+async function purgeExpiredArchived() {
+  const expired = await JiraIssue.find({ archiveExpiresAt: { $ne: null, $lte: new Date() } })
+    .select("_id")
+    .lean();
+  if (!expired.length) return;
+  const ids = expired.map((e) => e._id);
+  await JiraIssue.deleteMany({ _id: { $in: ids } });
+  await Promise.all(ids.map((id) => taskService.deleteTasksForIssue(id)));
+  console.log(`[jira-backlog] purged ${ids.length} expired archived issue(s)`);
+}
 
 /**
  * Pick only writable fields from a request body and coerce their types. Unknown
@@ -67,6 +113,7 @@ async function doSeed() {
 
 async function getAllIssues() {
   await seedIfEmpty();
+  await purgeExpiredArchived();
   // Default order: most urgent first. Null urgency (regressions / incomplete rows) sorts
   // last in a descending sort; `order` is a stable insertion-order tiebreaker.
   return JiraIssue.find().sort({ urgency: -1, order: 1 }).lean();
@@ -107,6 +154,8 @@ async function createIssue(body = {}) {
     issue.urgency = computeUrgency(issue);
   }
 
+  reconcileArchival(issue);
+
   await issue.save();
   return issue.toObject();
 }
@@ -134,6 +183,8 @@ async function updateIssue(id, body = {}) {
     // An input field changed and the row isn't manually overridden -> recalc.
     doc.urgency = computeUrgency(doc);
   }
+
+  reconcileArchival(doc);
 
   await doc.save();
   return doc.toObject();

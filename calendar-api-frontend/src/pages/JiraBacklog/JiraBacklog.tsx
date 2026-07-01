@@ -280,7 +280,8 @@ export default function JiraBacklog() {
   // Rows for the current view, before search. "To Review" now shows the user-selected
   // statuses (was a fixed "Review with Squad").
   const viewIssues = useMemo(() => {
-    if (view === "open") return issues.filter((i) => i.status !== "Fixed/Closed");
+    if (view === "open")
+      return issues.filter((i) => i.status !== "Fixed/Closed" && i.status !== "Archived");
     if (view === "toReview") return issues.filter((i) => toReviewStatuses.includes(i.status));
     return issues;
   }, [issues, view, toReviewStatuses]);
