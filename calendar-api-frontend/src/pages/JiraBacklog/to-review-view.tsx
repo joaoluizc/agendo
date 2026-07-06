@@ -12,9 +12,10 @@ const isGrow = (id: string) => id === "desc";
  * toolbar's status filter — "In a Sprint" and "Review with Squad" by default — intersected
  * with the search), grouped into collapsible squad sections (squads alphabetical, collapsed
  * by default). Within a group: by status ("In a Sprint" before "Review with Squad"), then
- * Regressions first, then urgency descending, nulls last (compareToReview). Rows open the
- * detail panel, same as the main table. No horizontal scroll — the reduced column set fits
- * the page width.
+ * Regressions first, then urgency descending, nulls last (compareToReview). The bug's comment
+ * is shown under its title so the "why" (context / urgency rationale) is visible at a glance.
+ * Rows open the detail panel, same as the main table. No horizontal scroll — the reduced
+ * column set fits the page width.
  */
 export function ToReviewView({ issues, meta }: { issues: JiraIssue[]; meta: JiraTableMeta }) {
   const groups = groupBySquadForReview(issues);
@@ -83,6 +84,12 @@ export function ToReviewView({ issues, meta }: { issues: JiraIssue[]; meta: Jira
                             className={cn("px-3 py-2.5 align-top", grow ? "" : "whitespace-nowrap")}
                           >
                             <FieldCell issue={issue} desc={desc} meta={meta} />
+                            {/* Show the comment under the title so reviewers see the "why" at a glance. */}
+                            {desc.id === "desc" && issue.comment && (
+                              <p className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                                {issue.comment}
+                              </p>
+                            )}
                           </td>
                         );
                       })}

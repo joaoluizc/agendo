@@ -51,7 +51,8 @@ places (the route and the nav link — see "Remove it").
   `Review with Squad`, but any combination can be selected to pull in bugs from other
   statuses; grouped into squad sections that are collapsed by default; within a group, by
   status (`In a Sprint` before `Review with Squad`), then Regressions first, then urgency
-  desc, nulls last).
+  desc, nulls last. Each row shows its **comment under the title** so the review rationale is
+  visible at a glance).
 - **Colours (`badges.ts`):** Client = light purple when set; Priority = Minor blue / Major
   red / Critical louder red; Status = one hue each; Urgency = ≥80 red, 60–79 amber, <60 green.
 - **Urgency:** auto-calculated; admins override it in the panel and clear it to revert to
