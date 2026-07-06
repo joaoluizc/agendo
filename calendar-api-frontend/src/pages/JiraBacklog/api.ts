@@ -55,10 +55,12 @@ export const jiraApi = {
   updateIssue: (id: string, body: IssuePatch) =>
     request<JiraIssue>(`/issues/${id}`, { method: "PATCH", body }),
   deleteIssue: (id: string) => request<{ message: string }>(`/issues/${id}`, { method: "DELETE" }),
-  // The "Refresh ZD counts" toolbar action fans out over this per-row endpoint (a few at
-  // a time) rather than one long batch request — see refreshVisible in JiraBacklog.tsx.
+  // Refresh just the ZD count for one row (the detail panel's per-row ↻ button).
   refreshZd: (id: string) => request<JiraIssue>(`/issues/${id}/refresh-zd`, { method: "POST" }),
-  // Pull summary/priority/squad/sprint/ZD-count from the linked Jira ticket onto the row.
+  // Pull summary/priority/squad/sprint/client/ZD-count from the linked Jira ticket onto the
+  // row (overwriting local values; blanks never wipe). Used for new-row autofill and by the
+  // toolbar's "Sync from Jira" bulk action (fans out over this per-row endpoint) — see
+  // syncVisible in JiraBacklog.tsx.
   autofill: (id: string) => request<JiraIssue>(`/issues/${id}/autofill`, { method: "POST" }),
 };
 
@@ -78,8 +80,11 @@ export const taskApi = {
   getStatuses: () => request<TaskStatus[]>("/task-statuses"),
   createStatus: (name: string) =>
     request<TaskStatus>("/task-statuses", { method: "POST", body: { name } }),
-  updateStatus: (id: string, body: { name?: string; order?: number }) =>
+  updateStatus: (id: string, body: { name?: string; order?: number; isDefault?: boolean }) =>
     request<TaskStatus>(`/task-statuses/${id}`, { method: "PATCH", body }),
+  // Persist a new column order (ids in display order). Returns the reordered list.
+  reorderStatuses: (ids: string[]) =>
+    request<TaskStatus[]>("/task-statuses/order", { method: "PUT", body: { ids } }),
   deleteStatus: (id: string) =>
     request<{ message: string }>(`/task-statuses/${id}`, { method: "DELETE" }),
 

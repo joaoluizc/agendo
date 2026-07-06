@@ -17,11 +17,14 @@ const { Schema } = mongoose;
  */
 
 // A kanban column. `order` drives the left-to-right column order; defaults are seeded
-// once in taskService.seedStatusesIfEmpty (Not done / Doing / Done).
+// once in taskService.seedStatusesIfEmpty (Not done / Doing / Done). `isDefault` marks the
+// status new tasks land in — explicit (rather than "lowest order") so reordering or deleting
+// a column can never silently change where new tasks are created. Exactly one is default.
 const TaskStatusSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, unique: true },
     order: { type: Number, default: 0 },
+    isDefault: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

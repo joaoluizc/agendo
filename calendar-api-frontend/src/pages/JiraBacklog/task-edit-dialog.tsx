@@ -1,13 +1,23 @@
 import { useEffect, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { AlertTriangle, CalendarClock, Loader2, Trash2, X } from "lucide-react";
+import { AlertTriangle, Calendar as CalendarIcon, CalendarClock, Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { PrettySelect } from "./pretty-select";
 import { jiraApi, taskApi } from "./api";
 import { NO_ETA_STATUS } from "./constants";
 import { JiraIssue, NoEtaReview, Task, TaskStatus, TaskWithIssue } from "./types";
-import { deadlineRelative, formatDeadline, relativeToNow, toDateInputValue } from "./dates";
+import {
+  dateToInputValue,
+  deadlineRelative,
+  formatDeadline,
+  inputValueToDate,
+  relativeToNow,
+  toDateInputValue,
+} from "./dates";
 
 /**
  * Shared task editor — used both inside an issue's detail panel (editing a linked task) and
@@ -51,6 +61,7 @@ export function TaskEditDialog({
   const [title, setTitle] = useState("");
   const [statusId, setStatusId] = useState("");
   const [deadline, setDeadline] = useState(""); // yyyy-MM-dd or ""
+  const [dateOpen, setDateOpen] = useState(false);
   const [noEta, setNoEta] = useState<NoEtaReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
@@ -59,7 +70,8 @@ export function TaskEditDialog({
   useEffect(() => {
     if (!open) return;
     setTitle(task?.title ?? "");
-    setStatusId(task?.statusId ?? statuses[0]?._id ?? "");
+    // New tasks default to the flagged default status; editing keeps the task's own status.
+    setStatusId(task?.statusId ?? statuses.find((s) => s.isDefault)?._id ?? statuses[0]?._id ?? "");
     setDeadline(toDateInputValue(task?.deadline));
     setNoEta(task?.noEtaReview ?? null);
     setEvaluating(false);
@@ -142,7 +154,7 @@ export function TaskEditDialog({
   };
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-[70] bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
@@ -210,12 +222,32 @@ export function TaskEditDialog({
               <div className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Deadline</span>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    className={inputClass}
-                    value={deadline}
-                    onChange={(e) => setDeadline(e.target.value)}
-                  />
+                  <Popover open={dateOpen} onOpenChange={setDateOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          inputClass,
+                          "flex items-center justify-between gap-2 text-left",
+                          !deadline && "text-muted-foreground",
+                        )}
+                      >
+                        {deadline ? formatDeadline(deadline) : "Pick a date"}
+                        <CalendarIcon className="h-4 w-4 shrink-0 opacity-60" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="z-[80] w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        autoFocus
+                        selected={inputValueToDate(deadline)}
+                        onSelect={(d) => {
+                          setDeadline(d ? dateToInputValue(d) : "");
+                          setDateOpen(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   {deadline && (
                     <button
                       type="button"

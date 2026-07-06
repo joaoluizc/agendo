@@ -11,13 +11,14 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, ListChecks, Loader2, Plus, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { ApiError, taskApi } from "@/pages/JiraBacklog/api";
 import { TaskEditDialog } from "@/pages/JiraBacklog/task-edit-dialog";
+import { TaskStatusManagerDialog } from "@/pages/JiraBacklog/task-status-manager-dialog";
 import { formatDeadline, isDeadlineReached, isPastDue } from "@/pages/JiraBacklog/dates";
 import { TaskStatus, TaskWithIssue } from "@/pages/JiraBacklog/types";
 import { usePageFavicon } from "@/pages/JiraBacklog/use-page-favicon";
@@ -129,33 +130,27 @@ function Column({
   status,
   tasks,
   canEdit,
-  onDelete,
   onOpen,
 }: {
   status: TaskStatus;
   tasks: TaskWithIssue[];
   canEdit: boolean;
-  onDelete: (id: string) => void;
   onOpen: (task: TaskWithIssue) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${COL_PREFIX}${status._id}` });
   return (
     <div className="flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30">
-      <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
+      <header className="flex items-center gap-1.5 border-b px-3 py-2">
+        {status.isDefault && (
+          <Star
+            className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500"
+            aria-label="Default status for new tasks"
+          />
+        )}
         <span className="text-sm font-semibold">
           {status.name}{" "}
           <span className="text-xs font-normal text-muted-foreground">({tasks.length})</span>
         </span>
-        {canEdit && (
-          <button
-            onClick={() => onDelete(status._id)}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
-            aria-label={`Delete ${status.name} status`}
-            title="Delete status"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
       </header>
       <div ref={setNodeRef} className={cn("flex-1 space-y-2 p-2", isOver && "bg-accent/40")}>
         {tasks.length === 0 ? (
@@ -182,8 +177,7 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<TaskWithIssue | null>(null);
-  const [newStatus, setNewStatus] = useState("");
-  const [addingStatus, setAddingStatus] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editing, setEditing] = useState<TaskWithIssue | null>(null);
@@ -266,32 +260,6 @@ export default function Tasks() {
     [tasks],
   );
 
-  const addStatus = useCallback(async () => {
-    const name = newStatus.trim();
-    if (!name) return;
-    setAddingStatus(true);
-    try {
-      const created = await taskApi.createStatus(name);
-      setStatuses((prev) => [...prev, created]);
-      setNewStatus("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not add status");
-    } finally {
-      setAddingStatus(false);
-    }
-  }, [newStatus]);
-
-  const removeStatus = useCallback(async (id: string) => {
-    try {
-      await taskApi.deleteStatus(id);
-      setStatuses((prev) => prev.filter((s) => s._id !== id));
-      toast.success("Status deleted");
-    } catch (e) {
-      // 409 STATUS_IN_USE carries a friendly message from the server.
-      toast.error(e instanceof Error ? e.message : "Could not delete status");
-    }
-  }, []);
-
   return (
     <div className="mx-auto w-full max-w-[1800px] px-4 pb-16">
       <div className="pt-6 pb-2">
@@ -307,22 +275,8 @@ export default function Tasks() {
           <Button variant="outline" size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4" /> New task
           </Button>
-          <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
-          <input
-            className="h-9 w-56 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            placeholder="New status name…"
-            value={newStatus}
-            onChange={(e) => setNewStatus(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addStatus();
-              }
-            }}
-          />
-          <Button variant="outline" size="sm" onClick={addStatus} disabled={addingStatus || !newStatus.trim()}>
-            {addingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Add status
+          <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
+            <ListChecks className="h-4 w-4" /> Manage statuses
           </Button>
         </div>
       )}
@@ -350,7 +304,6 @@ export default function Tasks() {
                   status={s}
                   tasks={tasksByStatus.get(s._id) || []}
                   canEdit={canEdit}
-                  onDelete={removeStatus}
                   onOpen={openEdit}
                 />
               ))}
@@ -376,6 +329,15 @@ export default function Tasks() {
           task={editing}
           statuses={statuses}
           onChanged={load}
+        />
+      )}
+
+      {canEdit && (
+        <TaskStatusManagerDialog
+          open={manageOpen}
+          onOpenChange={setManageOpen}
+          statuses={statuses}
+          reload={load}
         />
       )}
     </div>

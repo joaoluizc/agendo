@@ -9,8 +9,9 @@ type Opt = { value: string; label: string };
  * A select styled to match the app's shadcn dropdowns, but built on Radix Popover rather
  * than Radix Select on purpose: Select locks body scroll (react-remove-scroll), which inside
  * the fixed detail panel shifts the layout and misplaces the options on classic (Windows)
- * scrollbars. Popover is non-modal (no scroll lock) and its content sits above the panel via
- * z-[70]. Options may be plain strings or {value,label} pairs; pass `clearable` to offer a
+ * scrollbars. Popover is non-modal (no scroll lock) and its content sits above the panel and
+ * dialogs via z-[80] (the task-edit dialog content is z-[71]). Options may be plain strings
+ * or {value,label} pairs; pass `clearable` to offer a
  * blank "—" choice.
  */
 export function PrettySelect({
@@ -58,7 +59,7 @@ export function PrettySelect({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="z-[70] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto p-1"
+        className="z-[80] max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto p-1"
       >
         {clearable && (
           <OptionRow selected={!value} onSelect={() => select("")}>

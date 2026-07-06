@@ -51,6 +51,8 @@ export interface TaskStatus {
   _id: string;
   name: string;
   order: number;
+  /** The status new tasks land in. Exactly one status is the default. */
+  isDefault?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

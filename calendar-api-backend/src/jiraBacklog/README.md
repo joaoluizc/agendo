@@ -64,10 +64,12 @@ read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
 | PATCH | `/jira-backlog/issues/:id` | Update fields on a row | yes |
 | DELETE | `/jira-backlog/issues/:id` | Delete a row | yes |
 | POST | `/jira-backlog/issues/:id/refresh-zd` | Re-fetch one row's Zendesk count | yes |
+| POST | `/jira-backlog/issues/:id/autofill` | Pull title/priority/squad/sprint/client/ZD count from Jira onto the row | yes |
 
-> The toolbar "Refresh ZD counts" action refreshes each visible row through the per-row
-> endpoint above with bounded concurrency on the client — there is no long-running batch
-> request to time out.
+> The toolbar **"Sync from Jira"** action refreshes each visible row through the per-row
+> `autofill` endpoint above (bounded concurrency on the client — no long-running batch
+> request to time out). `autofill` overwrites the Jira-sourced fields (blank Jira values never
+> wipe existing data) and leaves the agendo-only triage `status` + urgency inputs untouched.
 
 > `adminOnly` intentionally bypasses the role check when `NODE_ENV=development`, matching
 > the rest of agendo — so locally every signed-in user can edit.
@@ -90,7 +92,16 @@ standalone** (`issueId` is optional), carries an optional **`deadline`**, and is
 editable. `getAllTasks` keeps standalone tasks (only true orphans — a linked issue that was
 deleted — are dropped). Task routes (all `adminOnly`): `POST /tasks` (standalone create),
 `POST /issues/:id/tasks` (linked create), `PATCH /tasks/:taskId`, `DELETE /tasks/:taskId`,
-plus the kanban `task-statuses` CRUD.
+plus the kanban `task-statuses` CRUD and `PUT /task-statuses/order` (bulk reorder).
+
+**Default task status.** `TaskStatus` carries an explicit `isDefault` flag (seeded onto
+"Not done"); new tasks land in `resolveDefaultStatusId()` — the flagged status, falling back
+to lowest `order` for pre-flag databases. Marking a status default (`PATCH /task-statuses/:id`
+with `{ isDefault: true }`) clears the flag on the others; deleting the default promotes the
+new lowest-order status, so exactly one default always exists. This replaces the old implicit
+"top status is default" rule, which silently broke when a column was deleted/renamed. Existing
+databases work without a migration (the fallback covers them); to make the flag explicit there,
+mark a default once from the Manage-statuses dialog.
 
 **No-ETA review.** When a bug is set to `Possible No-ETA`, the UI offers to create a 30-day
 re-evaluation reminder via `POST /issues/:id/no-eta-task` → `createNoEtaReviewTask`: a task

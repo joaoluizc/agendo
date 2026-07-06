@@ -15,7 +15,7 @@ places (the route and the nav link — see "Remove it").
   enforces the same with `adminOnly`, so the UI gate is convenience, not security.
 - **Layout:** the page scrolls as a whole (no inner table scroll) and the table blends into
   the page. A sticky toolbar keeps the view tabs, search box, To-Review status filter, and
-  Add row / Refresh ZD counts visible (and shows a compact title) once you scroll; the column
+  Add row / Sync from Jira visible (and shows a compact title) once you scroll; the column
   header is sticky just beneath it. The main table is **display-only** and fits without a
   horizontal scrollbar.
 - **Search:** a toolbar search box (in every view) filters by issue key, title, client,
@@ -36,11 +36,16 @@ places (the route and the nav link — see "Remove it").
   see the backend README.)
 - **Tasks & No-ETA workflow:** tasks (the panel's Tasks list + the `/app/tasks` kanban) are
   editable via a shared dialog (`task-edit-dialog.tsx`) — title, status, and an optional
-  **deadline** (a red dot marks tasks whose deadline has been reached). Tasks can be linked to
-  a bug (quick-add in the panel) or **standalone** (the kanban's "New task"). Setting a bug to
-  `Possible No-ETA` prompts to create a 30-day re-evaluation task; opening that task shows a
-  candidate card with **Evaluate now** → *Set as No-ETA* (bug → `No-ETA`, task → Done) or
-  *Re-evaluate +30 days* (recursive). Date helpers live in `dates.ts`.
+  **deadline** picked with a shadcn calendar (`components/ui/calendar.tsx`; a red dot marks
+  tasks whose deadline has been reached). Tasks can be linked to a bug (quick-add in the panel)
+  or **standalone** (the kanban's "New task"). Setting a bug to `Possible No-ETA` prompts to
+  create a 30-day re-evaluation task; opening that task shows a candidate card with **Evaluate
+  now** → *Set as No-ETA* (bug → `No-ETA`, task → Done) or *Re-evaluate +30 days* (recursive).
+  Date helpers live in `dates.ts`.
+- **Task statuses (kanban columns):** managed from the Bug Tasks page's **Manage statuses**
+  dialog (`task-status-manager-dialog.tsx`) — reorder columns (↑/↓), add/remove, and mark one
+  as the **default** (★) that new tasks start in. The default is an explicit server-side flag,
+  so reordering or deleting a column never silently changes where new tasks land.
 - **Views:** `All` (insertion order) · `Open` (excludes `Fixed/Closed` + `Archived`) · `To Review`
   (the statuses chosen in the toolbar's status filter — defaults to `In a Sprint` +
   `Review with Squad`, but any combination can be selected to pull in bugs from other
@@ -53,10 +58,12 @@ places (the route and the nav link — see "Remove it").
   auto (the ✎ marker shows in the table cell too). `urgency.ts` mirrors the backend formula
   for instant feedback; the server is authoritative on save. Regressions bypass the formula
   (no score), so their urgency cell shows `REG` rather than a dash.
-- **Jira:** when the backend reports `jiraConfigured`, the panel shows the ZD count + a ↻,
-  the toolbar "Refresh ZD counts" re-fetches every row in the active view, and a new row's
-  count auto-fetches once a valid Jira URL is entered. When not configured, counts show `—`
-  and the controls are hidden.
+- **Jira:** when the backend reports `jiraConfigured`, the panel shows the ZD count + a ↻
+  (count-only refresh), the toolbar **"Sync from Jira"** re-pulls every Jira-sourced field
+  (title, client, priority, squad, sprint, ZD count) onto every row in the active view
+  (overwriting local values; blank Jira fields never wipe), and a new row autofills once a
+  valid Jira URL is entered. The triage status and urgency inputs are agendo-only and never
+  touched. When not configured, counts show `—` and the controls are hidden.
 
 ## Files
 
@@ -69,7 +76,8 @@ JiraBacklog/
 ├── status-multi-select.tsx  dropdown checklist — which statuses the To-Review view shows
 ├── detail-panel.tsx    Notion-style side panel — every field editable
 ├── tasks-section.tsx   in-panel task list (quick-add + click-to-edit, overdue dot)
-├── task-edit-dialog.tsx  shared task editor (title/status/deadline/delete + No-ETA card)
+├── task-edit-dialog.tsx  shared task editor (title/status/deadline picker/delete + No-ETA card)
+├── task-status-manager-dialog.tsx  Bug Tasks status manager (reorder / default / add / delete)
 ├── dates.ts            deadline helpers (isOverdue, formatDeadline, …) on date-fns
 ├── columns.tsx         TanStack column defs (display cells) built from COLUMN_DEFS
 ├── cells.tsx           display-only cell renderers + FieldCell dispatcher

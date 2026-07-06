@@ -126,6 +126,17 @@ const updateStatus = async (req, res) => {
   }
 };
 
+// PUT /jira-backlog/task-statuses/order — body { ids: [...] } sets each status's order to
+// its position in the array (the status manager's drag/reorder).
+const reorderStatuses = async (req, res) => {
+  try {
+    const statuses = await taskService.reorderStatuses((req.body || {}).ids || []);
+    res.status(200).json(statuses);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 // Deleting a status that still has tasks is blocked (409) — same 409+code convention as
 // jiraBacklogController's JIRA_NOT_CONFIGURED, so the UI can show a clear message.
 const deleteStatus = async (req, res) => {
@@ -157,5 +168,6 @@ export default {
   listStatuses,
   createStatus,
   updateStatus,
+  reorderStatuses,
   deleteStatus,
 };

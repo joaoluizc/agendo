@@ -32,7 +32,7 @@ async function doSeedStatuses() {
   const count = await TaskStatus.estimatedDocumentCount();
   if (count > 0) return; // never re-seed once statuses exist
   await TaskStatus.insertMany([
-    { name: "Not done", order: 0 },
+    { name: "Not done", order: 0, isDefault: true },
     { name: "Doing", order: 1 },
     { name: "Done", order: 2 },
   ]);
@@ -44,9 +44,42 @@ async function nextStatusOrder() {
   return (last?.order ?? -1) + 1;
 }
 
+/**
+ * Self-heal databases seeded before `isDefault` existed: if no status carries the flag,
+ * promote the lowest-order one. Idempotent and cheap (one exists-check, an occasional write),
+ * so it's safe to run on every status read — mirrors the seedIfEmpty pattern.
+ */
+async function ensureDefaultStatus() {
+  if (await TaskStatus.exists({ isDefault: true })) return;
+  const first = await TaskStatus.findOne().sort({ order: 1 }).select("_id").lean();
+  if (first) await TaskStatus.updateOne({ _id: first._id }, { isDefault: true });
+}
+
 async function getStatuses() {
   await seedStatusesIfEmpty();
+  await ensureDefaultStatus();
   return TaskStatus.find().sort({ order: 1, createdAt: 1 }).lean();
+}
+
+/**
+ * The status new tasks land in: the one explicitly flagged `isDefault` (back-filled by
+ * ensureDefaultStatus for pre-flag databases), falling back to the lowest-order status.
+ * Seeds first so a fresh DB always resolves. Returns an ObjectId or null (only if there are
+ * no statuses at all).
+ */
+async function resolveDefaultStatusId() {
+  await seedStatusesIfEmpty();
+  await ensureDefaultStatus();
+  const flagged = await TaskStatus.findOne({ isDefault: true }).select("_id").lean();
+  if (flagged) return flagged._id;
+  const first = await TaskStatus.findOne().sort({ order: 1 }).select("_id").lean();
+  return first?._id || null;
+}
+
+/** Make `id` the sole default status (clears the flag on every other status). */
+async function makeDefault(id) {
+  await TaskStatus.updateMany({ _id: { $ne: id } }, { isDefault: false });
+  await TaskStatus.updateOne({ _id: id }, { isDefault: true });
 }
 
 async function createStatus(body = {}) {
@@ -67,8 +100,27 @@ async function updateStatus(id, body = {}) {
     const n = Number(body.order);
     if (Number.isFinite(n)) doc.order = n;
   }
+  // Only honour setting the default (never clearing it directly) so there's always exactly
+  // one default — you change it by marking a different status.
+  if (body.isDefault === true) {
+    await makeDefault(doc._id);
+    doc.isDefault = true;
+  }
   await doc.save();
   return doc.toObject();
+}
+
+/**
+ * Reorder statuses to match `orderedIds` (setting order = index). Ignores unknown ids and
+ * leaves any status not listed after the reordered ones. Returns the new status list.
+ */
+async function reorderStatuses(orderedIds = []) {
+  if (Array.isArray(orderedIds) && orderedIds.length) {
+    await Promise.all(
+      orderedIds.map((id, index) => TaskStatus.updateOne({ _id: id }, { order: index })),
+    );
+  }
+  return getStatuses();
 }
 
 /**
@@ -80,7 +132,13 @@ async function deleteStatus(id) {
   if (!doc) return { ok: false, code: "NOT_FOUND" };
   const count = await JiraTask.countDocuments({ statusId: id });
   if (count > 0) return { ok: false, code: "STATUS_IN_USE", count };
+  const wasDefault = doc.isDefault;
   await doc.deleteOne();
+  // Never leave the board without a default: promote the new lowest-order status.
+  if (wasDefault) {
+    const next = await TaskStatus.findOne().sort({ order: 1 }).select("_id").lean();
+    if (next) await makeDefault(next._id);
+  }
   return { ok: true };
 }
 
@@ -145,9 +203,7 @@ async function createTask(issueId, body = {}) {
 
   let statusId = body.statusId;
   if (!statusId) {
-    await seedStatusesIfEmpty();
-    const first = await TaskStatus.findOne().sort({ order: 1 }).select("_id").lean();
-    statusId = first?._id;
+    statusId = await resolveDefaultStatusId();
   } else if (!(await TaskStatus.exists({ _id: statusId }))) {
     throw new Error("Unknown task status");
   }
@@ -223,16 +279,15 @@ async function createNoEtaReviewTask(issueId) {
   const existing = await JiraTask.findOne({ issueId, noEtaReview: { $ne: null } }).lean();
   if (existing) return existing;
 
-  await seedStatusesIfEmpty();
-  const first = await TaskStatus.findOne().sort({ order: 1 }).select("_id").lean();
-  if (!first) throw new Error("No task status available");
+  const defaultStatusId = await resolveDefaultStatusId();
+  if (!defaultStatusId) throw new Error("No task status available");
 
   const now = new Date();
   const task = await JiraTask.create({
     issueId,
     title: `Re-evaluate No-ETA candidate${issue.issueKey ? ` (${issue.issueKey})` : ""}`,
-    statusId: first._id,
-    order: await nextTaskOrder(first._id),
+    statusId: defaultStatusId,
+    order: await nextTaskOrder(defaultStatusId),
     deadline: addDays(now, NO_ETA_REVIEW_DAYS),
     noEtaReview: { flaggedAt: now, cycles: 0 },
   });
@@ -273,6 +328,7 @@ export default {
   getStatuses,
   createStatus,
   updateStatus,
+  reorderStatuses,
   deleteStatus,
   // tasks
   getTasksForIssue,

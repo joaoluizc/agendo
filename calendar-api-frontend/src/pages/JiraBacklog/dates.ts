@@ -43,7 +43,20 @@ export function relativeToNow(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
 }
 
-/** ISO deadline → "yyyy-MM-dd" for an <input type="date"> value (UTC date part). */
+/** ISO deadline → "yyyy-MM-dd" for a date-only value (UTC date part). */
 export function toDateInputValue(deadline?: string | null): string {
   return deadline ? new Date(deadline).toISOString().slice(0, 10) : "";
+}
+
+/** "yyyy-MM-dd" → a LOCAL midnight Date (for the calendar's selected day); undefined if empty. */
+export function inputValueToDate(value?: string | null): Date | undefined {
+  if (!value) return undefined;
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d);
+}
+
+/** A calendar-selected Date → "yyyy-MM-dd" (local date parts), the deadline draft format. */
+export function dateToInputValue(date: Date): string {
+  return format(date, "yyyy-MM-dd");
 }

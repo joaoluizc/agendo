@@ -299,7 +299,9 @@ export default function JiraBacklog() {
     [viewIssues, term],
   );
 
-  const refreshVisible = useCallback(async () => {
+  // Bulk "Sync from Jira": pull every Jira-sourced field (title, client, priority, squad,
+  // sprint, ZD count) onto each visible row via the same per-row autofill the panel uses.
+  const syncVisible = useCallback(async () => {
     const ids = visibleIssues.map((i) => i._id);
     if (!ids.length) return;
 
@@ -317,7 +319,7 @@ export default function JiraBacklog() {
         const id = ids[cursor++];
         patchIssue(id, { _zdBusy: true, _zdError: false });
         try {
-          const updated = await jiraApi.refreshZd(id);
+          const updated = await jiraApi.autofill(id);
           setIssues((prev) =>
             prev.map((it) => (it._id === id ? { ...updated, _zdBusy: false, _zdError: false } : it)),
           );
@@ -338,8 +340,8 @@ export default function JiraBacklog() {
 
     setBulkBusy(false);
     if (notConfigured) toast.error("Jira isn't configured yet.");
-    else if (failed) toast.warning(`Refreshed ${ok}/${ids.length}; ${failed} failed.`);
-    else toast.success(`Refreshed ${ok} ticket count${ok === 1 ? "" : "s"}.`);
+    else if (failed) toast.warning(`Synced ${ok}/${ids.length}; ${failed} failed.`);
+    else toast.success(`Synced ${ok} bug${ok === 1 ? "" : "s"} from Jira.`);
   }, [visibleIssues, patchIssue]);
 
   const openDetail = useCallback((id: string) => setSelectedId(id), []);
@@ -428,9 +430,9 @@ export default function JiraBacklog() {
                 <Plus className="h-4 w-4" /> Add row
               </Button>
               {jiraConfigured && (
-                <Button variant="outline" size="sm" onClick={refreshVisible} disabled={bulkBusy}>
+                <Button variant="outline" size="sm" onClick={syncVisible} disabled={bulkBusy}>
                   {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Refresh ZD counts
+                  Sync from Jira
                 </Button>
               )}
             </>

@@ -51,6 +51,8 @@ jiraBacklogRouter.post("/tasks/:taskId/no-eta", adminOnly, taskController.noEtaT
 // Task statuses (kanban columns)
 jiraBacklogRouter.get("/task-statuses", adminOnly, taskController.listStatuses);
 jiraBacklogRouter.post("/task-statuses", adminOnly, taskController.createStatus);
+// Bulk reorder (static path before :id so it's never captured as an id).
+jiraBacklogRouter.put("/task-statuses/order", adminOnly, taskController.reorderStatuses);
 jiraBacklogRouter.patch("/task-statuses/:id", adminOnly, taskController.updateStatus);
 jiraBacklogRouter.delete("/task-statuses/:id", adminOnly, taskController.deleteStatus);
 
