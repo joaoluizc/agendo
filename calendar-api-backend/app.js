@@ -20,6 +20,7 @@ import { mountSwagger } from "./src/swagger/swagger.js";
 import discovaiRouter from "./src/discovai/discovaiRouter.js";
 // Jira backlog — self-contained module, see src/jiraBacklog/README.md to remove.
 import jiraBacklogRouter from "./src/jiraBacklog/jiraBacklogRouter.js";
+import { startJiraBacklogScheduler } from "./src/jiraBacklog/scheduler.js";
 
 dotenv.config();
 
@@ -59,6 +60,9 @@ app.use(addRequestId);
 mountSwagger(app);
 
 connectDB();
+
+// Jira backlog: register the daily 00:00 UTC "Sync from Jira" job (self-contained module).
+startJiraBacklogScheduler();
 
 app.use("/gcalendar", gCalendarRouter);
 app.use("/sling", requireAuth(), slingRouter);

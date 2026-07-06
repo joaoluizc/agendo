@@ -3,6 +3,7 @@ import { computeUrgency, URGENCY_INPUT_FIELDS } from "./lib/urgency.js";
 import { DROPDOWN_OPTIONS } from "./lib/dropdowns.js";
 import { STATUS_OPTIONS, FIXED_CLOSED_STATUS, ARCHIVED_STATUS } from "./lib/status.js";
 import { fetchConnectedTicketCount, fetchIssueDetails } from "./lib/jiraClient.js";
+import { isJiraConfigured } from "./lib/config.js";
 import { JIRA_BACKLOG_SEED } from "./seed/jiraBacklogSeed.js";
 import { mapSeedRecord } from "./seed/mapSeedRecord.js";
 import { BugStatus } from "./bugStatusModel.js";
@@ -253,6 +254,56 @@ async function autofillFromJira(id) {
   return doc.toObject();
 }
 
+/**
+ * Bulk "Sync from Jira" for every linked bug — the server-side counterpart of the toolbar
+ * button, run by the daily scheduler (scheduler.js) and the standalone cron script. Autofills
+ * each row that has a Jira key/URL, a few at a time (bounded concurrency so we stay within
+ * Jira's rate limits). Never throws for a single-row failure — it logs and tallies it so one
+ * bad ticket can't abort the whole run. Logs loudly with a `[jira-backlog][sync]` prefix so
+ * runs are easy to confirm in the server (Render) logs.
+ */
+async function syncAllFromJira({ concurrency = 5 } = {}) {
+  const startedAt = Date.now();
+  if (!isJiraConfigured()) {
+    console.log("[jira-backlog][sync] skipped — Jira is not configured (set the Jira env vars)");
+    return { skipped: true, total: 0, linked: 0, ok: 0, failed: 0, durationMs: 0 };
+  }
+
+  await seedIfEmpty();
+  const total = await JiraIssue.estimatedDocumentCount();
+  // Only rows with something to look up in Jira (a key or a URL).
+  const linked = await JiraIssue.find({ $or: [{ issueKey: { $ne: "" } }, { url: { $ne: "" } }] })
+    .select("_id")
+    .lean();
+  const ids = linked.map((d) => d._id);
+  console.log(
+    `[jira-backlog][sync] starting — ${ids.length} linked of ${total} bug(s), concurrency ${concurrency}`,
+  );
+
+  let ok = 0;
+  let failed = 0;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < ids.length) {
+      const id = ids[cursor++];
+      try {
+        await autofillFromJira(id);
+        ok++;
+      } catch (e) {
+        failed++;
+        console.warn(`[jira-backlog][sync] failed ${id}: ${e.message}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, worker));
+
+  const durationMs = Date.now() - startedAt;
+  console.log(
+    `[jira-backlog][sync] done — ${ok} synced, ${failed} failed, of ${ids.length} linked (${(durationMs / 1000).toFixed(1)}s)`,
+  );
+  return { skipped: false, total, linked: ids.length, ok, failed, durationMs };
+}
+
 /* ----------------------------- bug statuses ------------------------------ */
 
 // Memoised so concurrent first-requests can't double-seed (mirrors seedIfEmpty). The
@@ -307,6 +358,7 @@ export default {
   deleteIssue,
   refreshZdCount,
   autofillFromJira,
+  syncAllFromJira,
   getBugStatuses,
   createBugStatus,
   deleteBugStatus,

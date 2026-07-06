@@ -163,6 +163,27 @@ Until those are set, `isJiraConfigured()` is false: the column simply shows `—
 refresh controls are hidden, and `refresh-zd` returns `409 JIRA_NOT_CONFIGURED`. A
 missing/invalid var never crashes the server.
 
+## Daily automatic sync
+
+`jiraBacklogService.syncAllFromJira()` runs the bulk "Sync from Jira" server-side: it
+autofills every linked bug (key or URL) a few at a time, tallying ok/failed and skipping
+gracefully when Jira isn't configured. It never throws for a single-row failure. Two ways to
+run it daily at **00:00 UTC** — both call the same function and log with a `[jira-backlog][sync]`
+prefix so runs are easy to confirm in Render's log stream:
+
+1. **In-process cron** (`scheduler.js`, started once from `app.js` via
+   `startJiraBacklogScheduler()`): a `node-cron` job (`0 0 * * *`, timezone UTC). Reliable on an
+   **always-on** web service; on a tier that sleeps when idle the midnight tick can be missed
+   (you'll see no `tick` log at 00:00). Logs on registration and on every run.
+2. **Standalone script** for a **Render Cron Job** (robust even if the web service sleeps — it
+   runs in its own process): set the job command to
+   `node src/jiraBacklog/scripts/sync-all-jira.js --prod` and schedule `0 0 * * *` (Render cron
+   is UTC). Exits non-zero if Jira is unconfigured so the platform flags it.
+
+Pick whichever fits your setup (running both is harmless — the sync just overwrites the same
+Jira-sourced fields twice). To confirm it works right now, run the script manually and watch the
+log lines: `starting — N linked of M bug(s)` … `done — X synced, Y failed`.
+
 ## Files
 
 ```
@@ -174,9 +195,11 @@ jiraBacklog/
 ├── seed/jiraBacklogSeed.js     89 cleaned seed issues from the sheet (auto-generated, do not edit)
 ├── seed/mapSeedRecord.js       seed-record → JiraIssue doc mapping (shared by seeding + import)
 ├── taskModel.js / taskService.js / taskController.js  tasks + kanban statuses (+ No-ETA review)
+├── scheduler.js                daily 00:00 UTC "Sync from Jira" (node-cron, started from app.js)
 ├── scripts/migrate-status.js   one-time booleans→status migration (idempotent)
 ├── scripts/import-sheet-data.js  refresh an existing DB from the sheet (upsert by key)
 ├── scripts/add-bug-statuses.js  back-fill missing STATUS_OPTIONS into existing DBs (idempotent)
+├── scripts/sync-all-jira.js    standalone bulk sync (for a Render Cron Job / manual runs)
 └── lib/
     ├── urgency.js              computeUrgency() — verified against the seed
     ├── status.js               STATUS_OPTIONS + deriveStatus() decision tree
@@ -188,10 +211,12 @@ jiraBacklog/
 ## Remove it
 
 1. Delete this folder (`calendar-api-backend/src/jiraBacklog/`).
-2. In `app.js`, delete the `jiraBacklogRouter` import and its
-   `app.use("/jira-backlog", …)` line.
+2. In `app.js`, delete the `jiraBacklogRouter` import + its `app.use("/jira-backlog", …)` line,
+   and the `startJiraBacklogScheduler` import + its call.
 3. In `.env`, delete the `# === Jira backlog ===` block.
-4. (Optional) Drop the `jira-issues` / `dev-jira-issues` MongoDB collection.
+4. (Optional) Drop the `jira-issues` / `dev-jira-issues` MongoDB collection, and remove any
+   Render Cron Job pointing at `scripts/sync-all-jira.js`.
 5. Remove the frontend half — see `calendar-api-frontend/src/pages/JiraBacklog/README.md`.
 
-No other part of agendo imports this module, and it adds no new npm dependencies.
+No other part of agendo imports this module. It reuses `node-cron` (already a dependency) and
+adds no new npm dependencies.
