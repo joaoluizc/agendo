@@ -32,6 +32,9 @@ import {
 import { ManageStatusesDialog } from "./manage-statuses-dialog";
 import { SearchBox } from "./search-box";
 import { StatusMultiSelect } from "./status-multi-select";
+import { usePageFavicon } from "./use-page-favicon";
+import { usePageTitle } from "./use-page-title";
+import favicon from "./favicon.svg";
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -47,6 +50,9 @@ const REFRESH_CONCURRENCY = 5;
 export default function JiraBacklog() {
   const { type } = useUserSettings();
   const canEdit = type === "admin";
+
+  usePageFavicon(favicon);
+  usePageTitle("Bug Tracker");
 
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -373,7 +379,7 @@ export default function JiraBacklog() {
     <div className="mx-auto w-full max-w-[1800px] px-4 pb-16">
       {/* Big header — scrolls away as you move into the list. */}
       <div className="pt-6 pb-2">
-        <h1 className="text-2xl font-semibold">Jira Backlog</h1>
+        <h1 className="text-2xl font-semibold">Bug Tracker</h1>
         <p className="text-sm text-muted-foreground">
           Triage board for SUP bug tickets.{" "}
           {canEdit ? "Click a row to open and edit it." : "Read-only — ask an admin for edit access."}
@@ -387,7 +393,7 @@ export default function JiraBacklog() {
           scrolled && "shadow-sm",
         )}
       >
-        {scrolled && <span className="hidden text-sm font-semibold sm:inline">Jira Backlog</span>}
+        {scrolled && <span className="hidden text-sm font-semibold sm:inline">Bug Tracker</span>}
         <div className="flex items-center gap-1">
           {VIEWS.map((v) => (
             <Button

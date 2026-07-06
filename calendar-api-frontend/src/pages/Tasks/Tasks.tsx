@@ -20,6 +20,9 @@ import { ApiError, taskApi } from "@/pages/JiraBacklog/api";
 import { TaskEditDialog } from "@/pages/JiraBacklog/task-edit-dialog";
 import { formatDeadline, isDeadlineReached, isPastDue } from "@/pages/JiraBacklog/dates";
 import { TaskStatus, TaskWithIssue } from "@/pages/JiraBacklog/types";
+import { usePageFavicon } from "@/pages/JiraBacklog/use-page-favicon";
+import { usePageTitle } from "@/pages/JiraBacklog/use-page-title";
+import favicon from "@/pages/JiraBacklog/favicon.svg";
 
 /**
  * Tasks kanban — every task across all Jira-backlog tickets, grouped into status columns.
@@ -171,6 +174,9 @@ export default function Tasks() {
   const { type } = useUserSettings();
   const canEdit = type === "admin";
 
+  usePageFavicon(favicon);
+  usePageTitle("Bug Tasks");
+
   const [tasks, setTasks] = useState<TaskWithIssue[]>([]);
   const [statuses, setStatuses] = useState<TaskStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,7 +295,7 @@ export default function Tasks() {
   return (
     <div className="mx-auto w-full max-w-[1800px] px-4 pb-16">
       <div className="pt-6 pb-2">
-        <h1 className="text-2xl font-semibold">Tasks</h1>
+        <h1 className="text-2xl font-semibold">Bug Tasks</h1>
         <p className="text-sm text-muted-foreground">
           Every task across the Jira backlog, by status.{" "}
           {canEdit ? "Drag a card to change its status." : "Read-only — ask an admin for edit access."}

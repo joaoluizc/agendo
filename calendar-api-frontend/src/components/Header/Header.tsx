@@ -155,7 +155,7 @@ const Header = () => {
                       }
                     >
                       <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                        Jira Backlog
+                        Bug Tracker
                       </NavigationMenuLink>
                     </NavLink>
                   </NavigationMenuItem>
@@ -169,7 +169,7 @@ const Header = () => {
                       }
                     >
                       <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                        Tasks
+                        Bug Tasks
                       </NavigationMenuLink>
                     </NavLink>
                   </NavigationMenuItem>
@@ -225,10 +225,10 @@ const Header = () => {
                 {type === "admin" && (
                   <>
                     <NavLink to="/app/jira-backlog" className="text-muted-foreground hover:text-foreground">
-                      Jira Backlog
+                      Bug Tracker
                     </NavLink>
                     <NavLink to="/app/tasks" className="text-muted-foreground hover:text-foreground">
-                      Tasks
+                      Bug Tasks
                     </NavLink>
                   </>
                 )}
