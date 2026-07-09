@@ -1,4 +1,4 @@
-import { BugStatus, IssuePatch, JiraIssue, Task, TaskStatus, TaskWithIssue } from "./types";
+import { BugStatus, IssuePatch, JiraIssue, MrrOverride, Task, TaskStatus, TaskWithIssue } from "./types";
 
 /**
  * Thin client for the /jira-backlog backend. Uses the same calling convention as the
@@ -45,6 +45,7 @@ async function request<T>(path: string, options: { method?: string; body?: unkno
 
 export interface JiraConfig {
   jiraConfigured: boolean;
+  mrrConfigured: boolean;
   dropdownOptions: Record<string, string[]>;
 }
 
@@ -57,11 +58,22 @@ export const jiraApi = {
   deleteIssue: (id: string) => request<{ message: string }>(`/issues/${id}`, { method: "DELETE" }),
   // Refresh just the ZD count for one row (the detail panel's per-row ↻ button).
   refreshZd: (id: string) => request<JiraIssue>(`/issues/${id}/refresh-zd`, { method: "POST" }),
+  // Re-resolve MRR for one row (Jira -> Zendesk -> DOMO). 409 MRR_NOT_CONFIGURED until all
+  // three legs are set up server-side.
+  refreshMrr: (id: string) => request<JiraIssue>(`/issues/${id}/refresh-mrr`, { method: "POST" }),
   // Pull summary/priority/squad/sprint/client/ZD-count from the linked Jira ticket onto the
   // row (overwriting local values; blanks never wipe). Used for new-row autofill and by the
   // toolbar's "Sync from Jira" bulk action (fans out over this per-row endpoint) — see
   // syncVisible in JiraBacklog.tsx.
   autofill: (id: string) => request<JiraIssue>(`/issues/${id}/autofill`, { method: "POST" }),
+};
+
+/** Admin-managed MRR overrides (Zendesk org / exact email -> Duda account email). */
+export const mrrOverrideApi = {
+  list: () => request<MrrOverride[]>("/mrr-overrides"),
+  create: (body: { matchType: "org" | "email"; matchValue: string; label: string; accountEmail: string }) =>
+    request<MrrOverride>("/mrr-overrides", { method: "POST", body }),
+  remove: (id: string) => request<{ message: string }>(`/mrr-overrides/${id}`, { method: "DELETE" }),
 };
 
 /** User-managed issue statuses (the backlog's status dropdown — add / delete). */

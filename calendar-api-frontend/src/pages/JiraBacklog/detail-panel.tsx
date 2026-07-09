@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, Archive, ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta } from "./types";
+import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta, MRR_PROBLEM_STAGES } from "./types";
 import { DETAIL_GROUPS, STATUS_FIELD } from "./constants";
 import { CollapsibleSection } from "./collapsible-section";
 import { PrettySelect } from "./pretty-select";
@@ -17,6 +17,12 @@ import { badgeClasses } from "./badges";
  * Edits go through the same meta.updateField as before, so optimistic update + server
  * reconciliation behave identically. Read-only for non-admins.
  */
+
+const mrrFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
 
 const inputClass =
   "w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring";
@@ -315,7 +321,77 @@ function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta })
           )}
         </div>
       )}
+
+      {meta.mrrConfigured && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">MRR</span>
+            {issue._mrrBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : issue._mrrError ? (
+              <span className="inline-flex items-center gap-1 text-xs text-destructive">
+                <AlertCircle className="h-3.5 w-3.5" /> Fetch failed
+              </span>
+            ) : (
+              <span className="text-sm font-semibold tabular-nums">
+                {issue.mrr == null ? "—" : mrrFormatter.format(issue.mrr)}
+              </span>
+            )}
+            {meta.canEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                disabled={issue._mrrBusy}
+                onClick={() => meta.refreshMrr(issue._id)}
+                title="Re-resolve MRR (Jira -> Zendesk -> DOMO)"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          {issue.mrrAccounts && issue.mrrAccounts.length > 0 && (
+            <ul className="space-y-0.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs">
+              {issue.mrrAccounts.map((a, i) => (
+                <li key={i} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-muted-foreground" title={`${a.email} -> ${a.ownerEmail}`}>
+                    {a.businessName || a.ownerEmail}
+                  </span>
+                  <span className="shrink-0 tabular-nums">{mrrFormatter.format(a.mrr)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <MrrProblems issue={issue} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * The tickets that did NOT contribute to the MRR sum, with the step each one failed at
+ * (from the per-ticket resolution trace) — so a suspicious 0 is diagnosable right here.
+ * Resolved-fine entries (ok / via_override / duplicate_owner) stay hidden to keep the
+ * panel calm; the full trace is in the row data if ever needed.
+ */
+function MrrProblems({ issue }: { issue: JiraIssue }) {
+  const problems = (issue.mrrTrace || []).filter((t) => MRR_PROBLEM_STAGES.has(t.stage));
+  if (!problems.length) return null;
+  return (
+    <ul className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+      {problems.map((t, i) => (
+        <li key={i} className="flex items-start gap-1.5">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <span>
+            {t.ticketId && <span className="font-medium">ZD {t.ticketId}</span>}
+            {t.email && <span className="font-medium"> ({t.email})</span>}
+            {(t.ticketId || t.email) && " — "}
+            {t.detail || t.stage}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

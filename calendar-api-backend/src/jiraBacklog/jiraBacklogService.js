@@ -3,7 +3,10 @@ import { computeUrgency, URGENCY_INPUT_FIELDS } from "./lib/urgency.js";
 import { DROPDOWN_OPTIONS } from "./lib/dropdowns.js";
 import { STATUS_OPTIONS, FIXED_CLOSED_STATUS, ARCHIVED_STATUS } from "./lib/status.js";
 import { fetchConnectedTicketCount, fetchIssueDetails } from "./lib/jiraClient.js";
-import { isJiraConfigured } from "./lib/config.js";
+import { findLinkedZendeskTicketIds, fetchTicketRequester } from "./lib/zendeskClient.js";
+import { resolveOwnerAccount, fetchMrrForOwner } from "./lib/domoClient.js";
+import { isJiraConfigured, isMrrConfigured } from "./lib/config.js";
+import { MrrOverride } from "./mrrOverrideModel.js";
 import { JIRA_BACKLOG_SEED } from "./seed/jiraBacklogSeed.js";
 import { mapSeedRecord } from "./seed/mapSeedRecord.js";
 import { BugStatus } from "./bugStatusModel.js";
@@ -255,12 +258,169 @@ async function autofillFromJira(id) {
 }
 
 /**
+ * Find the override matching a ticket, org matcher first (the ticket's Zendesk organization
+ * groups all of a client's requester emails), then exact requester email. Overrides *win*
+ * over requester-email resolution — a partner employee's personal Duda account must never be
+ * counted in place of the real enterprise account. Returns null when nothing matches.
+ */
+async function findMrrOverride({ organizationId, email }) {
+  if (organizationId) {
+    const byOrg = await MrrOverride.findOne({ matchType: "org", matchValue: organizationId }).lean();
+    if (byOrg) return byOrg;
+  }
+  if (email) {
+    const byEmail = await MrrOverride.findOne({
+      matchType: "email",
+      matchValue: email.toLowerCase(),
+    }).lean();
+    if (byEmail) return byEmail;
+  }
+  return null;
+}
+
+/**
+ * Resolve MRR for one row: its linked Zendesk ticket(s) (best-effort — see zendeskClient.js)
+ * -> each ticket's requester email (or an admin-managed override, see mrrOverrideModel.js)
+ * -> DOMO's owning account -> that account's latest-complete-month MRR, summed across
+ * *distinct* owner accounts (so two tickets from the same account never double-count).
+ *
+ * A single ticket/account failure is skipped rather than aborting the whole row — but every
+ * ticket's outcome (including skips) is recorded in `mrrTrace`, so a 0 or missing MRR can be
+ * traced to the exact step that failed afterwards.
+ */
+async function refreshMrr(id) {
+  const doc = await JiraIssue.findById(id);
+  if (!doc) return null;
+
+  const ticketIds = await findLinkedZendeskTicketIds(doc.issueKey);
+  doc.zendeskTicketIds = ticketIds.map(String);
+
+  const seenOwners = new Set();
+  const accounts = [];
+  const trace = [];
+  let total = 0;
+
+  if (!ticketIds.length) {
+    trace.push({ ticketId: "", email: "", stage: "no_tickets_found", detail: "No Zendesk tickets reference this Jira key." });
+  }
+
+  for (const ticketId of ticketIds) {
+    const entry = { ticketId: String(ticketId), email: "", stage: "", detail: "" };
+    trace.push(entry);
+
+    let requester;
+    try {
+      requester = await fetchTicketRequester(ticketId);
+    } catch (e) {
+      entry.stage = "requester_lookup_failed";
+      entry.detail = e.message;
+      continue;
+    }
+    entry.email = requester.email;
+
+    const override = await findMrrOverride({ organizationId: requester.organizationId, email: requester.email });
+    const resolveEmail = override ? override.accountEmail : requester.email;
+    if (!override && !requester.email) {
+      entry.stage = "requester_lookup_failed";
+      entry.detail = "Ticket has no requester email.";
+      continue;
+    }
+
+    let owner;
+    try {
+      owner = await resolveOwnerAccount(resolveEmail);
+    } catch (e) {
+      entry.stage = "mrr_lookup_failed";
+      entry.detail = `Account resolution errored: ${e.message}`;
+      continue;
+    }
+    if (!owner) {
+      entry.stage = "no_account_match";
+      entry.detail = override
+        ? `Override "${override.label || override.matchValue}" points at ${resolveEmail}, which matches no Duda account.`
+        : `${resolveEmail} matches no Duda account. Add an override if this client files tickets from a non-Duda email.`;
+      continue;
+    }
+
+    const ownerKey = `${owner.ownerInstance}:${owner.ownerAccountUuid || owner.ownerEmail}`;
+    if (seenOwners.has(ownerKey)) {
+      entry.stage = "duplicate_owner";
+      entry.detail = `Same owner as another ticket (${owner.ownerEmail}) — counted once.`;
+      continue;
+    }
+    seenOwners.add(ownerKey);
+
+    let mrr = 0;
+    try {
+      const result = await fetchMrrForOwner({ accountId: owner.ownerAccountId, instance: owner.ownerInstance });
+      mrr = result.mrr;
+    } catch (e) {
+      entry.stage = "mrr_lookup_failed";
+      entry.detail = `Owner ${owner.ownerEmail} resolved, but the revenue query errored: ${e.message}`;
+      continue;
+    }
+
+    if (mrr === 0) {
+      entry.stage = "zero_mrr";
+      entry.detail = `Owner ${owner.ownerEmail} resolved, but latest-month MRR is $0 — free account or a data gap.`;
+    } else {
+      entry.stage = override ? "via_override" : "ok";
+      entry.detail = override
+        ? `Resolved via override "${override.label || override.matchValue}" -> ${owner.ownerEmail}.`
+        : `Resolved to ${owner.ownerEmail}.`;
+    }
+
+    accounts.push({ email: requester.email || resolveEmail, ownerEmail: owner.ownerEmail, businessName: owner.ownerBusinessName, mrr });
+    total += mrr;
+  }
+
+  doc.mrr = Math.round(total * 100) / 100;
+  doc.mrrAccounts = accounts;
+  doc.mrrTrace = trace;
+  doc.mrrFetchedAt = new Date();
+  await doc.save();
+  return doc.toObject();
+}
+
+/* ----------------------------- MRR overrides ------------------------------ */
+
+async function getMrrOverrides() {
+  return MrrOverride.find().sort({ createdAt: 1 }).lean();
+}
+
+async function createMrrOverride(body = {}) {
+  const matchType = body.matchType === "org" ? "org" : body.matchType === "email" ? "email" : "";
+  if (!matchType) throw new Error('matchType must be "org" or "email"');
+  const rawValue = (body.matchValue == null ? "" : String(body.matchValue)).trim();
+  const matchValue = matchType === "email" ? rawValue.toLowerCase() : rawValue;
+  const accountEmail = (body.accountEmail == null ? "" : String(body.accountEmail)).trim();
+  const label = (body.label == null ? "" : String(body.label)).trim();
+  if (!matchValue) throw new Error("matchValue is required (a Zendesk org id or requester email)");
+  if (matchType === "org" && !/^\d+$/.test(matchValue)) {
+    throw new Error("For org overrides, matchValue must be a numeric Zendesk organization id");
+  }
+  if (!accountEmail) throw new Error("accountEmail is required (the Duda account to attribute MRR to)");
+  const override = await MrrOverride.create({ matchType, matchValue, label, accountEmail });
+  return override.toObject();
+}
+
+async function deleteMrrOverride(id) {
+  const doc = await MrrOverride.findByIdAndDelete(id);
+  return Boolean(doc);
+}
+
+/**
  * Bulk "Sync from Jira" for every linked bug — the server-side counterpart of the toolbar
  * button, run by the daily scheduler (scheduler.js) and the standalone cron script. Autofills
  * each row that has a Jira key/URL, a few at a time (bounded concurrency so we stay within
  * Jira's rate limits). Never throws for a single-row failure — it logs and tallies it so one
  * bad ticket can't abort the whole run. Logs loudly with a `[jira-backlog][sync]` prefix so
  * runs are easy to confirm in the server (Render) logs.
+ *
+ * MRR refresh rides along as a second, independently-gated pass: it's skipped entirely unless
+ * Jira + Zendesk + DOMO are all configured (isMrrConfigured()), so it's a silent no-op today
+ * (DOMO's two dataset ids aren't set yet) and turns on by itself once they are — no code
+ * change needed.
  */
 async function syncAllFromJira({ concurrency = 5 } = {}) {
   const startedAt = Date.now();
@@ -301,7 +461,31 @@ async function syncAllFromJira({ concurrency = 5 } = {}) {
   console.log(
     `[jira-backlog][sync] done — ${ok} synced, ${failed} failed, of ${ids.length} linked (${(durationMs / 1000).toFixed(1)}s)`,
   );
-  return { skipped: false, total, linked: ids.length, ok, failed, durationMs };
+
+  let mrr = { skipped: true, ok: 0, failed: 0 };
+  if (isMrrConfigured()) {
+    console.log(`[jira-backlog][mrr-sync] starting — ${ids.length} linked bug(s), concurrency ${concurrency}`);
+    let mrrOk = 0;
+    let mrrFailed = 0;
+    let mrrCursor = 0;
+    const mrrWorker = async () => {
+      while (mrrCursor < ids.length) {
+        const id = ids[mrrCursor++];
+        try {
+          await refreshMrr(id);
+          mrrOk++;
+        } catch (e) {
+          mrrFailed++;
+          console.warn(`[jira-backlog][mrr-sync] failed ${id}: ${e.message}`);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, mrrWorker));
+    console.log(`[jira-backlog][mrr-sync] done — ${mrrOk} synced, ${mrrFailed} failed`);
+    mrr = { skipped: false, ok: mrrOk, failed: mrrFailed };
+  }
+
+  return { skipped: false, total, linked: ids.length, ok, failed, durationMs, mrr };
 }
 
 /* ----------------------------- bug statuses ------------------------------ */
@@ -357,6 +541,10 @@ export default {
   updateIssue,
   deleteIssue,
   refreshZdCount,
+  refreshMrr,
+  getMrrOverrides,
+  createMrrOverride,
+  deleteMrrOverride,
   autofillFromJira,
   syncAllFromJira,
   getBugStatuses,

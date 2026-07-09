@@ -12,7 +12,7 @@ import { JiraIssue, JiraTableMeta } from "./types";
 
 // Numeric columns hold number | null; the accessor maps null → undefined so
 // sortUndefined:"last" keeps blanks at the bottom regardless of sort direction.
-const NUMERIC_FIELDS = new Set<string>(["urgency", "zdCount"]);
+const NUMERIC_FIELDS = new Set<string>(["urgency", "zdCount", "mrr"]);
 
 // Dropdown columns filter by exact value; free-text columns by case-insensitive contains.
 const equalsFilter: FilterFn<JiraIssue> = (row, columnId, value) =>

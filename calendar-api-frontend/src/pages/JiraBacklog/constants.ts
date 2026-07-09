@@ -85,6 +85,7 @@ const F: Record<string, ColumnDesc> = {
   complexity: { id: "complexity", field: "complexity", header: "Complexity", type: "select", options: DROPDOWN_OPTIONS.complexity, minWidth: 130 },
   urgency: { id: "urgency", field: "urgency", header: "Urgency", type: "urgency", minWidth: 84 },
   zd: { id: "zd", field: "zdCount", header: "Tickets", type: "zd", minWidth: 88 },
+  mrr: { id: "mrr", field: "mrr", header: "MRR", type: "mrr", minWidth: 100 },
   // Detail-panel-only fields (kept off the main table to avoid horizontal scroll).
   bugType: { id: "bugType", field: "bugType", header: "Bug type", type: "select", options: DROPDOWN_OPTIONS.bugType, minWidth: 120 },
   comment: { id: "comment", field: "comment", header: "Comment", type: "text", minWidth: 240, wrap: true },
@@ -111,6 +112,7 @@ export const COLUMN_DEFS: ColumnDesc[] = [
   F.complexity,
   F.urgency,
   F.zd,
+  F.mrr,
 ];
 
 /** Columns shown (in this order) in the To-Review view — squad is the group, so it's dropped. */
@@ -123,6 +125,7 @@ export const TO_REVIEW_COLUMNS: ColumnDesc[] = [
   F.complexity,
   F.urgency,
   F.zd,
+  F.mrr,
 ];
 
 /** The status field descriptor — rendered prominently at the top of the detail panel. */

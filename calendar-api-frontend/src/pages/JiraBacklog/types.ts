@@ -22,6 +22,16 @@ export interface JiraIssue {
   workaroundQ: string;
   zdCount: number | null;
   zdCountFetchedAt: string | null;
+  /**
+   * MRR resolution: Jira issue -> linked Zendesk ticket(s) -> requester email -> DOMO owner
+   * account -> latest-complete-month MRR, summed across distinct owner accounts.
+   */
+  zendeskTicketIds: string[];
+  mrr: number | null;
+  mrrAccounts: { email: string; ownerEmail: string; businessName: string; mrr: number }[];
+  mrrFetchedAt: string | null;
+  /** Per-ticket diagnostics from the last MRR refresh — why each ticket did(n't) contribute. */
+  mrrTrace: MrrTraceEntry[];
   /** Archival stamps — set while status is "Archived"; the row auto-deletes after expiry. */
   archivedAt?: string | null;
   archiveExpiresAt?: string | null;
@@ -33,9 +43,48 @@ export interface JiraIssue {
   // only the affected row re-renders during a refresh.
   _zdBusy?: boolean;
   _zdError?: boolean;
+  _mrrBusy?: boolean;
+  _mrrError?: boolean;
 }
 
 export type IssuePatch = Partial<Omit<JiraIssue, "_id">>;
+
+/** One step of the MRR resolution chain for one Zendesk ticket (see backend mrrTrace). */
+export interface MrrTraceEntry {
+  /** "" for issue-level entries (no_tickets_found). */
+  ticketId: string;
+  email: string;
+  stage:
+    | "ok"
+    | "via_override"
+    | "duplicate_owner"
+    | "no_tickets_found"
+    | "requester_lookup_failed"
+    | "no_account_match"
+    | "mrr_lookup_failed"
+    | "zero_mrr";
+  detail: string;
+}
+
+/** Stages that mean "something needs a human look" (drives the warning icon). */
+export const MRR_PROBLEM_STAGES: ReadonlySet<MrrTraceEntry["stage"]> = new Set([
+  "no_tickets_found",
+  "requester_lookup_failed",
+  "no_account_match",
+  "mrr_lookup_failed",
+  "zero_mrr",
+]);
+
+/** An admin-managed MRR resolution override (Zendesk org / exact email -> Duda account). */
+export interface MrrOverride {
+  _id: string;
+  matchType: "org" | "email";
+  matchValue: string;
+  label: string;
+  accountEmail: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 /** A user-managed issue status (the backlog's status dropdown). */
 export interface BugStatus {
@@ -101,7 +150,7 @@ export interface TaskWithIssue {
 
 export type ViewKey = "all" | "open" | "toReview";
 
-export type ColumnType = "jiraUrl" | "text" | "select" | "urgency" | "zd";
+export type ColumnType = "jiraUrl" | "text" | "select" | "urgency" | "zd" | "mrr";
 
 /** Which coloured-pill palette a value uses (see badges.ts). */
 export type BadgeKind = "status" | "priority" | "client";
@@ -132,10 +181,13 @@ export interface ColumnDesc {
 export interface JiraTableMeta {
   canEdit: boolean;
   jiraConfigured: boolean;
+  /** Whether the full Jira->Zendesk->DOMO MRR chain is configured (gates the MRR column/button). */
+  mrrConfigured: boolean;
   /** Persist a field change; resolves once the server has confirmed. */
   updateField: (id: string, patch: IssuePatch) => Promise<boolean>;
   deleteRow: (id: string) => void;
   refreshZd: (id: string) => void;
+  refreshMrr: (id: string) => void;
   /** Pull as much as possible from the linked Jira ticket onto the row (new-row autofill). */
   autofill: (id: string) => void;
   /** Open the Notion-style detail panel for a row. */

@@ -64,6 +64,9 @@ read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
 | PATCH | `/jira-backlog/issues/:id` | Update fields on a row | yes |
 | DELETE | `/jira-backlog/issues/:id` | Delete a row | yes |
 | POST | `/jira-backlog/issues/:id/refresh-zd` | Re-fetch one row's Zendesk count | yes |
+| POST | `/jira-backlog/issues/:id/refresh-mrr` | Re-resolve one row's MRR (Jira -> Zendesk -> DOMO) | yes |
+| GET/POST | `/jira-backlog/mrr-overrides` | List / add MRR resolution overrides | yes |
+| DELETE | `/jira-backlog/mrr-overrides/:id` | Delete an MRR override | yes |
 | POST | `/jira-backlog/issues/:id/autofill` | Pull title/priority/squad/sprint/client/ZD count from Jira onto the row | yes |
 
 > The toolbar **"Sync from Jira"** action refreshes each visible row through the per-row
@@ -163,11 +166,87 @@ Until those are set, `isJiraConfigured()` is false: the column simply shows `—
 refresh controls are hidden, and `refresh-zd` returns `409 JIRA_NOT_CONFIGURED`. A
 missing/invalid var never crashes the server.
 
+## MRR resolution (optional — Zendesk + DOMO)
+
+For each bug, resolves the MRR of every client that reported it, summed across distinct
+accounts: **Jira issue -> linked Zendesk ticket(s) -> each ticket's requester email -> DOMO's
+owning account for that email -> that account's latest-complete-month MRR.** Fields on
+`JiraIssue`: `zendeskTicketIds`, `mrr`, `mrrAccounts` (per-account breakdown: email, resolved
+owner email, business name, MRR), `mrrFetchedAt`.
+
+**Step 1 — Jira issue -> Zendesk ticket(s)** (`lib/zendeskClient.js`). Zendesk's documented
+"Jira Links" API (`/api/v2/jira/links`) is *not* the source of truth here — verified live
+against Duda's instance: it has 17k+ historical rows but every one is from ~2015, and current
+issues (which keep a live linked-ticket count in `customfield_13671`) return nothing through
+it. What actually works: Duda's Zendesk-Jira sync bot posts a comment on every linked Zendesk
+ticket mentioning the Jira key, so a full-text ticket search (`GET /api/v2/search.json?
+query=type:ticket {key}`) finds them. Verified live: SUP-6378 (Jira count 2) -> 2 found;
+SUP-5180 (Jira count 4) -> 3 found — **best-effort, not guaranteed-exact.**
+
+**Step 2 — ticket -> requester email**: `GET /api/v2/tickets/:id.json?include=users`
+(sideloaded, one request per ticket).
+
+**Step 3 — email -> owner account -> MRR** (`lib/domoClient.js`), per Duda's BI agent's spec:
+resolve the input email to its account in the accounts dataset; if it has a
+`parent_account_uuid`, the *parent* is the MRR owner (staff/child accounts must roll up —
+`parent_account_email` is a display-only fallback, `parent_account_uuid` is the stable join
+key). Then sum `revenue_net_amount` from the revenue dataset where `payment_type = 'recurring'`
+and `frequency NOT IN ('onetime', 'sfl')`, for the latest complete month
+(`charge_date >= max_netsuite_charge_date AND charge_date < max_netsuite_charge_date + 1
+month`). Two sequential single-dataset queries (Domo's dataset-query endpoint can't join
+across datasets), auth via OAuth2 client-credentials (`scope=data`), token cached in-process.
+
+**Owner-resolution caveats** (both verified live, both handled in `domoClient.js`):
+`account_uuid`/`account_id` are only unique *per instance* (the same uuid/id names unrelated
+accounts on `duda` vs `eu`), so every parent lookup is pinned to the child's `instance`; and
+on some instances (seen on `eu`) the child's `parent_account_uuid` doesn't match any account
+row, so the lookup falls back to `parent_account_email` (also instance-pinned). Owner accounts
+self-reference (`parent_account_uuid` == own `account_uuid`) — only a *different* parent uuid
+triggers the roll-up.
+
+**Diagnostics (`mrrTrace`).** Every refresh records one trace entry per Zendesk ticket (plus a
+single `no_tickets_found` entry when the search found none): `{ ticketId, email, stage,
+detail }`, stage one of `ok | via_override | duplicate_owner | no_tickets_found |
+requester_lookup_failed | no_account_match | mrr_lookup_failed | zero_mrr`. A ticket failure
+never aborts the row — it's recorded and skipped, so a 0 or missing MRR is diagnosable after
+the fact. The UI shows an amber warning on the MRR cell when any ticket has a problem stage,
+and the detail panel lists each failed ticket with its reason. `zero_mrr` is deliberately its
+own stage: the account resolved fine but latest-month MRR is $0 (free account or data gap) —
+different from "couldn't resolve".
+
+**Overrides (`mrr-overrides` collection, managed in the UI).** Some enterprise clients file
+Zendesk tickets from emails that aren't Duda accounts — e.g. 1&1/IONOS's
+`hosting-jira@1und1.de` — so requester-email resolution finds nothing. An override maps a
+matcher to the Duda account email whose MRR should be counted instead: `matchType "org"`
+(a Zendesk organization id — preferred, one row covers every requester the client uses;
+orgs are curated by Duda's support team) or `matchType "email"` (exact requester email).
+Overrides **win** over requester-email resolution — a partner employee's personal Duda
+account must never be counted in place of the real enterprise account. Endpoints:
+`GET/POST /jira-backlog/mrr-overrides`, `DELETE /jira-backlog/mrr-overrides/:id` (admin);
+UI: the toolbar's "MRR overrides" dialog. Seeded mapping: Zendesk org `16877541108` ("1&1",
+domains 1und1.de/ionos.com/web.de/gmx.net) -> `duda-owner-ionos@ionos.com` (account_id 354 on
+the `one` instance — verified to hold all of that instance's latest-month recurring revenue).
+
+**Configured via env vars** (`ZD_SUBDOMAIN`, `ZD_API_EMAIL`, `ZD_API_TOKEN`, `DOMO_CLIENT_ID`,
+`DOMO_CLIENT_SECRET`, `DOMO_ACCOUNTS_DATASET_ID`, `DOMO_REVENUE_DATASET_ID` — see the
+`# === MRR resolution ===` block in `.env`). `isMrrConfigured()` requires Jira + Zendesk + DOMO
+all configured; until then `refresh-mrr` returns `409 MRR_NOT_CONFIGURED` and the daily sync's
+MRR pass is skipped entirely. The two dataset ids in Duda's instance: **"Accounts"**
+(`2f47373f-0537-449c-b088-9fd11e7e678e`, mirrors `bi_par.view_account_segment_flat` — has
+`account_uuid, account_id, instance, account_name, user_type, parent_account_uuid,
+parent_account_email, billing_master_business_name, account_plan_type, 2020_segment`) and
+**"Revenues"** (`8062fa5b-e2c1-4b2c-877f-0c0d71967b35`, mirrors `bi_dwh.fact_revenues` — has
+`account_id, athena_env, charge_date, max_netsuite_charge_date, payment_type, frequency,
+revenue_net_amount`). Validated end-to-end against the BI agent's reference case
+(`sofia.mazzoli@register.it` -> owner `websitebuilder@register.it`, MRR 22535.63 for 2026-06).
+
 ## Daily automatic sync
 
 `jiraBacklogService.syncAllFromJira()` runs the bulk "Sync from Jira" server-side: it
 autofills every linked bug (key or URL) a few at a time, tallying ok/failed and skipping
-gracefully when Jira isn't configured. It never throws for a single-row failure. Two ways to
+gracefully when Jira isn't configured. It never throws for a single-row failure. A second,
+independently-gated MRR-refresh pass rides along (logs with a `[jira-backlog][mrr-sync]`
+prefix) — skipped entirely unless `isMrrConfigured()` (see "MRR resolution" above). Two ways to
 run it daily at **00:00 UTC** — both call the same function and log with a `[jira-backlog][sync]`
 prefix so runs are easy to confirm in Render's log stream:
 
@@ -192,6 +271,7 @@ jiraBacklog/
 ├── jiraBacklogController.js    req/res handlers
 ├── jiraBacklogService.js       DB ops, seeding, urgency-override rules, ZD orchestration
 ├── jiraBacklogModel.js         Mongoose schema (dev/prod collection split)
+├── mrrOverrideModel.js         MRR resolution overrides (Zendesk org/email -> Duda account)
 ├── seed/jiraBacklogSeed.js     89 cleaned seed issues from the sheet (auto-generated, do not edit)
 ├── seed/mapSeedRecord.js       seed-record → JiraIssue doc mapping (shared by seeding + import)
 ├── taskModel.js / taskService.js / taskController.js  tasks + kanban statuses (+ No-ETA review)
@@ -205,7 +285,9 @@ jiraBacklog/
     ├── status.js               STATUS_OPTIONS + deriveStatus() decision tree
     ├── dropdowns.js            canonical dropdown option values (incl. status)
     ├── config.js               env getters (never throws at import)
-    └── jiraClient.js           server-side Zendesk-count fetch
+    ├── jiraClient.js           server-side Zendesk-count fetch
+    ├── zendeskClient.js        server-side MRR resolution step 1-2 (Jira key -> ticket(s) -> requester email)
+    └── domoClient.js           server-side MRR resolution step 3 (email -> owner account -> MRR)
 ```
 
 ## Remove it
@@ -213,7 +295,7 @@ jiraBacklog/
 1. Delete this folder (`calendar-api-backend/src/jiraBacklog/`).
 2. In `app.js`, delete the `jiraBacklogRouter` import + its `app.use("/jira-backlog", …)` line,
    and the `startJiraBacklogScheduler` import + its call.
-3. In `.env`, delete the `# === Jira backlog ===` block.
+3. In `.env`, delete the `# === Jira backlog ===` and `# === MRR resolution ===` blocks.
 4. (Optional) Drop the `jira-issues` / `dev-jira-issues` MongoDB collection, and remove any
    Render Cron Job pointing at `scripts/sync-all-jira.js`.
 5. Remove the frontend half — see `calendar-api-frontend/src/pages/JiraBacklog/README.md`.

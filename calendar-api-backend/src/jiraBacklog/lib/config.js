@@ -63,3 +63,83 @@ export function assertJiraConfig() {
     );
   }
 }
+
+/**
+ * Zendesk config for the MRR-resolution feature: finding which tickets are linked to a
+ * Jira bug and their requester's email. Same getter shape as jiraConfig (live process.env,
+ * never throws at import). Auth is Zendesk's API-token scheme: Basic with `{email}/token`
+ * as the username and the token as the password.
+ */
+export const zendeskConfig = {
+  get subdomain() {
+    return process.env.ZD_SUBDOMAIN || "";
+  },
+  get apiEmail() {
+    return process.env.ZD_API_EMAIL || "";
+  },
+  get apiToken() {
+    return process.env.ZD_API_TOKEN || "";
+  },
+};
+
+export function isZendeskConfigured() {
+  return Boolean(zendeskConfig.subdomain && zendeskConfig.apiEmail && zendeskConfig.apiToken);
+}
+
+export function assertZendeskConfig() {
+  const missing = [];
+  if (!zendeskConfig.subdomain) missing.push("ZD_SUBDOMAIN");
+  if (!zendeskConfig.apiEmail) missing.push("ZD_API_EMAIL");
+  if (!zendeskConfig.apiToken) missing.push("ZD_API_TOKEN");
+  if (missing.length) {
+    throw new Error(
+      `Zendesk integration is not configured. Missing env var(s): ${missing.join(", ")}. ` +
+        `Add them to calendar-api-backend/.env (see src/jiraBacklog/README.md).`,
+    );
+  }
+}
+
+/**
+ * DOMO config for the MRR-resolution feature: resolving a Zendesk requester's email to its
+ * owning account, then that account's latest-complete-month MRR. The two dataset ids are the
+ * hard part — see README's "MRR resolution" section for the column shape each dataset needs.
+ */
+export const domoConfig = {
+  get clientId() {
+    return process.env.DOMO_CLIENT_ID || "";
+  },
+  get clientSecret() {
+    return process.env.DOMO_CLIENT_SECRET || "";
+  },
+  get accountsDatasetId() {
+    return process.env.DOMO_ACCOUNTS_DATASET_ID || "";
+  },
+  get revenueDatasetId() {
+    return process.env.DOMO_REVENUE_DATASET_ID || "";
+  },
+};
+
+export function isDomoConfigured() {
+  return Boolean(
+    domoConfig.clientId && domoConfig.clientSecret && domoConfig.accountsDatasetId && domoConfig.revenueDatasetId,
+  );
+}
+
+export function assertDomoConfig() {
+  const missing = [];
+  if (!domoConfig.clientId) missing.push("DOMO_CLIENT_ID");
+  if (!domoConfig.clientSecret) missing.push("DOMO_CLIENT_SECRET");
+  if (!domoConfig.accountsDatasetId) missing.push("DOMO_ACCOUNTS_DATASET_ID");
+  if (!domoConfig.revenueDatasetId) missing.push("DOMO_REVENUE_DATASET_ID");
+  if (missing.length) {
+    throw new Error(
+      `DOMO integration is not configured. Missing env var(s): ${missing.join(", ")}. ` +
+        `Add them to calendar-api-backend/.env (see src/jiraBacklog/README.md).`,
+    );
+  }
+}
+
+/** True when every leg of the Jira → Zendesk → DOMO MRR chain is configured. */
+export function isMrrConfigured() {
+  return isJiraConfigured() && isZendeskConfigured() && isDomoConfigured();
+}

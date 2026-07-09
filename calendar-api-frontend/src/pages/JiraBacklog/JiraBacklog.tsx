@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ListChecks, Loader2, Plus, RefreshCw } from "lucide-react";
+import { BadgeDollarSign, ListChecks, Loader2, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ import {
   STATUS_OPTIONS,
 } from "./constants";
 import { ManageStatusesDialog } from "./manage-statuses-dialog";
+import { ManageMrrOverridesDialog } from "./manage-mrr-overrides-dialog";
 import { SearchBox } from "./search-box";
 import { StatusMultiSelect } from "./status-multi-select";
 import { usePageFavicon } from "./use-page-favicon";
@@ -64,12 +65,14 @@ export default function JiraBacklog() {
   // but the user can widen it to surface bugs from other statuses too.
   const [toReviewStatuses, setToReviewStatuses] = useState<string[]>(DEFAULT_TO_REVIEW_STATUSES);
   const [jiraConfigured, setJiraConfigured] = useState(false);
+  const [mrrConfigured, setMrrConfigured] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [bugStatuses, setBugStatuses] = useState<BugStatus[]>([]);
   const [manageOpen, setManageOpen] = useState(false);
+  const [mrrOverridesOpen, setMrrOverridesOpen] = useState(false);
   const [dup, setDup] = useState<{ existingId: string; issueKey: string } | null>(null);
   // When a bug is set to "Possible No-ETA", offer to create the 30-day re-evaluation task.
   const [noEtaPrompt, setNoEtaPrompt] = useState<{ issueId: string } | null>(null);
@@ -99,6 +102,7 @@ export default function JiraBacklog() {
     try {
       const [cfg, list] = await Promise.all([jiraApi.getConfig(), jiraApi.getIssues()]);
       setJiraConfigured(cfg.jiraConfigured);
+      setMrrConfigured(cfg.mrrConfigured);
       setIssues(list);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load");
@@ -261,6 +265,27 @@ export default function JiraBacklog() {
     [patchIssue],
   );
 
+  const refreshMrr = useCallback(
+    async (id: string) => {
+      patchIssue(id, { _mrrBusy: true, _mrrError: false });
+      try {
+        const updated = await jiraApi.refreshMrr(id);
+        setIssues((prev) =>
+          prev.map((it) => (it._id === id ? { ...updated, _mrrBusy: false, _mrrError: false } : it)),
+        );
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "MRR_NOT_CONFIGURED") {
+          patchIssue(id, { _mrrBusy: false });
+          toast.error("MRR lookup isn't configured yet.");
+        } else {
+          patchIssue(id, { _mrrBusy: false, _mrrError: true });
+          toast.error(e instanceof Error ? e.message : "MRR fetch failed");
+        }
+      }
+    },
+    [patchIssue],
+  );
+
   const autofill = useCallback(
     async (id: string) => {
       patchIssue(id, { _zdBusy: true, _zdError: false });
@@ -358,16 +383,30 @@ export default function JiraBacklog() {
     () => ({
       canEdit,
       jiraConfigured,
+      mrrConfigured,
       updateField,
       deleteRow: setPendingDeleteId,
       refreshZd,
+      refreshMrr,
       autofill,
       openDetail,
       onStatusChange,
       onIssueUpdated,
       statusOptions,
     }),
-    [canEdit, jiraConfigured, updateField, refreshZd, autofill, openDetail, onStatusChange, onIssueUpdated, statusOptions],
+    [
+      canEdit,
+      jiraConfigured,
+      mrrConfigured,
+      updateField,
+      refreshZd,
+      refreshMrr,
+      autofill,
+      openDetail,
+      onStatusChange,
+      onIssueUpdated,
+      statusOptions,
+    ],
   );
 
   const columns = useMemo(() => buildColumns(), []);
@@ -426,6 +465,11 @@ export default function JiraBacklog() {
               <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
                 <ListChecks className="h-4 w-4" /> Manage statuses
               </Button>
+              {mrrConfigured && (
+                <Button variant="outline" size="sm" onClick={() => setMrrOverridesOpen(true)}>
+                  <BadgeDollarSign className="h-4 w-4" /> MRR overrides
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={addRow}>
                 <Plus className="h-4 w-4" /> Add row
               </Button>
@@ -533,6 +577,10 @@ export default function JiraBacklog() {
           statuses={bugStatuses}
           reload={reloadStatuses}
         />
+      )}
+
+      {canEdit && mrrConfigured && (
+        <ManageMrrOverridesDialog open={mrrOverridesOpen} onOpenChange={setMrrOverridesOpen} />
       )}
     </div>
   );

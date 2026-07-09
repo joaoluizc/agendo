@@ -23,7 +23,13 @@ jiraBacklogRouter.post("/issues", adminOnly, jiraBacklogController.createIssue);
 jiraBacklogRouter.patch("/issues/:id", adminOnly, jiraBacklogController.updateIssue);
 jiraBacklogRouter.delete("/issues/:id", adminOnly, jiraBacklogController.deleteIssue);
 jiraBacklogRouter.post("/issues/:id/refresh-zd", adminOnly, jiraBacklogController.refreshZd);
+jiraBacklogRouter.post("/issues/:id/refresh-mrr", adminOnly, jiraBacklogController.refreshMrr);
 jiraBacklogRouter.post("/issues/:id/autofill", adminOnly, jiraBacklogController.autofill);
+
+// MRR overrides (admin-managed matcher -> Duda account email; see mrrOverrideModel.js)
+jiraBacklogRouter.get("/mrr-overrides", adminOnly, jiraBacklogController.listMrrOverrides);
+jiraBacklogRouter.post("/mrr-overrides", adminOnly, jiraBacklogController.createMrrOverride);
+jiraBacklogRouter.delete("/mrr-overrides/:id", adminOnly, jiraBacklogController.deleteMrrOverride);
 
 // Bug statuses (the issue status dropdown — user-managed: add / delete)
 jiraBacklogRouter.get("/bug-statuses", adminOnly, jiraBacklogController.listBugStatuses);
