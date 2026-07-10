@@ -174,14 +174,16 @@ owning account for that email -> that account's latest-complete-month MRR.** Fie
 `JiraIssue`: `zendeskTicketIds`, `mrr`, `mrrAccounts` (per-account breakdown: email, resolved
 owner email, business name, MRR), `mrrFetchedAt`.
 
-**Step 1 — Jira issue -> Zendesk ticket(s)** (`lib/zendeskClient.js`). Zendesk's documented
-"Jira Links" API (`/api/v2/jira/links`) is *not* the source of truth here — verified live
-against Duda's instance: it has 17k+ historical rows but every one is from ~2015, and current
-issues (which keep a live linked-ticket count in `customfield_13671`) return nothing through
-it. What actually works: Duda's Zendesk-Jira sync bot posts a comment on every linked Zendesk
-ticket mentioning the Jira key, so a full-text ticket search (`GET /api/v2/search.json?
-query=type:ticket {key}`) finds them. Verified live: SUP-6378 (Jira count 2) -> 2 found;
-SUP-5180 (Jira count 4) -> 3 found — **best-effort, not guaranteed-exact.**
+**Step 1 — Jira issue -> Zendesk ticket(s)** (`lib/zendeskClient.js`). Source of truth:
+Zendesk's "Jira Links" API (`/api/v2/jira/links`) — the live table the Zendesk-Jira app
+maintains. Two quirks, both verified against Duda's instance: `filter[ticket_id]` only
+accepts *Zendesk ticket ids* (despite the docs claiming it also takes Jira issue ids, and
+issue-key filtering isn't supported at all), so the reverse lookup fetches the whole table
+(~18k rows, 18 paginated requests) and indexes it by `issue_key`, cached in-process for 10
+minutes — the bulk sync pays that once for every bug. And pre-2016 rows carry
+`issue_key: null`; they're skipped. Verified exact: SUP-6378 -> 2 (Jira count 2), SUP-5180
+-> 4 (Jira count 4), SUP-7002 -> 1 (a link an earlier full-text-search approach missed
+because the sync bot never commented the key on that ticket).
 
 **Step 2 — ticket -> requester email**: `GET /api/v2/tickets/:id.json?include=users`
 (sideloaded, one request per ticket).

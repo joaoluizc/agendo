@@ -279,7 +279,8 @@ async function findMrrOverride({ organizationId, email }) {
 }
 
 /**
- * Resolve MRR for one row: its linked Zendesk ticket(s) (best-effort — see zendeskClient.js)
+ * Resolve MRR for one row: its linked Zendesk ticket(s) (from Zendesk's Jira-links table —
+ * see zendeskClient.js)
  * -> each ticket's requester email (or an admin-managed override, see mrrOverrideModel.js)
  * -> DOMO's owning account -> that account's latest-complete-month MRR, summed across
  * *distinct* owner accounts (so two tickets from the same account never double-count).

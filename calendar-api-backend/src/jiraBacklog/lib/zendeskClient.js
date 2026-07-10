@@ -4,19 +4,23 @@ import { zendeskConfig, assertZendeskConfig } from "./config.js";
  * Server-side Zendesk client for the MRR-resolution feature: given a Jira issue key, find
  * the Zendesk tickets linked to it and their requester's email.
  *
- * Zendesk's documented "Jira Links" API (`/api/v2/jira/links`) turned out NOT to be the
- * source of truth here — verified live against Duda's instance: the endpoint returns real
- * data (17k+ historical rows), but every row is from ~2015 and current Jira issues (e.g.
- * SUP-6378, linked-ticket count 2) return nothing. That legacy integration table appears to
- * have stopped being written to at some point, even though Jira's own linked-ticket count
- * (customfield_13671) keeps updating live.
+ * Source of truth: Zendesk's "Jira Links" API (`/api/v2/jira/links`) — the live table the
+ * Zendesk-Jira app maintains (verified: rows appear within minutes of linking). Two catches,
+ * both verified against Duda's instance:
  *
- * What actually works: Duda's Zendesk-Jira sync bot posts a comment on every linked Zendesk
- * ticket that mentions the Jira key (the mirror image of the "sent from JIRA to all linked
- * Zendesk Support tickets" comment it posts back on the Jira issue) — so a full-text ticket
- * search for the key finds them. Verified live: SUP-6378 (2 linked per Jira) → 2 found;
- * SUP-5180 (4 linked per Jira) → 3 found. It's a close match, not a guaranteed-exact one —
- * treat the result as best-effort, not authoritative.
+ *  - Despite the docs claiming `filter[ticket_id]` accepts "a ticket id or issue id", it only
+ *    matches *Zendesk ticket ids* — filtering by a Jira issue id returns nothing, and
+ *    filtering by issue key isn't supported at all. So a reverse lookup (Jira -> tickets)
+ *    has to fetch the whole table and index it by issue_key. That's ~18k rows = 18 paginated
+ *    requests, so the map is cached in-process (LINKS_CACHE_MS) — the bulk sync pays the cost
+ *    once for every bug, cheaper than even one search per bug.
+ *  - Rows from the pre-2016 era carry `issue_key: null` (only issue_id). Those are skipped:
+ *    the backlog stores keys, and decade-old links are irrelevant to current bugs.
+ *
+ * (An earlier version searched tickets full-text for the Jira key — the sync bot posts a
+ * comment mentioning it on *most* linked tickets. That misses links with no bot comment,
+ * e.g. SUP-7002 <-> ticket 1905190, and can over-match tickets that merely mention a key;
+ * the links table has neither problem.)
  */
 function authHeader() {
   const basic = Buffer.from(`${zendeskConfig.apiEmail}/token:${zendeskConfig.apiToken}`).toString("base64");
@@ -39,18 +43,48 @@ async function zendeskGet(path) {
   return res.json();
 }
 
+// How long a fetched links map stays fresh. Long enough that one bulk sync run reuses a
+// single fetch; short enough that a manual per-row refresh sees recently-created links.
+const LINKS_CACHE_MS = 10 * 60 * 1000;
+
+let linksCache = null; // { map: Map<issueKey, string[]>, fetchedAt: number }
+
 /**
- * Find the Zendesk tickets referencing a Jira issue key (e.g. "SUP-6378"). Returns an array
- * of ticket ids (numbers). Empty array when nothing matches or the key is blank.
+ * Fetch the full Jira-links table and index it by Jira issue key (uppercased). Paginates
+ * with the cursor API (page[size]=1000); result is cached for LINKS_CACHE_MS.
+ */
+async function fetchJiraLinksMap() {
+  if (linksCache && Date.now() - linksCache.fetchedAt < LINKS_CACHE_MS) return linksCache.map;
+
+  const map = new Map();
+  let path = `/api/v2/jira/links?page%5Bsize%5D=1000`;
+  for (let page = 0; page < 100 && path; page++) {
+    const data = await zendeskGet(path);
+    for (const link of data?.links || []) {
+      if (!link.issue_key || !link.ticket_id) continue; // pre-2016 rows carry issue_key: null
+      const key = String(link.issue_key).toUpperCase();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(String(link.ticket_id));
+    }
+    // after_cursor is a full URL; keep only path + query (zendeskGet prepends the base).
+    const after = data?.meta?.has_more ? data?.meta?.after_cursor : null;
+    path = after ? after.replace(/^https?:\/\/[^/]+/, "") : null;
+  }
+
+  linksCache = { map, fetchedAt: Date.now() };
+  console.log(`[jira-backlog][mrr] Jira-links map refreshed — ${map.size} issue key(s)`);
+  return map;
+}
+
+/**
+ * The Zendesk tickets linked to a Jira issue key (e.g. "SUP-6378"), from the links table.
+ * Returns an array of ticket id strings; empty when the key is blank or has no links.
  */
 export async function findLinkedZendeskTicketIds(issueKey) {
   assertZendeskConfig();
   if (!issueKey) return [];
-
-  const query = encodeURIComponent(`type:ticket ${issueKey}`);
-  const data = await zendeskGet(`/api/v2/search.json?query=${query}`);
-  const results = Array.isArray(data?.results) ? data.results : [];
-  return results.map((t) => t.id).filter((id) => Number.isFinite(id));
+  const map = await fetchJiraLinksMap();
+  return map.get(String(issueKey).toUpperCase()) || [];
 }
 
 /**
