@@ -131,10 +131,14 @@ export const TO_REVIEW_COLUMNS: ColumnDesc[] = [
 /** The status field descriptor — rendered prominently at the top of the detail panel. */
 export const STATUS_FIELD: ColumnDesc = F.status;
 
-/** Detail-panel layout: grouped, every field editable. The urgency inputs live here. */
+/**
+ * Detail-panel layout: grouped, every field editable. Details first (the "what"), then
+ * Triage, then the urgency inputs (the panel appends the urgency-override input at the end
+ * of that group — see detail-panel.tsx URGENCY_GROUP_TITLE).
+ */
 export const DETAIL_GROUPS: { title: string; fields: ColumnDesc[] }[] = [
-  { title: "Triage", fields: [F.priority, F.squad, F.client, F.sprint, F.complexity, F.bugType] },
   { title: "Details", fields: [F.desc, F.comment] },
+  { title: "Triage", fields: [F.priority, F.squad, F.client, F.sprint, F.complexity, F.bugType] },
   { title: "Urgency inputs", fields: [F.scope, F.planTier, F.workaround, F.frustration, F.scopeConf, F.workaroundQ] },
 ];
 

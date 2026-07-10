@@ -23,12 +23,14 @@ import { ToReviewView } from "./to-review-view";
 import { DetailPanel } from "./detail-panel";
 import { BugStatus, IssuePatch, JiraIssue, JiraTableMeta, ViewKey } from "./types";
 import {
+  COLUMN_DEFS,
   DEFAULT_TO_REVIEW_STATUSES,
   matchesQuery,
   normalizeQuery,
   POSSIBLE_NO_ETA_STATUS,
   STATUS_OPTIONS,
 } from "./constants";
+import { ColumnsSelect } from "./columns-select";
 import { ManageStatusesDialog } from "./manage-statuses-dialog";
 import { ManageMrrOverridesDialog } from "./manage-mrr-overrides-dialog";
 import { SearchBox } from "./search-box";
@@ -38,10 +40,31 @@ import { usePageTitle } from "./use-page-title";
 import favicon from "./favicon.svg";
 
 const VIEWS: { key: ViewKey; label: string }[] = [
-  { key: "all", label: "All" },
   { key: "open", label: "Open" },
   { key: "toReview", label: "To Review" },
+  { key: "all", label: "All" },
 ];
+
+// Statuses that never appear in the "Open" view (its whole point is excluding them).
+const OPEN_EXCLUDED_STATUSES = ["Fixed/Closed", "Archived"];
+
+// Per-user, per-view hidden-column choices, kept in localStorage keyed by the signed-in
+// user's email so each user (per browser) sees the columns they picked.
+const columnPrefsKey = (email: string) => `jira-backlog:hidden-columns:${email || "anon"}`;
+
+type HiddenColumns = { open: string[]; all: string[] };
+
+function loadHiddenColumns(email: string): HiddenColumns {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(columnPrefsKey(email)) || "{}");
+    return {
+      open: Array.isArray(parsed.open) ? parsed.open : [],
+      all: Array.isArray(parsed.all) ? parsed.all : [],
+    };
+  } catch {
+    return { open: [], all: [] };
+  }
+}
 
 // How many per-row Jira fetches the "Refresh ZD counts" action runs at once. Each request
 // is short, so cells update incrementally as results stream back and no single request can
@@ -49,7 +72,7 @@ const VIEWS: { key: ViewKey; label: string }[] = [
 const REFRESH_CONCURRENCY = 5;
 
 export default function JiraBacklog() {
-  const { type } = useUserSettings();
+  const { type, email } = useUserSettings();
   const canEdit = type === "admin";
 
   usePageFavicon(favicon);
@@ -58,12 +81,18 @@ export default function JiraBacklog() {
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [view, setView] = useState<ViewKey>("all");
+  const [view, setView] = useState<ViewKey>("open");
   // Free-text search, applied in every view (accepts a pasted Jira link — see normalizeQuery).
   const [query, setQuery] = useState("");
   // Which statuses the "To Review" view shows; defaults to the legacy "Review with Squad"
   // but the user can widen it to surface bugs from other statuses too.
   const [toReviewStatuses, setToReviewStatuses] = useState<string[]>(DEFAULT_TO_REVIEW_STATUSES);
+  // Status filters for "Open" / "All" — null means "no narrowing" (every status the view
+  // allows), so the filter stays inert until the user actually unchecks something.
+  const [openStatuses, setOpenStatuses] = useState<string[] | null>(null);
+  const [allStatuses, setAllStatuses] = useState<string[] | null>(null);
+  // Per-user hidden columns for "Open" / "All" (localStorage; reloaded when the user is known).
+  const [hiddenColumns, setHiddenColumns] = useState<HiddenColumns>({ open: [], all: [] });
   const [jiraConfigured, setJiraConfigured] = useState(false);
   const [mrrConfigured, setMrrConfigured] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -128,6 +157,26 @@ export default function JiraBacklog() {
   useEffect(() => {
     reloadStatuses();
   }, [reloadStatuses]);
+
+  // Column choices are per user — reload once the signed-in user's email resolves.
+  useEffect(() => {
+    setHiddenColumns(loadHiddenColumns(email));
+  }, [email]);
+
+  const setHiddenFor = useCallback(
+    (viewKey: "open" | "all", next: string[]) => {
+      setHiddenColumns((prev) => {
+        const merged = { ...prev, [viewKey]: next };
+        try {
+          localStorage.setItem(columnPrefsKey(email), JSON.stringify(merged));
+        } catch {
+          // storage full/blocked — the choice still applies for this session
+        }
+        return merged;
+      });
+    },
+    [email],
+  );
 
   // Open the deep-linked ticket once its id appears in the URL (selectedIssue resolves
   // as soon as the list finishes loading).
@@ -308,14 +357,17 @@ export default function JiraBacklog() {
     [patchIssue],
   );
 
-  // Rows for the current view, before search. "To Review" now shows the user-selected
-  // statuses (was a fixed "Review with Squad").
+  // Rows for the current view, before search. Every view now has a toolbar status filter:
+  // "To Review" shows exactly the selected statuses; "Open" / "All" narrow their base set
+  // only once the user unchecks something (null = inert).
   const viewIssues = useMemo(() => {
-    if (view === "open")
-      return issues.filter((i) => i.status !== "Fixed/Closed" && i.status !== "Archived");
+    if (view === "open") {
+      const base = issues.filter((i) => !OPEN_EXCLUDED_STATUSES.includes(i.status));
+      return openStatuses ? base.filter((i) => openStatuses.includes(i.status)) : base;
+    }
     if (view === "toReview") return issues.filter((i) => toReviewStatuses.includes(i.status));
-    return issues;
-  }, [issues, view, toReviewStatuses]);
+    return allStatuses ? issues.filter((i) => allStatuses.includes(i.status)) : issues;
+  }, [issues, view, toReviewStatuses, openStatuses, allStatuses]);
 
   // Search term (normalised once per keystroke), then the visible rows = view ∩ search.
   const term = useMemo(() => normalizeQuery(query), [query]);
@@ -409,7 +461,18 @@ export default function JiraBacklog() {
     ],
   );
 
-  const columns = useMemo(() => buildColumns(), []);
+  // Statuses offered by the Open view's filter (its base rule already excludes the rest).
+  const openStatusOptions = useMemo(
+    () => statusOptions.filter((s) => !OPEN_EXCLUDED_STATUSES.includes(s)),
+    [statusOptions],
+  );
+
+  // Columns for the current view, minus the user's hidden ones ("To Review" isn't a
+  // DataTable view — it has its own fixed layout).
+  const columns = useMemo(() => {
+    const hidden = view === "open" ? hiddenColumns.open : view === "all" ? hiddenColumns.all : [];
+    return buildColumns(COLUMN_DEFS.filter((d) => !hidden.includes(d.id)));
+  }, [view, hiddenColumns]);
 
   const selectedIssue = useMemo(
     () => issues.find((i) => i._id === selectedId) || null,
@@ -447,11 +510,30 @@ export default function JiraBacklog() {
             </Button>
           ))}
         </div>
-        {view === "toReview" && (
+        {view === "toReview" ? (
           <StatusMultiSelect
             options={statusOptions}
             selected={toReviewStatuses}
             onChange={setToReviewStatuses}
+          />
+        ) : view === "open" ? (
+          <StatusMultiSelect
+            options={openStatusOptions}
+            selected={openStatuses ?? openStatusOptions}
+            onChange={setOpenStatuses}
+          />
+        ) : (
+          <StatusMultiSelect
+            options={statusOptions}
+            selected={allStatuses ?? [...statusOptions]}
+            onChange={setAllStatuses}
+          />
+        )}
+        {view !== "toReview" && (
+          <ColumnsSelect
+            options={COLUMN_DEFS}
+            hidden={view === "open" ? hiddenColumns.open : hiddenColumns.all}
+            onChange={(next) => setHiddenFor(view === "open" ? "open" : "all", next)}
           />
         )}
         <span className="hidden text-sm text-muted-foreground sm:inline">
@@ -499,7 +581,8 @@ export default function JiraBacklog() {
         ) : view === "toReview" ? (
           <ToReviewView issues={visibleIssues} meta={meta} />
         ) : (
-          <DataTable columns={columns} data={visibleIssues} meta={meta} />
+          // Keyed by view so per-column sort/filter state doesn't leak between Open and All.
+          <DataTable key={view} columns={columns} data={visibleIssues} meta={meta} />
         )}
       </div>
 

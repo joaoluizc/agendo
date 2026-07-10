@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -70,6 +70,14 @@ export function DataTable({
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
+  // Columns can be hidden at runtime (the toolbar's Columns picker) — drop any filter or
+  // sort that references a column that no longer exists, or the row models would choke.
+  useEffect(() => {
+    const ids = new Set(columns.map((c) => c.id));
+    setColumnFilters((prev) => prev.filter((f) => ids.has(f.id)));
+    setSorting((prev) => prev.filter((s) => ids.has(s.id)));
+  }, [columns]);
 
   const table = useReactTable({
     data,

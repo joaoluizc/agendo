@@ -2,7 +2,7 @@ import { ColumnDef, FilterFn } from "@tanstack/react-table";
 import { COLUMN_DEFS } from "./constants";
 import { FieldCell } from "./cells";
 import { ColumnHeader } from "./column-header";
-import { JiraIssue, JiraTableMeta } from "./types";
+import { ColumnDesc, JiraIssue, JiraTableMeta } from "./types";
 
 /**
  * TanStack column defs built from COLUMN_DEFS. Cells stay display-only (<FieldCell>);
@@ -24,10 +24,11 @@ const containsFilter: FilterFn<JiraIssue> = (row, columnId, value) =>
     .toLowerCase()
     .includes(String(value).toLowerCase());
 
-export function buildColumns(): ColumnDef<JiraIssue>[] {
-  return COLUMN_DEFS.map((desc) => {
+export function buildColumns(defs: readonly ColumnDesc[] = COLUMN_DEFS): ColumnDef<JiraIssue>[] {
+  return defs.map((desc) => {
     const numeric = NUMERIC_FIELDS.has(desc.field as string);
-    const filterable = desc.type === "select" || desc.type === "text";
+    // Status is filtered from the toolbar's status multi-select (every view), not per-column.
+    const filterable = (desc.type === "select" || desc.type === "text") && desc.field !== "status";
     return {
       id: desc.id,
       accessorFn: numeric

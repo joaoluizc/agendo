@@ -19,6 +19,9 @@ const JiraIssueSchema = new Schema(
     // Consolidated triage state (replaces the old closed/checkedSquad/reviewSquad
     // booleans). One of lib/status.js STATUS_OPTIONS.
     status: { type: String, default: "Backlog" },
+    // The ticket's status *in Jira* ("To Do", "Closed", ...) — Jira-sourced on autofill/sync,
+    // read-only in the UI (agendo's own triage state above is the editable one).
+    jiraStatus: { type: String, default: "" },
     desc: { type: String, default: "" },
     client: { type: String, default: "" },
     priority: { type: String, default: "" },
@@ -58,7 +61,7 @@ const JiraIssueSchema = new Schema(
     // ticket (plus a single no_tickets_found entry when the search found none), so a 0 or
     // missing MRR can be traced to the exact step that failed. stage is one of:
     // ok | via_override | duplicate_owner | no_tickets_found | requester_lookup_failed |
-    // no_account_match | mrr_lookup_failed | zero_mrr.
+    // duda_employee | no_account_match | mrr_lookup_failed | zero_mrr.
     mrrTrace: {
       type: [
         {

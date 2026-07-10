@@ -248,6 +248,9 @@ async function autofillFromJira(id) {
 
   Object.assign(doc, sanitizeWritable(patch));
 
+  // Jira-sourced, read-only fields — set directly, not part of the user-writable set.
+  if (details.jiraStatusName) doc.jiraStatus = details.jiraStatusName;
+
   if (details.zdCount != null) {
     doc.zdCount = details.zdCount;
     doc.zdCountFetchedAt = new Date();
@@ -324,6 +327,15 @@ async function refreshMrr(id) {
     if (!override && !requester.email) {
       entry.stage = "requester_lookup_failed";
       entry.detail = "Ticket has no requester email.";
+      continue;
+    }
+
+    // Account managers often file the ticket themselves — their @duda.co user is not the
+    // client, so resolving it would just report a $0 internal account. Overrides still apply
+    // (the ticket's org identifies the real client even when a Duda employee filed it).
+    if (!override && /@duda\.co$/i.test(requester.email)) {
+      entry.stage = "duda_employee";
+      entry.detail = "Requester is a Duda employee.";
       continue;
     }
 

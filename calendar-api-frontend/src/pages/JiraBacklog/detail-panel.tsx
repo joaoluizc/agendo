@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, AlertTriangle, Archive, ExternalLink, Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Archive,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta, MRR_PROBLEM_STAGES } from "./types";
@@ -242,55 +254,37 @@ function UrgencyField({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }
 }
 
 function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }) {
-  const key = issue.issueKey || extractIssueKey(issue.url);
-  const [draft, setDraft] = useState(issue.url);
+  const [draft, setDraft] = useState("");
   const focused = useRef(false);
-  const wasEmpty = useRef(false);
-  useEffect(() => {
-    if (!focused.current) setDraft(issue.url);
-  }, [issue.url]);
 
+  // Linking is one-shot: the URL input only exists while the row has no Jira ticket yet.
+  // Once linked (and autofilled), the association is fixed — the key lives in the panel
+  // header as a clickable link; there's nothing to edit here. Wrong link? Delete the row
+  // and re-add it.
   const commit = async () => {
     focused.current = false;
     const url = draft.trim();
-    if (url === issue.url) return;
+    if (!url) return;
     const issueKey = extractIssueKey(url);
-    const empty = wasEmpty.current;
     const ok = await meta.updateField(issue._id, { url, issueKey });
-    if (ok && empty && meta.jiraConfigured && issueKey) meta.autofill(issue._id);
+    if (ok && meta.jiraConfigured && issueKey) meta.autofill(issue._id);
   };
 
   return (
     <div className="space-y-2">
-      {issue.url ? (
-        <a
-          href={issue.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-lg font-semibold text-primary hover:underline"
-        >
-          {key || "Open in Jira"} <ExternalLink className="h-4 w-4" />
-        </a>
-      ) : (
-        <p className="text-lg font-semibold text-muted-foreground">No Jira ticket linked</p>
-      )}
-
-      {meta.canEdit && (
+      {meta.canEdit && !issue.url && (
         <Field label="Jira URL">
           <input
             className={inputClass}
             value={draft}
             placeholder="Paste Jira URL"
-            onFocus={() => {
-              focused.current = true;
-              wasEmpty.current = !issue.url;
-            }}
+            onFocus={() => (focused.current = true)}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
               else if (e.key === "Escape") {
-                setDraft(issue.url);
+                setDraft("");
                 focused.current = false;
                 e.currentTarget.blur();
               }
@@ -299,31 +293,58 @@ function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta })
         </Field>
       )}
 
-      {meta.jiraConfigured && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Connected Zendesk tickets</span>
-          {issue._zdBusy ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (
-            <span className="text-sm font-semibold tabular-nums">{issue.zdCount == null ? "—" : issue.zdCount}</span>
-          )}
-          {meta.canEdit && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              disabled={issue._zdBusy}
-              onClick={() => meta.refreshZd(issue._id)}
-              title="Refresh count from Jira"
-            >
-              <RefreshCw className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-      )}
+      <ZdMrrSummary issue={issue} meta={meta} />
+    </div>
+  );
+}
 
-      {meta.mrrConfigured && (
-        <div className="space-y-1.5">
+/**
+ * Zendesk-ticket count + MRR on one line; clicking anywhere on the row toggles the
+ * per-account MRR breakdown + resolution warnings (collapsed by default). The refresh
+ * buttons stop propagation so they don't also toggle.
+ */
+function ZdMrrSummary({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!meta.jiraConfigured && !meta.mrrConfigured) return null;
+
+  const problems = (issue.mrrTrace || []).filter((t) => MRR_PROBLEM_STAGES.has(t.stage));
+  const hasDetails = meta.mrrConfigured && ((issue.mrrAccounts?.length || 0) > 0 || problems.length > 0);
+
+  return (
+    <div
+      className={cn("rounded-md border", hasDetails && "cursor-pointer")}
+      onClick={hasDetails ? () => setExpanded((e) => !e) : undefined}
+    >
+      <div className="flex items-center gap-4 px-3 py-2">
+        {meta.jiraConfigured && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Zendesk tickets</span>
+            {issue._zdBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <span className="text-sm font-semibold tabular-nums">
+                {issue.zdCount == null ? "—" : issue.zdCount}
+              </span>
+            )}
+            {meta.canEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                disabled={issue._zdBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  meta.refreshZd(issue._id);
+                }}
+                title="Refresh count from Jira"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {meta.mrrConfigured && (
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">MRR</span>
             {issue._mrrBusy ? (
@@ -337,21 +358,37 @@ function JiraSection({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta })
                 {issue.mrr == null ? "—" : mrrFormatter.format(issue.mrr)}
               </span>
             )}
+            {problems.length > 0 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
             {meta.canEdit && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
                 disabled={issue._mrrBusy}
-                onClick={() => meta.refreshMrr(issue._id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  meta.refreshMrr(issue._id);
+                }}
                 title="Re-resolve MRR (Jira -> Zendesk -> DOMO)"
               >
                 <RefreshCw className="h-3 w-3" />
               </Button>
             )}
           </div>
+        )}
+
+        {hasDetails &&
+          (expanded ? (
+            <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
+          ))}
+      </div>
+
+      {expanded && hasDetails && (
+        <div className="space-y-1.5 border-t px-3 py-2">
           {issue.mrrAccounts && issue.mrrAccounts.length > 0 && (
-            <ul className="space-y-0.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs">
+            <ul className="space-y-0.5 text-xs">
               {issue.mrrAccounts.map((a, i) => (
                 <li key={i} className="flex items-center justify-between gap-2">
                   <span className="truncate text-muted-foreground" title={`${a.email} -> ${a.ownerEmail}`}>
@@ -392,6 +429,27 @@ function MrrProblems({ issue }: { issue: JiraIssue }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// The DETAIL_GROUPS group that gets the manual urgency-override input appended.
+const URGENCY_GROUP_TITLE = "Urgency inputs";
+
+/** Compact urgency pill for the panel header (score, "REG" for regressions, "—" unset). */
+function UrgencyBadge({ issue }: { issue: JiraIssue }) {
+  const value = issue.urgency;
+  const isReg = value == null && issue.bugType === "Regression";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold tabular-nums",
+        urgencyCellClasses(value),
+      )}
+      title={isReg ? "Regression" : issue.urgencyOverridden ? "Urgency (manually overridden)" : "Urgency (auto-calculated)"}
+    >
+      Urgency {value != null ? value : isReg ? "REG" : "—"}
+      {issue.urgencyOverridden && <Pencil className="h-3 w-3 opacity-60" />}
+    </span>
   );
 }
 
@@ -444,14 +502,22 @@ export function DetailPanel({
       <div className="absolute inset-0 bg-black/40 animate-in fade-in" onClick={onClose} />
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-[92vw] flex-col border-l bg-background shadow-xl animate-in slide-in-from-right duration-200 sm:w-[460px]">
         <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
-          <span
-            className={cn(
-              "inline-block rounded px-2 py-0.5 text-xs font-medium",
-              badgeClasses("status", issue.status || "Backlog"),
+          <div className="flex items-center gap-2.5">
+            {issue.url ? (
+              <a
+                href={issue.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+              >
+                {issue.issueKey || extractIssueKey(issue.url) || "Open in Jira"}
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            ) : (
+              <span className="text-sm font-semibold text-muted-foreground">No Jira ticket linked</span>
             )}
-          >
-            {issue.status || "Backlog"}
-          </span>
+            <UrgencyBadge issue={issue} />
+          </div>
           <button
             onClick={onClose}
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -465,9 +531,15 @@ export function DetailPanel({
           <ArchivedCard issue={issue} />
           <JiraSection issue={issue} meta={meta} />
 
-          <div className="grid gap-4 border-t pt-6">
+          <div className="grid grid-cols-2 gap-4 border-t pt-6">
             <SelectField issue={issue} desc={STATUS_FIELD} meta={meta} />
-            <UrgencyField issue={issue} meta={meta} />
+            <Field label="Jira status">
+              {issue.jiraStatus ? (
+                <p className="py-1.5 text-sm">{issue.jiraStatus}</p>
+              ) : (
+                <p className="py-1.5 text-sm text-muted-foreground">—</p>
+              )}
+            </Field>
           </div>
 
           {DETAIL_GROUPS.map((group) => (
@@ -476,6 +548,8 @@ export function DetailPanel({
                 {group.fields.map((f) => (
                   <FieldEditor key={f.id} issue={issue} desc={f} meta={meta} />
                 ))}
+                {/* The manual override lives at the end of the inputs it overrides. */}
+                {group.title === URGENCY_GROUP_TITLE && <UrgencyField issue={issue} meta={meta} />}
               </div>
             </CollapsibleSection>
           ))}

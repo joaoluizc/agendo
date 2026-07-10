@@ -4,6 +4,8 @@ export interface JiraIssue {
   url: string;
   /** Consolidated triage state — one of STATUS_OPTIONS (replaces the old booleans). */
   status: string;
+  /** The ticket's status in Jira ("To Do", "Closed", ...) — Jira-sourced, read-only. */
+  jiraStatus: string;
   desc: string;
   client: string;
   priority: string;
@@ -60,6 +62,7 @@ export interface MrrTraceEntry {
     | "duplicate_owner"
     | "no_tickets_found"
     | "requester_lookup_failed"
+    | "duda_employee"
     | "no_account_match"
     | "mrr_lookup_failed"
     | "zero_mrr";
@@ -70,6 +73,7 @@ export interface MrrTraceEntry {
 export const MRR_PROBLEM_STAGES: ReadonlySet<MrrTraceEntry["stage"]> = new Set([
   "no_tickets_found",
   "requester_lookup_failed",
+  "duda_employee",
   "no_account_match",
   "mrr_lookup_failed",
   "zero_mrr",

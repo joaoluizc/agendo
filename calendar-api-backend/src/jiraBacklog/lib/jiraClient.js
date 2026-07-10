@@ -110,6 +110,7 @@ export async function fetchIssueDetails(keyOrUrl) {
   const fields = [
     "summary",
     "priority",
+    "status",
     jiraConfig.connectedTicketsField,
     jiraConfig.squadField,
     jiraConfig.sprintField,
@@ -142,6 +143,7 @@ export async function fetchIssueDetails(keyOrUrl) {
     issueKey,
     summary: typeof f.summary === "string" ? f.summary : "",
     priorityName: f.priority?.name || "",
+    jiraStatusName: f.status?.name || "",
     squadValue: extractOptionValue(f[jiraConfig.squadField]),
     sprintName: pickSprintName(f[jiraConfig.sprintField]),
     partnerValue: extractOptionValue(f[jiraConfig.partnerField]),

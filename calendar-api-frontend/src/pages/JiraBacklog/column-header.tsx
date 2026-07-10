@@ -31,8 +31,9 @@ export function ColumnHeader({
 }) {
   const [open, setOpen] = useState(false);
   const sorted = column.getIsSorted(); // false | "asc" | "desc"
+  // Status has no per-column filter — it's filtered from the toolbar's status multi-select.
   const kind: "none" | "text" | "select" =
-    desc.type === "select" ? "select" : desc.type === "text" ? "text" : "none";
+    desc.field === "status" ? "none" : desc.type === "select" ? "select" : desc.type === "text" ? "text" : "none";
   const filterValue = (column.getFilterValue() as string) ?? "";
   const hasFilter = filterValue !== "";
 
