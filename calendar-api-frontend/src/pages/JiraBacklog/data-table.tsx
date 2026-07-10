@@ -25,12 +25,14 @@ const STICKY_TOP = "top-[116px]";
 const isGrow = (id: string) => id === "desc";
 
 /**
- * One rendered table row, memoized — re-renders only when its own issue identity or meta
- * changes. The whole row is clickable and opens the detail panel; the Jira link inside
- * stops propagation so it still opens Jira instead.
+ * One rendered table row, memoized — re-renders only when its own issue identity, meta, or
+ * the column set changes (`cols` is only read by the comparator: without it, toggling a
+ * column in the toolbar's Columns picker would update the headers but leave every memoized
+ * row rendering the old cell layout). The whole row is clickable and opens the detail
+ * panel; the Jira link inside stops propagation so it still opens Jira instead.
  */
 const MemoTableRow = memo(
-  function MemoTableRow({ row, meta }: { row: Row<JiraIssue>; meta: JiraTableMeta }) {
+  function MemoTableRow({ row, meta }: { row: Row<JiraIssue>; meta: JiraTableMeta; cols: ColumnDef<JiraIssue>[] }) {
     return (
       <tr
         className="cursor-pointer border-b transition-colors hover:bg-muted/40"
@@ -51,7 +53,8 @@ const MemoTableRow = memo(
       </tr>
     );
   },
-  (prev, next) => prev.row.original === next.row.original && prev.meta === next.meta,
+  (prev, next) =>
+    prev.row.original === next.row.original && prev.meta === next.meta && prev.cols === next.cols,
 );
 
 /**
@@ -132,7 +135,7 @@ export function DataTable({
         </thead>
         <tbody>
           {rows.length ? (
-            rows.map((row) => <MemoTableRow key={row.id} row={row} meta={meta} />)
+            rows.map((row) => <MemoTableRow key={row.id} row={row} meta={meta} cols={columns} />)
           ) : (
             <tr>
               <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">
