@@ -15,15 +15,27 @@ import { EventColorCell } from "./EventColorCell.tsx";
 export const columns: ColumnDef<Position>[] = [
   {
     id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
+    header: ({ table, column }) => (
+      <div className="flex items-center gap-1">
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          aria-label="Sort by synced"
+          title="Sort by synced"
+        >
+          <ArrowUpDown className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     ),
     cell: ({ row }) =>
       row.original.enforceSync ? (
@@ -37,7 +49,18 @@ export const columns: ColumnDef<Position>[] = [
           aria-label="Select row"
         />
       ),
-    enableSorting: false,
+    enableSorting: true,
+    // accessorFn is required for the column to be sortable at all (TanStack's
+    // getCanSort gate); the sortingFn below is what actually orders rows.
+    accessorFn: (row) => (row.sync || row.enforceSync ? 0 : 1),
+    // Group synced rows first (ascending): synced -> 0, unsynced -> 1. Enforced
+    // rows count as synced even though they're excluded from the selection model.
+    // Uses live selection so it reflects unsaved checkbox toggles too.
+    sortingFn: (rowA, rowB) => {
+      const a = rowA.getIsSelected() || rowA.original.enforceSync ? 0 : 1;
+      const b = rowB.getIsSelected() || rowB.original.enforceSync ? 0 : 1;
+      return a - b;
+    },
     enableHiding: false,
   },
   {

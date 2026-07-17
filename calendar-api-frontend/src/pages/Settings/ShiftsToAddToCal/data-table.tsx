@@ -33,6 +33,7 @@ interface DataTableProps<TValue> {
 export function DataTable<TValue>({ columns, data }: DataTableProps<TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const { rowSelection, setRowSelection } = useSettings();
   // const [rowSelection, setRowSelection] = useState<Record<number, boolean>>({});
 
@@ -41,10 +42,20 @@ export function DataTable<TValue>({ columns, data }: DataTableProps<TValue>) {
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
+    // Editing a row (e.g. picking a color) replaces `data`; without this the page
+    // would snap back to page 1 on every edit. Sort/filter reset the page below.
+    autoResetPageIndex: false,
+    onSortingChange: (updater) => {
+      setSorting(updater);
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
     getSortedRowModel: getSortedRowModel(),
-    onColumnFiltersChange: setColumnFilters,
+    onColumnFiltersChange: (updater) => {
+      setColumnFilters(updater);
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
     getFilteredRowModel: getFilteredRowModel(),
+    onPaginationChange: setPagination,
     // Enforced positions are locked on — exclude them from the selection model so
     // "select all" / "deselect all" can't toggle them.
     enableRowSelection: (row) => !row.original.enforceSync,
@@ -53,9 +64,13 @@ export function DataTable<TValue>({ columns, data }: DataTableProps<TValue>) {
       sorting,
       columnFilters,
       rowSelection,
+      pagination,
     },
   });
 
+  // Seed selection from saved `sync` when the row set loads/changes. Keyed on
+  // length (not the array ref) so per-row edits like color picks don't wipe
+  // unsaved sync toggles or reset selection.
   useEffect(() => {
     const preSelectRows = () => {
       const newSelection = data.reduce((acc, row, index) => {
@@ -65,13 +80,11 @@ export function DataTable<TValue>({ columns, data }: DataTableProps<TValue>) {
         return acc;
       }, {} as Record<number, boolean>);
       setRowSelection(newSelection);
-      console.log(rowSelection);
     };
 
     preSelectRows();
-  }, [data]);
-
-  console.log(rowSelection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.length]);
 
   return (
     <div>
