@@ -18,7 +18,7 @@ const todayISO = (date) => {
   return `${startOfDayISO}/${endOfDayISO}`;
 };
 
-const shiftToEvent = (shift) => {
+const shiftToEvent = (shift, colorId) => {
   const event = {
     summary: shift.position.name,
     description: `event created by agendo on ${new Date().toString()}`,
@@ -31,6 +31,8 @@ const shiftToEvent = (shift) => {
       timeZone: "Brazil/East",
     },
   };
+  // Google Calendar colorId ("1".."11"); omit entirely when no color is chosen.
+  if (colorId) event.colorId = colorId;
   return event;
 };
 

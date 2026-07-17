@@ -120,6 +120,29 @@ const setUserPositionsToSync = async (req, res) => {
 //   }
 // };
 
+const getUserDefaultEventColorId = async (req, res) => {
+  try {
+    const defaultEventColorId =
+      await positionService.getUserDefaultEventColorId(req.auth.userId);
+    res.status(200).json({ defaultEventColorId });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+const setUserDefaultEventColorId = async (req, res) => {
+  const { defaultEventColorId } = req.body;
+  try {
+    const saved = await positionService.setUserDefaultEventColorId(
+      req.auth.userId,
+      defaultEventColorId ?? null,
+    );
+    res.status(200).json({ defaultEventColorId: saved });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 async function getPosition(req, res) {
   const positionId = req.params.positionId;
   try {
@@ -152,6 +175,8 @@ export default {
   getAllPositions,
   setUserPositionsToSync,
   // setUserPositionsToSync_cl,
+  getUserDefaultEventColorId,
+  setUserDefaultEventColorId,
   getPosition,
   deletePosition,
 };

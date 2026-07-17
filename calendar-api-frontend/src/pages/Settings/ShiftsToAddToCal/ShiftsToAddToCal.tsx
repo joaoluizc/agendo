@@ -10,32 +10,48 @@ import {
 import { columns } from "./columns.tsx";
 import { DataTable } from "./data-table.tsx";
 import { useEffect } from "react";
-import { getPositionsToSync, savePositionsToSync } from "./utils.tsx";
+import {
+  getDefaultEventColorId,
+  getPositionsToSync,
+  savePositionsToSync,
+} from "./utils.tsx";
 import { useSettings } from "@/providers/useSettings.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
+import { ApplyColorMenu } from "./ApplyColorMenu.tsx";
 
 export default function ShiftsToAddToCal() {
   const { rowSelection } = useSettings();
-  const { positionsToSync, setPositionsToSync, setOriginalPositionsToSync } =
-    useUserSettings();
+  const {
+    positionsToSync,
+    setPositionsToSync,
+    setOriginalPositionsToSync,
+    setDefaultEventColorId,
+  } = useUserSettings();
 
   useEffect(() => {
     async function getData() {
-      const positionsData = await getPositionsToSync();
+      const [positionsData, defaultColor] = await Promise.all([
+        getPositionsToSync(),
+        getDefaultEventColorId(),
+      ]);
       setPositionsToSync(positionsData);
       setOriginalPositionsToSync(positionsData);
+      setDefaultEventColorId(defaultColor);
     }
     getData();
   }, []);
 
   return (
     <Card className="scroll-mt-20" id="shifts-to-add-to-cal">
-      <CardHeader>
-        <CardTitle>Shifts to add to Google Calendar</CardTitle>
-        <CardDescription>
-          Choose the shifts you want synced to your Google Calendar. Only live
-          channels and breaks are checked by default.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>Synced shifts</CardTitle>
+          <CardDescription>
+            Pick which shifts sync to your Google Calendar and the color each one
+            gets. Only live channels and breaks are checked by default.
+          </CardDescription>
+        </div>
+        <ApplyColorMenu />
       </CardHeader>
       <CardContent>
         <DataTable columns={columns} data={positionsToSync} />

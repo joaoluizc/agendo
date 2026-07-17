@@ -24,17 +24,21 @@ export async function getPositionsToSync(): Promise<Position[]> {
     const positionsData = (await positionsResponse.json()) as Position[];
     console.log("all positions: ", positionsData);
     const toSyncData = (await toSyncResponse.json()) as PositionSync[];
-    const positions = positionsData.map((position) => ({
-      _id: position._id,
-      positionId: position.positionId,
-      name: position.name,
-      type: position.type,
-      color: position.color,
-      enforceSync: position.enforceSync ?? false,
-      sync:
-        toSyncData.find((toSync) => toSync.positionId === position.positionId)
-          ?.sync ?? false,
-    }));
+    const positions = positionsData.map((position) => {
+      const toSync = toSyncData.find(
+        (toSync) => toSync.positionId === position.positionId
+      );
+      return {
+        _id: position._id,
+        positionId: position.positionId,
+        name: position.name,
+        type: position.type,
+        color: position.color,
+        enforceSync: position.enforceSync ?? false,
+        sync: toSync?.sync ?? false,
+        colorId: toSync?.colorId ?? null,
+      };
+    });
     return positions;
   } catch (error) {
     console.error("Failed to fetch positions:", error);
@@ -56,6 +60,9 @@ export async function savePositionsToSync(
     positionId: currPosition.positionId,
     sync: currPosition.enforceSync ? currPosition.sync : !!rowSelection[index],
     name: currPosition.name,
+    // colorId must be sent for every row: the backend replaces the whole
+    // positionsToSync array, so omitting it would wipe saved colors.
+    colorId: currPosition.colorId ?? null,
   }));
   console.log("selectedPositions: ", selectedPositions);
   try {
@@ -72,5 +79,39 @@ export async function savePositionsToSync(
   } catch (error) {
     console.error("Failed to save positions:", error);
     toast.error("Failed to save positions");
+  }
+}
+
+// User-level "one color for every shift" override (null = no override).
+export async function getDefaultEventColorId(): Promise<string | null> {
+  try {
+    const response = await fetch("/api/position/default-color", {
+      method: "GET",
+      mode: "cors",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await response.json();
+    return data.defaultEventColorId ?? null;
+  } catch (error) {
+    console.error("Failed to fetch default event color:", error);
+    return null;
+  }
+}
+
+export async function saveDefaultEventColorId(
+  colorId: string | null
+): Promise<void> {
+  try {
+    await fetch("/api/position/default-color", {
+      method: "PUT",
+      mode: "cors",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ defaultEventColorId: colorId }),
+    });
+  } catch (error) {
+    console.error("Failed to save default event color:", error);
+    toast.error("Failed to save default color");
   }
 }
