@@ -77,7 +77,7 @@ export default function Settings() {
               href="#shifts-to-add-to-cal"
               className={"font-semibold text-primary"}
             >
-              Shifts on GCalendar
+              Synced shifts
             </a>
             <a
               href="#generate-api-token"

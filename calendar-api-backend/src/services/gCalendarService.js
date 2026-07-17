@@ -458,9 +458,17 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
         const shiftsToAdd = userShifts.filter((event) =>
           positionsToSync.includes(event.position.id.toString()),
         );
-        const userEvents = shiftsToAdd.map((shift) =>
-          utils.shiftToEvent(shift),
+        const colorByPositionId = new Map(
+          (user.positionsToSync || [])
+            .filter((p) => p.colorId)
+            .map((p) => [p.positionId.toString(), p.colorId]),
         );
+        const userEvents = shiftsToAdd.map((shift) => {
+          const colorId =
+            user.defaultEventColorId ||
+            colorByPositionId.get(shift.position.id.toString());
+          return utils.shiftToEvent(shift, colorId);
+        });
 
         console.log(
           `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`,
@@ -609,9 +617,19 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
       const shiftsToAdd = userShifts.filter((event) =>
         positionsToSync.includes(event.position.id.toString()),
       );
-      const userEvents = shiftsToAdd.map((shift) =>
-        utils.shiftToEvent(shift),
+      // Per-position Google Calendar colors (Sling positionId -> colorId). The
+      // user-level default, when set, wins over every per-position choice.
+      const colorByPositionId = new Map(
+        (mongoUser.positionsToSync || [])
+          .filter((p) => p.colorId)
+          .map((p) => [p.positionId.toString(), p.colorId]),
       );
+      const userEvents = shiftsToAdd.map((shift) => {
+        const colorId =
+          mongoUser.defaultEventColorId ||
+          colorByPositionId.get(shift.position.id.toString());
+        return utils.shiftToEvent(shift, colorId);
+      });
 
       console.log(
         `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
@@ -850,7 +868,19 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
     const shiftsToAdd = userShifts.filter((event) =>
       positionsToSync.includes(event.position.id.toString()),
     );
-    const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
+    // Per-position Google Calendar colors (Sling positionId -> colorId); the
+    // user-level default, when set, overrides every per-position choice.
+    const colorByPositionId = new Map(
+      (user.positionsToSync || [])
+        .filter((p) => p.colorId)
+        .map((p) => [p.positionId.toString(), p.colorId]),
+    );
+    const userEvents = shiftsToAdd.map((shift) => {
+      const colorId =
+        user.defaultEventColorId ||
+        colorByPositionId.get(shift.position.id.toString());
+      return utils.shiftToEvent(shift, colorId);
+    });
 
     console.log(
       `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.email} on date ${date}`,
@@ -972,7 +1002,17 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
     const shiftsToAdd = userShifts.filter((event) =>
       positionsToSync.includes(event.position.id.toString()),
     );
-    const userEvents = shiftsToAdd.map((shift) => utils.shiftToEvent(shift));
+    const colorByPositionId = new Map(
+      (user.publicMetadata.positionsToSync || [])
+        .filter((p) => p.colorId)
+        .map((p) => [p.positionId.toString(), p.colorId]),
+    );
+    const userEvents = shiftsToAdd.map((shift) => {
+      const colorId =
+        user.publicMetadata.defaultEventColorId ||
+        colorByPositionId.get(shift.position.id.toString());
+      return utils.shiftToEvent(shift, colorId);
+    });
 
     console.log(
       `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
@@ -1046,8 +1086,13 @@ const addEventForShift = async (
       return;
     }
 
+    // Resolve the user's chosen Google Calendar color for this shift's position
+    // (user-level default -> per-position choice -> none). Read from the Mongo user,
+    // the same source the settings panel writes.
+    const position = await positionService.getPositionById(shift.positionId);
+    const colorId = positionService.resolveEventColorId(mongoUser, position);
     // transform shift into calendar event
-    event = await newShiftToEvent(shift);
+    event = await newShiftToEvent(shift, colorId);
     // add event to GCal
     addedEvent = await addEvent_cl(user, event, requestId);
     // add event to addedGCalEvents collection with MongoDB user ID for consistency

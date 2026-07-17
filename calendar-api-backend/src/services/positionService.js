@@ -122,6 +122,38 @@ const setUserPositionsToSync = async (userId, positions) => {
   await user.save();
 };
 
+const getUserDefaultEventColorId = async (userId) => {
+  const user = await userService.findUserByClerkId(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  return user.defaultEventColorId ?? null;
+};
+
+const setUserDefaultEventColorId = async (userId, colorId) => {
+  const user = await userService.findUserByClerkId(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  // Normalize "" / undefined to null so "clear the default" is unambiguous.
+  user.defaultEventColorId = colorId || null;
+  await user.save();
+  return user.defaultEventColorId;
+};
+
+// Resolve the Google Calendar colorId to use for a shift of `position` for `user`.
+// Precedence: user-level default -> per-position choice -> undefined (Google default).
+// `position` is a Position doc; matched against positionsToSync by the Sling positionId,
+// the same key the settings panel reads/writes.
+const resolveEventColorId = (user, position) => {
+  if (!user) return undefined;
+  if (user.defaultEventColorId) return user.defaultEventColorId;
+  const match = (user.positionsToSync || []).find(
+    (p) => p.positionId === position?.positionId,
+  );
+  return match?.colorId || undefined;
+};
+
 export default {
   createPosition,
   getPositions,
@@ -132,4 +164,7 @@ export default {
   getPositionsToSyncForUsers,
   getEnforcedPositionIds,
   setUserPositionsToSync,
+  getUserDefaultEventColorId,
+  setUserDefaultEventColorId,
+  resolveEventColorId,
 };

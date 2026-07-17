@@ -19,6 +19,7 @@ type UserSettingsProviderState = {
   allUsers: UserSafeInfo[];
   positionsToSync: Position[];
   originalPositionsToSync: Position[];
+  defaultEventColorId: string | null;
   isGoogleAuthenticated: boolean;
   userGoogleInfo: string;
   unsavedChangesAlertOpen: boolean;
@@ -32,6 +33,7 @@ type UserSettingsProviderState = {
   setAllUsers: (value: UserSafeInfo[]) => void;
   setPositionsToSync: (value: Position[]) => void;
   setOriginalPositionsToSync: (value: Position[]) => void;
+  setDefaultEventColorId: (value: string | null) => void;
   setIsGoogleAuthenticated: (value: boolean) => void;
   setUserGoogleInfo: (value: string) => void;
   setUnsavedChangesAlertOpen: (value: boolean) => void;
@@ -55,6 +57,9 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [originalPositionsToSync, setOriginalPositionsToSync] = useState<
     Position[]
   >([]);
+  const [defaultEventColorId, setDefaultEventColorId] = useState<string | null>(
+    null
+  );
   const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
   const [userGoogleInfo, setUserGoogleInfo] = useState("");
   const [unsavedChangesAlertOpen, setUnsavedChangesAlertOpen] = useState(false);
@@ -141,6 +146,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     allUsers,
     positionsToSync,
     originalPositionsToSync,
+    defaultEventColorId,
     isGoogleAuthenticated,
     userGoogleInfo,
     unsavedChangesAlertOpen,
@@ -154,6 +160,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     setAllUsers,
     setPositionsToSync,
     setOriginalPositionsToSync,
+    setDefaultEventColorId,
     setIsGoogleAuthenticated,
     setUserGoogleInfo,
     setUnsavedChangesAlertOpen,

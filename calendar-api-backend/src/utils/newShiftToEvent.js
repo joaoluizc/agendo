@@ -1,6 +1,6 @@
 import positionService from "../services/positionService.js";
 
-export async function newShiftToEvent(shift) {
+export async function newShiftToEvent(shift, colorId) {
   const positionName = await positionService.getPositionById(shift.positionId);
   console.log("positionName: ", JSON.stringify(positionName));
 
@@ -16,5 +16,7 @@ export async function newShiftToEvent(shift) {
       timeZone: "GMT",
     },
   };
+  // Google Calendar colorId ("1".."11"); omit entirely when no color is chosen.
+  if (colorId) event.colorId = colorId;
   return event;
 }

@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Position } from "@/types/positionTypes.tsx";
+import { EventColorCell } from "./EventColorCell.tsx";
 
 export const columns: ColumnDef<Position>[] = [
   {
@@ -86,5 +87,11 @@ export const columns: ColumnDef<Position>[] = [
         </Button>
       );
     },
+  },
+  {
+    id: "eventColor",
+    header: "Event color",
+    enableSorting: false,
+    cell: ({ row }) => <EventColorCell row={row} />,
   },
 ];

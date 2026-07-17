@@ -36,6 +36,13 @@ const PositionToSyncSchema = new Schema({
     required: true,
     default: false,
   },
+  // Google Calendar event colorId ("1".."11") for shifts of this position.
+  // Absent/null => no color chosen => Google uses the calendar's default color.
+  colorId: {
+    type: String,
+    required: false,
+    default: null,
+  },
 });
 
 // Define work hours for each day of the week
@@ -152,6 +159,14 @@ const UserSchema = new mongoose.Schema({
     type: [PositionToSyncSchema],
     required: false,
     default: initialPositions,
+  },
+  // User-level "one color for everything" override. When set, every synced shift
+  // (current and future) uses this Google Calendar colorId, ignoring per-position
+  // colorId choices. Null/absent => fall back to per-position colorId.
+  defaultEventColorId: {
+    type: String,
+    required: false,
+    default: null,
   },
   slingId: {
     type: String,
