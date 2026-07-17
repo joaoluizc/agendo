@@ -1120,25 +1120,34 @@ async function shouldSyncShift(
   console.log(
     `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`,
   );
-  console.log(
-    `[${requestId}] - Details of shift being checked: ${JSON.stringify(
-      shift,
-      null,
-      2,
-    )}`,
-  );
+  const shiftPositionId = shift.positionId.toString();
+
   // Admin-enforced positions always sync, overriding the user's preference.
   // Callers in a loop should pass enforcedObjectIds to avoid a query per shift.
   const enforced =
     enforcedObjectIds ??
     (await positionService.getEnforcedPositionIds()).objectIds;
-  const positionsToSync = (clerkUser.publicMetadata.positionsToSync || []).map(
-    (position) => position._id.toString(),
+  if (enforced.includes(shiftPositionId)) {
+    console.log(
+      `[${requestId}] - Position ${shift.positionId} is admin-enforced; syncing`,
+    );
+    return true;
+  }
+
+  // Read the user's real preference from Mongo — the source the settings panel
+  // writes via setUserPositionsToSync. We must NOT read clerkUser.publicMetadata
+  // here: it isn't updated when the user saves, and the previous code synced
+  // every position merely *present* in it, ignoring each entry's `sync` flag —
+  // which caused unchecked positions to keep syncing.
+  // The shift carries the position's Mongo _id; user prefs are keyed by the
+  // Sling positionId, so resolve the Position doc to bridge the two id-spaces
+  // (same match the bulk sync path uses).
+  const mongoUser = await userService.findUserByClerkId(clerkUser.id);
+  const position = await positionService.getPositionById(shift.positionId);
+  const shouldSync = (mongoUser?.positionsToSync || []).some(
+    (pref) => pref.positionId === position?.positionId && pref.sync === true,
   );
-  const shiftPositionId = shift.positionId.toString();
-  const shouldSync =
-    positionsToSync.includes(shiftPositionId) ||
-    enforced.includes(shiftPositionId);
+
   console.log(
     `[${requestId}] - Position ${shift.positionId} sync status: ${shouldSync}`,
   );
