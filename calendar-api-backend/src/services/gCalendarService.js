@@ -449,9 +449,9 @@ const addDaysShiftsToGcal = async (date, requestId = "req-id-nd") => {
           await positionService.getEnforcedPositionIds();
         const positionsToSync = [
           ...new Set([
-            ...user.positionsToSync.map((position) =>
-              position.positionId.toString(),
-            ),
+            ...user.positionsToSync
+              .filter((position) => position.sync === true)
+              .map((position) => position.positionId.toString()),
             ...enforcedSlingIds,
           ]),
         ];
@@ -841,9 +841,11 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
       await positionService.getEnforcedPositionIds();
     const positionsToSync = [
       ...new Set([
-        ...user.positionsToSync.map((position) =>
-          position.positionId.toString(),
-        ),
+        ...user.positionsToSync
+          // Only positions the user actually checked. Without this filter every
+          // position in positionsToSync synced, so unchecked shifts kept syncing.
+          .filter((position) => position.sync === true)
+          .map((position) => position.positionId.toString()),
         ...enforcedSlingIds,
       ]),
     ];
@@ -963,9 +965,9 @@ const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
       await positionService.getEnforcedPositionIds();
     const positionsToSync = [
       ...new Set([
-        ...user.publicMetadata.positionsToSync.map((position) =>
-          position.positionId.toString(),
-        ),
+        ...user.publicMetadata.positionsToSync
+          .filter((position) => position.sync === true)
+          .map((position) => position.positionId.toString()),
         ...enforcedSlingIds,
       ]),
     ];
