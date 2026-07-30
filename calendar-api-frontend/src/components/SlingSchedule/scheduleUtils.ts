@@ -8,23 +8,71 @@ import {
 } from "@/types/gCalendarTypes.ts";
 import { toast } from "sonner";
 
-/** Sort shifts for each user by start time
- * @param {User[]} data - array of users with shifts
- * @param {string} selectedDate - date selected by the user
- * @returns {User[]} - array of users with sorted shifts
- * shifts are sorted by user and then by start time
+/** Midnight that opens the given local calendar day. */
+const startOfLocalDay = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+/** Hours to reach back before local midnight when querying Sling.
+ * Sling filters by shift start, so a shift that began the previous evening and
+ * runs past midnight is only returned if the window opens before it started.
+ * A night shift is comfortably under 12h.
  */
-function sortShifts(data: User[], selectedDate: string): User[] {
+const LOOKBACK_HOURS = 12;
+
+/** The `start/end` range to ask Sling for, plus the local day being rendered.
+ * The window deliberately overshoots backwards so evening shifts that spill
+ * into the rendered day come back; `sortShifts` then trims to the day itself.
+ *
+ * This replaces `getLocalTimeframeISOld`, which offset the window by the
+ * viewer's UTC offset: in BRT (UTC-3) that happened to look back 3h — which is
+ * the only reason cross-midnight shifts ever appeared — but in UTC+ zones it
+ * looked *forward* past midnight, dropping those shifts entirely and pulling in
+ * part of the next day instead. A fixed lookback behaves the same everywhere.
+ */
+const shiftQueryWindow = (date: Date) => {
+  const dayStart = startOfLocalDay(date);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const from = new Date(dayStart);
+  from.setHours(from.getHours() - LOOKBACK_HOURS);
+
+  return {
+    param: `${from.toISOString()}/${dayEnd.toISOString()}`,
+    dayStart,
+    dayEnd,
+  };
+};
+
+/** Whether a shift actually occupies time inside the rendered day.
+ * Boundary-touching shifts are excluded: one ending exactly at `dayStart`
+ * belongs wholly to the previous day. Letting those through is what produced
+ * zero-duration bars — they emitted an invalid `span 0`, collapsed to a ~9px
+ * sliver at column 1, and displaced the row's real shifts onto a second grid
+ * row (the "broken rows").
+ */
+const overlapsDay = (shift: Shift, dayStart: Date, dayEnd: Date) =>
+  new Date(shift.dtend) > dayStart && new Date(shift.dtstart) < dayEnd;
+
+/** Trim each user's shifts to the rendered day, then sort by start time.
+ * @param {User[]} data - array of users with shifts
+ * @param {Date} dayStart - midnight opening the rendered day
+ * @param {Date} dayEnd - midnight closing the rendered day
+ * @returns {User[]} - users with in-day shifts, sorted by their first shift
+ * Users left with no shifts are dropped — the sort below reads `shifts[0]`.
+ */
+function sortShifts(data: User[], dayStart: Date, dayEnd: Date): User[] {
   return data
     .map((user: User) => ({
       ...user,
       shifts: user.shifts
+        .filter((shift: Shift) => overlapsDay(shift, dayStart, dayEnd))
         .sort(
           (a: Shift, b: Shift) =>
             new Date(a.dtstart).getTime() - new Date(b.dtstart).getTime()
-        )
-        .map((shift: Shift) => ({ ...shift, dateRequested: selectedDate })),
+        ),
     }))
+    .filter((user: User) => user.shifts.length > 0)
     .sort(
       (a: User, b: User) =>
         new Date(a.shifts[0].dtstart).getTime() -
@@ -44,8 +92,8 @@ export const getShifts = async (
   setSortedCalendar: (data: User[]) => void
 ): Promise<User[]> => {
   setIsLoading(true);
-  const selectedDate = utils.getLocalTimeframeISOld(date).todayISO;
-  const endpoint = `/api/sling/calendar?date=${selectedDate}`;
+  const { param, dayStart, dayEnd } = shiftQueryWindow(date);
+  const endpoint = `/api/sling/calendar?date=${param}`;
   const response = await fetch(endpoint, {
     method: "GET",
     credentials: "include",
@@ -59,7 +107,7 @@ export const getShifts = async (
     throw new Error("Failed to fetch shifts" + response.statusText);
   }
   const data: User[] = await response.json();
-  const sortedData = sortShifts(data, selectedDate);
+  const sortedData = sortShifts(data, dayStart, dayEnd);
 
   setSortedCalendar(sortedData);
   setIsLoading(false);
@@ -247,6 +295,13 @@ export const calculateGridColumnStart = (
   return startHour * 4 + Math.floor(startMinutes / 15) + 1; // Assuming each column represents 15 minutes
 };
 
+/** How many 15-minute columns the shift occupies within the rendered day.
+ * Both ends are clamped to the day, so a shift crossing either midnight shows
+ * only its visible portion. Clamping the end also keeps the span inside the
+ * grid's 96 columns: overrunning it spawned zero-width implicit tracks, and a
+ * zero-length overlap produced `span 0`, which CSS rejects — the declaration was
+ * dropped and the bar fell back to `auto`, rendering as a stray sliver.
+ */
 export const calculateGridColumnSpan = (
   start: string,
   end: string,
@@ -255,12 +310,14 @@ export const calculateGridColumnSpan = (
   const startAsDate = new Date(start);
   const endAdDate = new Date(end);
   const dayStart = startOfRenderedDay(dateToRender);
-  // Clamp a shift that began on a previous day to the rendered day's midnight so
-  // its visible width covers only the portion falling within this day.
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
   const effectiveStart = startAsDate < dayStart ? dayStart : startAsDate;
+  const effectiveEnd = endAdDate > dayEnd ? dayEnd : endAdDate;
   const durationInMinutes =
-    (endAdDate.getTime() - effectiveStart.getTime()) / (1000 * 60);
-  return Math.ceil(durationInMinutes / 15); // Assuming each column represents 15 minutes
+    (effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60);
+  return Math.max(1, Math.ceil(durationInMinutes / 15)); // Assuming each column represents 15 minutes
 };
 
 /** Formats Google Calendar event start and end times as 'pretty' string
