@@ -7,12 +7,15 @@ import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedCha
 import GenerateAPIToken from "./GenerateAPIToken/GenerateAPIToken.tsx";
 import ManageLocations from "./ManageLocations/ManageLocations.tsx";
 import ManagePositions from "./ManagePositions/ManagePositions.tsx";
+import CoverageTargets from "./CoverageTargets/CoverageTargets.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
   const {
     positionsToSync,
     originalPositionsToSync,
+    coverageMeters,
+    originalCoverageMeters,
     setUnsavedChangesAlertOpen,
     type,
   } = useUserSettings();
@@ -20,7 +23,8 @@ export default function Settings() {
   const hasUnsavedChanges = () => {
     return (
       JSON.stringify(positionsToSync) !==
-      JSON.stringify(originalPositionsToSync)
+        JSON.stringify(originalPositionsToSync) ||
+      JSON.stringify(coverageMeters) !== JSON.stringify(originalCoverageMeters)
     );
   };
 
@@ -35,7 +39,12 @@ export default function Settings() {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [positionsToSync, originalPositionsToSync]);
+  }, [
+    positionsToSync,
+    originalPositionsToSync,
+    coverageMeters,
+    originalCoverageMeters,
+  ]);
 
   const blocker: Blocker = useBlocker(({ currentLocation, nextLocation }) => {
     if (
@@ -91,6 +100,15 @@ export default function Settings() {
             >
               Manage Locations
             </a>
+            {/* Coverage targets are admin-only, so the link is too. */}
+            {type === "admin" && (
+              <a
+                href="#coverage-targets"
+                className={"font-semibold text-primary"}
+              >
+                Coverage targets
+              </a>
+            )}
           </nav>
           <div className="grid gap-6" id="settings-wrapper">
             {/* <GoogleIntegration></GoogleIntegration> */}
@@ -100,6 +118,7 @@ export default function Settings() {
                 <GenerateAPIToken />
                 <ManageLocations />
                 <ManagePositions />
+                <CoverageTargets />
               </div>
             )}
           </div>

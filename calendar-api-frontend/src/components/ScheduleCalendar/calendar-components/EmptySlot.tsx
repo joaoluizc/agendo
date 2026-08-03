@@ -7,13 +7,12 @@ import { toast } from "sonner";
 
 type EmptySlotProps = {
   userId: string;
-  visitorId: string;
   currentHour: number;
   selectedDate: Date;
 };
 
 function EmptySlot(props: EmptySlotProps) {
-  const { userId, visitorId, currentHour, selectedDate } = props;
+  const { userId, currentHour, selectedDate } = props;
   const { type: userType } = useUserSettings();
   const { shiftInDrag, setShiftInDrag, shifts, setShifts, events, setEvents } =
     useSchedule();
@@ -63,40 +62,42 @@ function EmptySlot(props: EmptySlotProps) {
     }
 
     const createdShift = responseData.data;
+    const targetUserId = createdShift.userId;
 
-    if (!shifts[createdShift.userId]) {
-      shifts[createdShift.userId] = [];
-    }
+    // Replace every level rather than mutating in place: the grid memoises each
+    // agent's lane packing on their own shift array, so an array that keeps its
+    // identity leaves the moved shift invisible until a reload. Filtering the
+    // target as well as the source keeps a same-agent drop from duplicating it.
+    const withoutMoved = (userShifts: Shift[] | undefined) =>
+      (userShifts ?? []).filter((shift) => shift._id !== createdShift._id);
 
-    const prevUserShifts = shifts[prevUserId].filter(
-      (shift) => shift._id !== createdShift._id
-    );
-    console.log("createdShift", createdShift);
-    console.log("prevUserShifts", prevUserShifts);
-    shifts[prevUserId] = prevUserShifts;
-
-    shifts[createdShift.userId].push(createdShift);
-
-    shifts[createdShift.userId].sort(
+    const updated = { ...shifts };
+    updated[prevUserId] = withoutMoved(updated[prevUserId]);
+    updated[targetUserId] = [
+      ...withoutMoved(updated[targetUserId]),
+      createdShift,
+    ].sort(
       (a, b) =>
         new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
     );
 
-    setShifts({ ...shifts });
+    setShifts(updated);
 
     if (createdShift.isSynced) {
-      events
-        .find((event) => event.userId === createdShift.userId)
-        ?.events.push(createdShift.syncedEvent);
-      events
-        .find((event) => event.userId === createdShift.userId)
-        ?.events.sort((a, b) => {
-          return (
-            new Date(a.start.dateTime).getTime() -
-            new Date(b.start.dateTime).getTime()
-          );
-        });
-      setEvents([...events]);
+      setEvents(
+        events.map((calendarUser) =>
+          calendarUser.userId === targetUserId
+            ? {
+                ...calendarUser,
+                events: [...calendarUser.events, createdShift.syncedEvent].sort(
+                  (a, b) =>
+                    new Date(a.start.dateTime).getTime() -
+                    new Date(b.start.dateTime).getTime()
+                ),
+              }
+            : calendarUser
+        )
+      );
     }
   };
 
@@ -124,42 +125,27 @@ function EmptySlot(props: EmptySlotProps) {
     }
   };
 
-  return userType === "admin" ? (
+  // One cell per hour, sitting underneath the shift lanes as a full-height click and
+  // drop target. The row's hour lines and tint are drawn by AgentRow, so these cells
+  // stay transparent — they exist for the interaction, not the paint.
+  if (userType !== "admin") return <div key={`key-${currentHour}`} />;
+
+  return (
     <CreateShiftDialog selectedDate={date} selectedUserId={userId}>
       <div
         key={`key-${currentHour}`}
         className={cn(
-          "border-r",
-          String(userId) === String(visitorId)
-            ? "border-primary/20"
-            : "border-secondary",
-          new Date().getHours() === currentHour
-            ? "bg-secondary/80"
-            : "background"
+          "group flex h-full cursor-pointer items-center justify-center",
+          "hover:bg-foreground/[0.04]"
         )}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
       >
-        <div
-          className={
-            "m-1 h-10 hover:border-2 justify-center items-center cursor-pointer flex group"
-          }
-        >
-          <span className="group-hover:block hidden">+</span>
-        </div>
+        <span className="hidden text-[11px] leading-none text-muted-foreground group-hover:block">
+          +
+        </span>
       </div>
     </CreateShiftDialog>
-  ) : (
-    <div
-      key={`key-${currentHour}`}
-      className={cn(
-        "border-r",
-        String(userId) === String(visitorId)
-          ? "border-primary/20"
-          : "border-secondary",
-        new Date().getHours() === currentHour ? "bg-secondary/80" : "background"
-      )}
-    ></div>
   );
 }
 

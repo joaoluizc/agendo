@@ -1,6 +1,8 @@
 import { createContext, useState, useEffect } from "react";
 import { Position } from "@/types/positionTypes.ts";
 import { UserSafeInfo } from "@/types/userTypes";
+import { CoverageMeter } from "@/types/coverageTypes";
+import { getCoverageMeters } from "@/pages/Settings/CoverageTargets/coverageUtils";
 import { useAuth } from "@clerk/clerk-react"; // Assuming you are using Clerk's useAuth hook
 
 type UserSettingsProviderProps = {
@@ -19,6 +21,8 @@ type UserSettingsProviderState = {
   allUsers: UserSafeInfo[];
   positionsToSync: Position[];
   originalPositionsToSync: Position[];
+  coverageMeters: CoverageMeter[];
+  originalCoverageMeters: CoverageMeter[];
   defaultEventColorId: string | null;
   isGoogleAuthenticated: boolean;
   userGoogleInfo: string;
@@ -33,6 +37,8 @@ type UserSettingsProviderState = {
   setAllUsers: (value: UserSafeInfo[]) => void;
   setPositionsToSync: (value: Position[]) => void;
   setOriginalPositionsToSync: (value: Position[]) => void;
+  setCoverageMeters: (value: CoverageMeter[]) => void;
+  setOriginalCoverageMeters: (value: CoverageMeter[]) => void;
   setDefaultEventColorId: (value: string | null) => void;
   setIsGoogleAuthenticated: (value: boolean) => void;
   setUserGoogleInfo: (value: string) => void;
@@ -56,6 +62,10 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [positionsToSync, setPositionsToSync] = useState<Position[]>([]);
   const [originalPositionsToSync, setOriginalPositionsToSync] = useState<
     Position[]
+  >([]);
+  const [coverageMeters, setCoverageMeters] = useState<CoverageMeter[]>([]);
+  const [originalCoverageMeters, setOriginalCoverageMeters] = useState<
+    CoverageMeter[]
   >([]);
   const [defaultEventColorId, setDefaultEventColorId] = useState<string | null>(
     null
@@ -134,6 +144,25 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     }
   }, [isSignedIn]);
 
+  // Coverage meters are admin-only on both ends, and `type` only lands once
+  // /api/user/info resolves — so this can't ride along with the fetches above.
+  // `originalCoverageMeters` is the baseline the Settings card diffs against for
+  // its dirty state and Reset, mirroring positionsToSync.
+  useEffect(() => {
+    if (!userInfoLoaded || type !== "admin") return;
+
+    const loadCoverageMeters = async () => {
+      try {
+        const meters = await getCoverageMeters();
+        setCoverageMeters(meters);
+        setOriginalCoverageMeters(meters);
+      } catch (e) {
+        console.error("Failed to get coverage meters", e);
+      }
+    };
+    loadCoverageMeters();
+  }, [userInfoLoaded, type]);
+
   const value = {
     firstName,
     lastName,
@@ -146,6 +175,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     allUsers,
     positionsToSync,
     originalPositionsToSync,
+    coverageMeters,
+    originalCoverageMeters,
     defaultEventColorId,
     isGoogleAuthenticated,
     userGoogleInfo,
@@ -160,6 +191,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     setAllUsers,
     setPositionsToSync,
     setOriginalPositionsToSync,
+    setCoverageMeters,
+    setOriginalCoverageMeters,
     setDefaultEventColorId,
     setIsGoogleAuthenticated,
     setUserGoogleInfo,

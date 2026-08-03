@@ -1,42 +1,43 @@
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { useSchedule } from "@/providers/useSchedule";
 // import BulkCopyBtn from "./BulkCopyBtn";
 import BulkDeleteBtn from "./BulkDeleteBtn";
 import BulkDeselectBtn from "./BulkDeselectBtn";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { ListChecks } from "lucide-react";
 
+/**
+ * Enters bulk-select mode, which reveals per-shift selection on the grid.
+ *
+ * Behaviour is unchanged from the old `Bulk Select` switch — it's a button now
+ * because the toolbar is a row of buttons and a lone switch read as a setting rather
+ * than a mode you step into and back out of.
+ */
 function ToggleBulkSelector() {
   const { type } = useUserSettings();
   const { isBulkSelectorActive, setIsBulkSelectorActive } = useSchedule();
 
-  const toggleBulkSelector = () => {
-    setIsBulkSelectorActive(!isBulkSelectorActive);
-  };
+  if (type !== "admin") return null;
 
   return (
-    type === "admin" && (
-      <div
-        className={`flex space-x-3 ml-auto p-2 rounded-md border border-border px-4 ${
-          isBulkSelectorActive ? "pl-1" : ""
-        }`}
+    <div className="flex items-center gap-2">
+      <Button
+        variant={isBulkSelectorActive ? "secondary" : "outline"}
+        className="h-[34px] gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px]"
+        onClick={() => setIsBulkSelectorActive(!isBulkSelectorActive)}
       >
-        {isBulkSelectorActive && (
-          <div id="bulk-selector-active-buttons" className="h-5">
-            {/* <BulkCopyBtn /> */}
-            <BulkDeselectBtn />
-            <BulkDeleteBtn />
-          </div>
-        )}
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="bulk-selector-toggle"
-            checked={isBulkSelectorActive}
-            onCheckedChange={toggleBulkSelector}
-          />
-          <p className="text-sm">Bulk Select</p>
+        <ListChecks size={15} />
+        {isBulkSelectorActive ? "Done selecting" : "Select shifts"}
+      </Button>
+
+      {isBulkSelectorActive && (
+        <div id="bulk-selector-active-buttons" className="flex items-center">
+          {/* <BulkCopyBtn /> */}
+          <BulkDeselectBtn />
+          <BulkDeleteBtn />
         </div>
-      </div>
-    )
+      )}
+    </div>
   );
 }
 
