@@ -51,6 +51,15 @@
     --radius: 0.5rem;
 
     --shiftmix: 203 72% 65%;
+
+    /* Schedule grid tokens (see src/components/ScheduleCalendar). --border is too
+       heavy for the 48 inner grid lines, and the grid needs a band a step off the
+       card plus a warn hue that isn't --destructive. */
+    --border-subtle: 214.3 31.8% 95.5%;
+    --band: 210 40% 98%;
+    --warn: 25 90% 48%;
+    --warn-bg: 33 100% 96%;
+    --me-tint: 217 60% 97%;
   }
 
   .dark {
@@ -83,6 +92,16 @@
     --ring: 212.7 26.8% 83.9%;
 
     --shiftmix: 240 100% 25%;
+
+    /* Dark background and card are the same slate in this theme, so --band has to
+       lift rather than recede to stay legible against both. */
+    --border-subtle: 217.2 32.6% 13%;
+    --band: 217.2 32.6% 10%;
+    --warn: 27 88% 58%;
+    /* Kept close to --card: a fully-missed day fills every one of the 48 cells, and
+       anything stronger turns the whole coverage row into a solid block. */
+    --warn-bg: 25 45% 11%;
+    --me-tint: 217.2 40% 12%;
   }
 }
 

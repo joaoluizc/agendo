@@ -378,13 +378,13 @@ export default function NewShiftForm({ selectedDate }: NewShiftFormProps) {
     <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
       <DialogTrigger asChild>
         <Button
-          variant="outline"
+          className="h-[34px] gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold"
           style={{
             display: userType !== "admin" ? "none" : "flex",
             alignItems: "center",
           }}
         >
-          <SquarePen size="16" /> Create New Shift
+          <SquarePen size="15" /> New shift
         </Button>
       </DialogTrigger>
       <DialogContent

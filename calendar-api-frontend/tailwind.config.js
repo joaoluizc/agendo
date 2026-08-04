@@ -55,6 +55,15 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Schedule grid tokens — see the matching block in src/index.css.
+        // `border-subtle` is a color, so the border utility is `border-border-subtle`.
+        "border-subtle": "hsl(var(--border-subtle))",
+        band: "hsl(var(--band))",
+        warn: {
+          DEFAULT: "hsl(var(--warn))",
+          bg: "hsl(var(--warn-bg))",
+        },
+        "me-tint": "hsl(var(--me-tint))",
       },
       borderRadius: {
         lg: "var(--radius)",

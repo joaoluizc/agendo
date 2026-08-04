@@ -76,7 +76,8 @@ const POSITION_TYPES = [
   "training",
 ];
 
-const DEFAULT_COLORS = [
+/** Shared with Coverage Targets so meters and positions draw from one palette. */
+export const DEFAULT_COLORS = [
   "#3B82F6",
   "#EF4444",
   "#10B981",

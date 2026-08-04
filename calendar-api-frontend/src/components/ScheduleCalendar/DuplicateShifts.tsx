@@ -170,12 +170,13 @@ function DuplicateShifts({ selectedDate }: DuplicateShiftsProps) {
       <DialogTrigger asChild>
         <Button
           variant="outline"
+          className="h-[34px] gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px]"
           style={{
             display: userType !== "admin" ? "none" : "flex",
             alignItems: "center",
           }}
         >
-          <Copy size="16" /> Duplicate shifts
+          <Copy size="15" /> Duplicate day
         </Button>
       </DialogTrigger>
       <DialogContent

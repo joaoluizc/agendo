@@ -10,6 +10,7 @@ import userRouter from "./src/routers/userRouter.js";
 import gCalendarRouter from "./src/controllers/gCalendarController.js";
 import slingRouter from "./src/routers/slingRouter.js";
 import positionRouter from "./src/routers/positionRouters.js";
+import coverageMeterRouter from "./src/routers/coverageMeterRouter.js";
 import shiftRouter from "./src/routers/shiftRouter.js";
 import locationRouter from "./src/routers/locationRouter.js";
 import skillRouter from "./src/routers/skillRouter.js";
@@ -67,6 +68,8 @@ startJiraBacklogScheduler();
 app.use("/gcalendar", gCalendarRouter);
 app.use("/sling", requireAuth(), slingRouter);
 app.use("/position", requireAuth(), positionRouter);
+// Coverage targets for the schedule page. Admin-only is enforced inside the router.
+app.use("/coverage-meter", requireAuth(), coverageMeterRouter);
 app.use("/user", userRouter);
 app.use("/shift", requireAuth(), shiftRouter);
 app.use("/location", requireAuth(), locationRouter);
