@@ -22,3 +22,20 @@ export type PositionSync = {
   sync: boolean;
   colorId?: string | null;
 };
+
+/**
+ * How one position resolves for one agent, from `GET /api/position/sync-rules`.
+ *
+ * Note `positionId` is the Mongo `Position._id` — the id a `Shift` carries and the key
+ * of `allPositions` — *not* the Sling `Position.positionId` that `PositionSync` above is
+ * keyed by. The backend resolves across the two id spaces so no client has to.
+ */
+export type PositionSyncRule = {
+  positionId: string;
+  /** An admin forced this position to sync for everyone. */
+  enforced: boolean;
+  /** The agent's own choice in Settings → shifts to add to calendar. */
+  preference: boolean;
+  /** `enforced || preference` — whether a shift here reaches their calendar. */
+  willSync: boolean;
+};

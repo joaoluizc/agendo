@@ -113,6 +113,59 @@ const getEnforcedPositionIds = async () => {
   };
 };
 
+/**
+ * Does this user's own preference sync shifts on `position`?
+ *
+ * The single home of the id-space bridge, and the reason it is a named function rather
+ * than an inline `.some()`: a user's preferences are keyed by the **Sling** positionId,
+ * while a Shift carries the position's **Mongo _id**. Comparing the wrong pair silently
+ * matches nothing, and treating a mere entry as consent — ignoring its `sync` flag —
+ * is what made unchecked positions keep syncing. Every caller goes through here.
+ *
+ * @param {object} user  Mongo user doc (not the Clerk user: `publicMetadata` is not
+ *                       updated when the settings panel saves).
+ * @param {object} position  Position doc.
+ */
+const prefersSync = (user, position) =>
+  (user?.positionsToSync || []).some(
+    (pref) => pref.positionId === position?.positionId && pref.sync === true,
+  );
+
+/**
+ * Every position's sync verdict for one user.
+ *
+ * The same two-step rule the per-shift gate applies (`gCalendarService.shouldSyncShift`):
+ * admin enforcement wins, otherwise the user's own preference decides. Exposed so an
+ * admin can see whether a given agent's shift will actually reach their calendar —
+ * previously only the backend could answer that, so the UI had to stay vague.
+ *
+ * Keyed by Mongo `_id` because that is what a Shift carries and what the frontend
+ * already holds in `allPositions`, which keeps the Sling-id bridge on this side of the
+ * wire where the canonical logic lives.
+ */
+const getSyncRulesForUser = async (clerkUserId) => {
+  const user = await userService.findUserByClerkId(clerkUserId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const [positions, { objectIds: enforcedObjectIds }] = await Promise.all([
+    getPositions(),
+    getEnforcedPositionIds(),
+  ]);
+
+  return positions.map((position) => {
+    const enforced = enforcedObjectIds.includes(position._id.toString());
+    const preference = prefersSync(user, position);
+    return {
+      positionId: position._id.toString(),
+      enforced,
+      preference,
+      willSync: enforced || preference,
+    };
+  });
+};
+
 const setUserPositionsToSync = async (userId, positions) => {
   const user = await userService.findUserByClerkId(userId);
   if (!user) {
@@ -163,6 +216,8 @@ export default {
   getUserPositionsToSync,
   getPositionsToSyncForUsers,
   getEnforcedPositionIds,
+  prefersSync,
+  getSyncRulesForUser,
   setUserPositionsToSync,
   getUserDefaultEventColorId,
   setUserDefaultEventColorId,

@@ -9,6 +9,8 @@ type ScheduleToolbarProps = {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   isToday: boolean;
+  /** Refetch the day on screen — used when a duplicate lands on it. */
+  onReload: () => void;
 };
 
 /** A given Date, shifted by `delta` days and normalised to local midnight. */
@@ -26,6 +28,7 @@ const ScheduleToolbar = ({
   selectedDate,
   onSelectDate,
   isToday,
+  onReload,
 }: ScheduleToolbarProps) => (
   <div className="flex flex-wrap items-end gap-4 px-5 pb-3.5 pt-5">
     <div className="min-w-0">
@@ -91,7 +94,7 @@ const ScheduleToolbar = ({
     </Label>
 
     <div className="ml-auto flex flex-wrap items-center gap-2.5">
-      <DuplicateShifts selectedDate={selectedDate} />
+      <DuplicateShifts selectedDate={selectedDate} onDuplicated={onReload} />
       <ToggleBulkSelector />
       <CreateShiftForm selectedDate={selectedDate} />
     </div>

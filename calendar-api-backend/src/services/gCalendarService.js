@@ -924,142 +924,6 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
   }
 };
 
-const addUsersDayShifts_cl = async (user, date, requestId = "req-id-nd") => {
-  console.log(`[${requestId}] - Adding user's day shifts to GCal`);
-  try {
-    const calendar = await slingController.getCalendar(date);
-    console.log(
-      `[${requestId}] - Found ${calendar.length} shifts for date ${date}`,
-    );
-
-    // Delete previously-tracked events BEFORE checking whether the user has shifts today.
-    // Without this ordering, syncing a day where all shifts were deleted would leave stale
-    // GCal events behind (the !slingUser guard would return early and skip cleanup).
-    const prevAddedEventsByUsers =
-      await addedGCalEventsService.findEventsByDate(date, requestId);
-    const prevAddedEventsForUser = prevAddedEventsByUsers.find(
-      (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
-    );
-    if (prevAddedEventsForUser) {
-      console.log(
-        `[${requestId}] - Deleting ${prevAddedEventsForUser.events?.length} tracked events for user ${user.firstName} on date ${date}`,
-      );
-      const { deletedIds, failedIds } = await deleteEvents_cl(
-        user,
-        prevAddedEventsForUser.events,
-        requestId,
-      );
-      const eventsToRemoveFromTracking = prevAddedEventsForUser.events.filter(
-        (e) => deletedIds.includes(e.id),
-      );
-      if (eventsToRemoveFromTracking.length > 0) {
-        await addedGCalEventsService.deleteEvents(
-          user.id,
-          eventsToRemoveFromTracking,
-          requestId,
-        );
-      }
-      if (failedIds.length > 0) {
-        console.warn(
-          `[${requestId}] - ${failedIds.length} event(s) could not be deleted from GCal for user ${user.firstName} — they may appear as duplicates`,
-        );
-      }
-    }
-
-    const slingUser = calendar.find((slingUserCal) => {
-      console.log(
-        `comparing ${slingUserCal.id} with ${user.publicMetadata.slingId}`,
-      );
-      return Number(slingUserCal.id) === Number(user.publicMetadata.slingId);
-    });
-    if (!slingUser) {
-      console.log(
-        `[${requestId}] - Found no shifts for user ${user.firstName}, no new events to add`,
-      );
-      return {
-        status: 200,
-        message: `Found no shifts for user ${user.firstName}, no new events to add`,
-      };
-    }
-    const userShifts = slingUser.shifts;
-    console.log(
-      `[${requestId}] - Found ${userShifts.length} shifts for user ${user.firstName}`,
-    );
-
-    console.log(
-      `[${requestId}] - Filtering shifts for ${user.firstName} to what user wants to sync`,
-    );
-    // Defensive: this function is currently unwired (no callers), but keep it
-    // consistent with the live paths — enforced positions always sync.
-    const { slingIds: enforcedSlingIds } =
-      await positionService.getEnforcedPositionIds();
-    const positionsToSync = [
-      ...new Set([
-        ...user.publicMetadata.positionsToSync
-          .filter((position) => position.sync === true)
-          .map((position) => position.positionId.toString()),
-        ...enforcedSlingIds,
-      ]),
-    ];
-    const shiftsToAdd = userShifts.filter((event) =>
-      positionsToSync.includes(event.position.id.toString()),
-    );
-    const colorByPositionId = new Map(
-      (user.publicMetadata.positionsToSync || [])
-        .filter((p) => p.colorId)
-        .map((p) => [p.positionId.toString(), p.colorId]),
-    );
-    const userEvents = shiftsToAdd.map((shift) => {
-      const colorId =
-        user.publicMetadata.defaultEventColorId ||
-        colorByPositionId.get(shift.position.id.toString());
-      return utils.shiftToEvent(shift, colorId);
-    });
-
-    console.log(
-      `[${requestId}] - Adding ${userEvents.length} shifts to GCal for ${user.firstName} on date ${date}`,
-    );
-
-    const addResults = await Promise.allSettled(
-      userEvents.map((event) => addEvent_cl(user, event, requestId)),
-    );
-
-    const addedEvents = addResults
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => r.value);
-    const failedAdds = addResults.filter((r) => r.status === "rejected");
-
-    if (failedAdds.length > 0) {
-      const firstError =
-        failedAdds[0].reason?.errors?.[0]?.message ||
-        failedAdds[0].reason?.message ||
-        "Unknown error";
-      console.error(
-        `[${requestId}] - ${failedAdds.length}/${userEvents.length} event(s) failed to add for user ${user.firstName}. First error: ${firstError}`,
-      );
-    }
-
-    if (addedEvents.length > 0) {
-      await addedGCalEventsService.addEvents_cl(user, addedEvents, requestId);
-    }
-
-    console.log(
-      `[${requestId}] - ${addedEvents.length}/${userEvents.length} event(s) added for user ${user.firstName}`,
-    );
-    return {
-      status: 200,
-      message: `${addedEvents.length} shifts added to GCal for ${user.firstName}`,
-      addedEvents,
-    };
-  } catch (e) {
-    console.log(
-      `[${requestId}] - Error adding shifts to GCal: `,
-      JSON.stringify(e),
-    );
-    return { status: 500, message: "Error adding shifts to GCal" };
-  }
-};
-
 const addEventForShift = async (
   userId,
   shift,
@@ -1142,13 +1006,12 @@ async function shouldSyncShift(
   // every position merely *present* in it, ignoring each entry's `sync` flag —
   // which caused unchecked positions to keep syncing.
   // The shift carries the position's Mongo _id; user prefs are keyed by the
-  // Sling positionId, so resolve the Position doc to bridge the two id-spaces
-  // (same match the bulk sync path uses).
+  // Sling positionId, so positionService.prefersSync owns that bridge. It is the
+  // same predicate positionService.getSyncRulesForUser reports to admins, so what
+  // the edit dialog promises and what this gate does cannot drift apart.
   const mongoUser = await userService.findUserByClerkId(clerkUser.id);
   const position = await positionService.getPositionById(shift.positionId);
-  const shouldSync = (mongoUser?.positionsToSync || []).some(
-    (pref) => pref.positionId === position?.positionId && pref.sync === true,
-  );
+  const shouldSync = positionService.prefersSync(mongoUser, position);
 
   console.log(
     `[${requestId}] - Position ${shift.positionId} sync status: ${shouldSync}`,
@@ -1250,7 +1113,6 @@ export default {
   addDaysShiftsToGcal_cl,
   deleteUserDayTrackedEvents,
   addUsersDayShifts,
-  addUsersDayShifts_cl,
   deleteEvents,
   getAllUsersEvents_cl,
   getAllUsersEventsExcludingPlatform,
