@@ -63,6 +63,10 @@ module.exports = {
           DEFAULT: "hsl(var(--warn))",
           bg: "hsl(var(--warn-bg))",
         },
+        ok: {
+          DEFAULT: "hsl(var(--ok))",
+          bg: "hsl(var(--ok-bg))",
+        },
         "me-tint": "hsl(var(--me-tint))",
       },
       borderRadius: {

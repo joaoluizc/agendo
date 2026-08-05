@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import CreateShiftDialog from "./CreateShiftDialog";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
 import { NewShift, Shift } from "@/types/shiftTypes";
 import { toast } from "sonner";
+import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
 
 type EmptySlotProps = {
   userId: string;
@@ -16,12 +17,12 @@ function EmptySlot(props: EmptySlotProps) {
   const { type: userType } = useUserSettings();
   const { shiftInDrag, setShiftInDrag, shifts, setShifts, events, setEvents } =
     useSchedule();
+  const [createOpen, setCreateOpen] = useState(false);
   const date = new Date(selectedDate);
   date.setHours(currentHour);
   date.setMinutes(0);
 
   const submitShiftUpdate = async (newShift: NewShift, prevUserId: string) => {
-    // setLoading(true);
     let responseData: { message: string; data: Shift } = {
       message: "",
       data: {} as Shift,
@@ -41,11 +42,8 @@ function EmptySlot(props: EmptySlotProps) {
 
       responseData = await response.json();
 
-      console.log("Shift updated successfully");
       toast.success("Shift updated successfully");
-      // setLoading(false);
     } catch (error) {
-      // setLoading(false);
       console.error("Error updating shift:", error);
       toast.error("Failed to update shift");
     }
@@ -102,9 +100,6 @@ function EmptySlot(props: EmptySlotProps) {
   };
 
   const handleDrop = () => {
-    console.log("Dropped shift on slot ", date, "at the hour", currentHour);
-    console.log("Shift in drag: ", shiftInDrag);
-
     const prevUserId = shiftInDrag.data?.userId || "";
 
     if (shiftInDrag && shiftInDrag.data) {
@@ -119,7 +114,6 @@ function EmptySlot(props: EmptySlotProps) {
         endTime: new Date(date.getTime() + shiftDuration).toISOString(),
       };
 
-      console.log(newShift);
       submitShiftUpdate(newShift, prevUserId);
       setShiftInDrag({ isBeingDragged: false, data: null });
     }
@@ -131,13 +125,17 @@ function EmptySlot(props: EmptySlotProps) {
   if (userType !== "admin") return <div key={`key-${currentHour}`} />;
 
   return (
-    <CreateShiftDialog selectedDate={date} selectedUserId={userId}>
+    <>
       <div
         key={`key-${currentHour}`}
+        role="button"
+        tabIndex={-1}
+        aria-label={`Create a shift at ${currentHour}:00`}
         className={cn(
           "group flex h-full cursor-pointer items-center justify-center",
           "hover:bg-foreground/[0.04]"
         )}
+        onClick={() => setCreateOpen(true)}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
       >
@@ -145,7 +143,20 @@ function EmptySlot(props: EmptySlotProps) {
           +
         </span>
       </div>
-    </CreateShiftDialog>
+
+      {/* Mounted only once opened. There is one of these per hour per agent — 384 on a
+          full roster — and the dialog derives the whole roster's conflicts and coverage
+          on render, so keeping them all mounted would do that work 384 times over. */}
+      {createOpen && (
+        <CreateShiftDialog
+          open
+          onOpenChange={setCreateOpen}
+          selectedDate={selectedDate}
+          initialUserId={userId}
+          initialRange={{ start: currentHour, end: currentHour + 1 }}
+        />
+      )}
+    </>
   );
 }
 

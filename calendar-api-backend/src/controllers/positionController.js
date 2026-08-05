@@ -85,6 +85,30 @@ const getUserPositionsToSync = async (req, res) => {
 //   }
 // };
 
+/**
+ * Admin-only: how every position resolves for one agent — enforced, their own
+ * preference, and the resulting verdict.
+ *
+ * `/sync` answers this for the caller only, which left an admin unable to tell whether
+ * another agent's shift would actually reach their calendar. Read-only, and it exposes
+ * nothing beyond the sync booleans: no tokens, no calendar contents, no event colors.
+ */
+const getSyncRulesForUser = async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ message: "userId is required" });
+  }
+  try {
+    const rules = await positionService.getSyncRulesForUser(userId);
+    return res.status(200).json({ userId, rules });
+  } catch (error) {
+    if (error.message === "User not found") {
+      return res.status(404).json({ message: error.message });
+    }
+    return res.status(400).json({ message: error.message });
+  }
+};
+
 const setUserPositionsToSync = async (req, res) => {
   const positions = req.body;
   if (!positions) {
@@ -172,6 +196,7 @@ export default {
   updatePosition,
   getUserPositionsToSync,
   // getUserPositionsToSync_cl,
+  getSyncRulesForUser,
   getAllPositions,
   setUserPositionsToSync,
   // setUserPositionsToSync_cl,

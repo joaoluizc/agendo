@@ -453,6 +453,28 @@ const UNKNOWN_POSITION: PositionDisplay = {
 
 const isUnavailable = (name: string) => /unavailab/i.test(name);
 
+/**
+ * Time the agent is not available, rather than merely not on a channel.
+ *
+ * The shift dialogs treat this as its own conflict kind — scheduling over someone's
+ * "Unavailable" block is a different decision from stacking two pieces of work — and
+ * `scheduledHours` already excludes it from an agent's total.
+ */
+export const isUnavailablePosition = (position: Position | undefined) =>
+  !!position && isUnavailable(position.name);
+
+/**
+ * Not real work: breaks, meetings and unavailable time.
+ *
+ * The duplicate dialog offers to leave these behind, since copying a Tuesday onto a
+ * Thursday usually means copying the coverage, not last Tuesday's 1:1.
+ */
+export const isOffDutyPosition = (position: Position | undefined) =>
+  !!position &&
+  (position.type === "break" ||
+    position.type === "meeting" ||
+    isUnavailable(position.name));
+
 /** Truncate on a word boundary where there is one. */
 const shortLabel = (name: string) => {
   const trimmed = name.trim();

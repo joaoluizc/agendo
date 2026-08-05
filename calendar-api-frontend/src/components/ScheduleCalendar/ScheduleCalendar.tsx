@@ -121,6 +121,7 @@ const Schedule = () => {
         selectedDate={selectedDate}
         onSelectDate={setDate}
         isToday={isToday}
+        onReload={() => fetchData(selectedDate)}
       />
 
       {/* One card, one horizontal scroll container. The 252px agent column is sticky

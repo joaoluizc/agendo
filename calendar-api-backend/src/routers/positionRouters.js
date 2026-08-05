@@ -14,6 +14,14 @@ positionRouter.get("/sync", positionController.getUserPositionsToSync);
 
 positionRouter.put("/sync", positionController.setUserPositionsToSync);
 
+// Another agent's sync verdicts, for the schedule's edit-shift dialog. Admin-only, and
+// declared before "/:positionId" so it isn't captured as a positionId.
+positionRouter.get(
+  "/sync-rules",
+  adminOnly,
+  positionController.getSyncRulesForUser,
+);
+
 // Must be declared before "/:positionId" so it isn't captured as a positionId.
 positionRouter.get(
   "/default-color",

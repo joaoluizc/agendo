@@ -7,9 +7,8 @@ import {
   prettyTimeRange,
 } from "./scheduleUtils";
 import type { Shift } from "@/types/shiftTypes";
-import { Dialog, DialogTrigger } from "../ui/dialog";
 import { useState, useMemo, useEffect } from "react";
-import { EditShiftDialog } from "./EditShiftDIalog";
+import EditShiftDialog from "./shift-dialogs/EditShiftDialog";
 import { useSchedule } from "@/providers/useSchedule";
 import { cn } from "@/lib/utils";
 
@@ -200,25 +199,28 @@ export function Shift(props: ShiftProps) {
       {body}
     </div>
   ) : (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <div
-          draggable={userType === "admin"}
-          onDragStart={handleDragStart}
-          title={title}
-          className={blockClass}
-          style={blockStyle}
-        >
-          {body}
-        </div>
-      </DialogTrigger>
-      {userType === "admin" && (
+    <>
+      <div
+        draggable={userType === "admin"}
+        onDragStart={handleDragStart}
+        title={title}
+        className={blockClass}
+        style={blockStyle}
+        onClick={() => userType === "admin" && setIsOpen(true)}
+      >
+        {body}
+      </div>
+      {/* Mounted only once opened: the dialog derives the whole roster's day and the
+          coverage series on render, and a full day is around a hundred of these blocks. */}
+      {isOpen && userType === "admin" && (
         <EditShiftDialog
           shift={shift}
-          setIsOpen={setIsOpen}
+          selectedDate={selectedDate}
+          open
+          onOpenChange={setIsOpen}
           reloadScheduleCalendar={reloadScheduleCalendar}
         />
       )}
-    </Dialog>
+    </>
   );
 }

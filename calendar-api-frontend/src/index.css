@@ -60,6 +60,11 @@
     --warn: 25 90% 48%;
     --warn-bg: 33 100% 96%;
     --me-tint: 217 60% 97%;
+
+    /* The counterpart to --warn, for the shift dialogs' "Free" / "Synced" badges.
+       --primary is near-black in this theme and reads as emphasis, not as good news. */
+    --ok: 152 45% 34%;
+    --ok-bg: 150 55% 95%;
   }
 
   .dark {
@@ -102,6 +107,9 @@
        anything stronger turns the whole coverage row into a solid block. */
     --warn-bg: 25 45% 11%;
     --me-tint: 217.2 40% 12%;
+
+    --ok: 150 45% 66%;
+    --ok-bg: 152 30% 15%;
   }
 }
 

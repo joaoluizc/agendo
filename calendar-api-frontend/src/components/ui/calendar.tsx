@@ -38,8 +38,15 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         day: "size-9 p-0 text-center text-sm",
         day_button: cn(
           buttonVariants({ variant: "ghost" }),
-          "size-9 rounded-md p-0 font-normal aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:hover:bg-primary aria-selected:hover:text-primary-foreground",
+          "size-9 rounded-md p-0 font-normal",
         ),
+        // react-day-picker puts `aria-selected` and every modifier class on the day
+        // *cell*, never on the button inside it — so an `aria-selected:` variant on
+        // `day_button` matches nothing and selection renders unstyled. Selection is
+        // therefore driven from the cell, reaching the button with `[&>button]:`, the
+        // same way `today` already is.
+        selected:
+          "[&>button]:bg-primary [&>button]:font-semibold [&>button]:text-primary-foreground [&>button]:hover:bg-primary [&>button]:hover:text-primary-foreground",
         today: "[&>button]:bg-accent [&>button]:text-accent-foreground [&>button]:rounded-md",
         outside: "text-muted-foreground opacity-50",
         disabled: "text-muted-foreground opacity-50",
