@@ -53,47 +53,101 @@ const userInfo_cl = async (req, res) => {
   res.status(200).json(response);
 };
 
-const newClerkUser = async (req, res) => {
-  const secret = process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET;
-  const svixHeaders = {
-    "svix-id": req.headers["svix-id"],
-    "svix-timestamp": req.headers["svix-timestamp"],
-    "svix-signature": req.headers["svix-signature"],
-  };
-  const payload = req.rawBody;
-
-  const wh = new Webhook(secret);
-
-  let msg;
+// Creates the mongo user behind a verified clerk "user created" webhook. Runs after
+// the webhook has already been acked, so its only output is the log line it ends on —
+// every path through here must log exactly one outcome.
+const provisionClerkUser = async ({
+  requestId,
+  firstName,
+  lastName,
+  userEmail,
+  clerkId,
+}) => {
+  let slingId;
   try {
-    msg = wh.verify(payload, svixHeaders);
-    msg = msg.data;
-  } catch (e) {
-    console.error("Verification error:", e);
-    return res.status(401).json({ message: "Unauthorized" });
+    slingId = await utils.getSlingIdByEmail(userEmail);
+    if (!slingId) {
+      console.warn(
+        `[${requestId}]: newClerkUser - no sling user matches ${userEmail}; continuing without a slingId`,
+      );
+    }
+  } catch (err) {
+    // A sling outage must not block the signup — slingId is optional on the model
+    // and can be backfilled later via /user/add-clerk-id-to-all-users.
+    console.error(
+      `[${requestId}]: newClerkUser - sling lookup failed for ${userEmail}: ${err.message}. Continuing without a slingId.`,
+    );
   }
 
-  const { first_name: firstName, last_name: lastName } = msg;
-  const userEmail = msg.email_addresses[0].email_address;
-  const clerkId = msg.id;
-  const userId = msg.id;
-  const slingId = utils.getSlingIdByEmail(userEmail);
-
-  console.log(
-    `[${req.requestId}]: newClerkUser called for user: ${userEmail}, clerkId: ${clerkId}, slingId: ${slingId}`,
-  );
-
-  await userService.createUser({
+  const { created } = await userService.createUser({
     firstName,
     lastName,
     email: userEmail,
     slingId,
     clerkId,
   });
-  // await userService.addPositionsToSyncNewUser(userId);
-  // await userService.addBasicPropertiesToNewUser(userId, userEmail);
+  // await userService.addPositionsToSyncNewUser(clerkId);
+  // await userService.addBasicPropertiesToNewUser(clerkId, userEmail);
 
-  res.json();
+  console.log(
+    created
+      ? `[${requestId}]: newClerkUser - created user ${userEmail} (clerkId: ${clerkId}, slingId: ${slingId ?? "none"})`
+      : `[${requestId}]: newClerkUser - user ${userEmail} already existed (clerkId: ${clerkId}); nothing to do`,
+  );
+};
+
+const newClerkUser = async (req, res) => {
+  const svixHeaders = {
+    "svix-id": req.headers["svix-id"],
+    "svix-timestamp": req.headers["svix-timestamp"],
+    "svix-signature": req.headers["svix-signature"],
+  };
+
+  let msg;
+  try {
+    // Webhook() itself throws on a missing/malformed secret, so it belongs in here too.
+    const wh = new Webhook(process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET);
+    msg = wh.verify(req.rawBody, svixHeaders).data;
+  } catch (e) {
+    console.error(
+      `[${req.requestId}]: newClerkUser - webhook verification failed: ${e.message}`,
+    );
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const { first_name: firstName, last_name: lastName } = msg;
+  const userEmail = msg.email_addresses?.[0]?.email_address;
+  const clerkId = msg.id;
+
+  if (!userEmail) {
+    console.error(
+      `[${req.requestId}]: newClerkUser - payload for clerkId ${clerkId} has no email address; ignoring`,
+    );
+    return res.status(200).json({ message: "ignored: no email address" });
+  }
+
+  // Ack before provisioning: svix gives the endpoint only a few seconds, and the sling
+  // lookup below is a network round trip. The outcome is logged, never returned.
+  console.log(
+    `[${req.requestId}]: newClerkUser - accepted webhook for ${userEmail} (clerkId: ${clerkId}); provisioning`,
+  );
+  res.status(200).json({ message: "accepted" });
+
+  try {
+    await provisionClerkUser({
+      requestId: req.requestId,
+      firstName,
+      lastName,
+      userEmail,
+      clerkId,
+    });
+  } catch (err) {
+    // Nothing to return to clerk at this point — the log is the only signal, so make it loud.
+    console.error(
+      `[${req.requestId}]: newClerkUser - FAILED to provision ${userEmail} (clerkId: ${clerkId}) after acking the webhook: ${err.message}`,
+      err,
+    );
+  }
 };
 
 const getAllUsers_cl = async (_req, res) => {

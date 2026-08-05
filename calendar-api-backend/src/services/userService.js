@@ -3,6 +3,8 @@ import { User } from "../models/UserModel.js";
 import { initialPositions } from "../database/seeds/initialPositions.js";
 import redisClient from "../database/redisClient.js";
 
+// Returns { user, created } so callers can tell an actual insert apart from a
+// no-op on an already-existing user (the clerk webhook logs which one happened).
 const createUser = async (userData) => {
   // const { firstName, lastName, email, password } = userData;
   const { firstName, lastName, email, slingId, clerkId } = userData;
@@ -10,7 +12,7 @@ const createUser = async (userData) => {
   let user = await User.findOne({ email });
 
   if (user) {
-    return user;
+    return { user, created: false };
   }
 
   user = new User({
@@ -25,7 +27,7 @@ const createUser = async (userData) => {
   // user.password = await bcrypt.hash(password, salt);
 
   await user.save();
-  return user;
+  return { user, created: true };
 };
 
 const findUserByEmail = async (email) => {
