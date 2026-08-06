@@ -14,7 +14,7 @@ const jiraBacklogRouter = express.Router();
 
 // Admin-only throughout: the Jira Backlog + Tasks pages are admin-only (enforced on the
 // client by AdminRoute), so these endpoints are gated to match — the data isn't readable
-// by a non-admin hitting the API directly. adminOnly is bypassed in development.
+// by a non-admin hitting the API directly.
 jiraBacklogRouter.get("/config", adminOnly, jiraBacklogController.getConfig);
 jiraBacklogRouter.get("/issues", adminOnly, jiraBacklogController.listIssues);
 

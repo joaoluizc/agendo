@@ -6,7 +6,6 @@ import { mergeShiftsFromSling } from "../utils/mergeShiftsFromSling.js";
 import gCalendarService from "../services/gCalendarService.js";
 import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
-import { userIsAdmin } from "../utils/userIsAdmin.js";
 import isISODate from "../utils/isISODate.js";
 
 function validateShift(shift) {
@@ -434,12 +433,13 @@ async function duplicateShiftsFromDay(req, res) {
     mode = "merge",
     excludePositionIds = [],
   } = req.body;
+  // Stamped onto every duplicated shift as `createdBy` further down.
   const { userId } = req.auth;
 
-  if (!userId || !(await userIsAdmin(userId))) {
-    return res.status(403).json({ message: "Unauthorized" });
-  }
-
+  // The admin check lives on the route (`adminOnly`) like every other shift mutation.
+  // It used to be done here via `utils/userIsAdmin`, which read Clerk
+  // `publicMetadata.type` — a field agendo stopped writing once the profile JSON
+  // outgrew Clerk's metadata size limit, so it denied genuine admins.
   const targets =
     Array.isArray(targetDates) && targetDates.length
       ? targetDates

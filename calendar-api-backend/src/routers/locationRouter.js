@@ -1,7 +1,13 @@
 import express from "express";
 import locationController from "../controllers/locationController.js";
+import adminOnly from "../middlewares/adminOnly.js";
 
 const locationRouter = express.Router();
+
+// Locations are org-wide config, edited only from Settings › Manage locations, which
+// renders behind `type === "admin"` (Settings.tsx). Mutations are therefore admin-only.
+// Reads stay open to any authenticated user: `GET /all` feeds that same page and is
+// harmless roster context, and gating it would risk breaking a read path for no gain.
 
 /**
  * @openapi
@@ -60,7 +66,7 @@ locationRouter.get("/all", locationController.getAllLocations);
  *                 [otherProps]:
  *                   type: string
  */
-locationRouter.post("/new", locationController.createLocation);
+locationRouter.post("/new", adminOnly, locationController.createLocation);
 
 /**
  * @openapi
@@ -135,7 +141,7 @@ locationRouter.get("/:id", locationController.getLocationById);
  *       404:
  *         description: Location not found
  */
-locationRouter.put("/:id", locationController.updateLocation);
+locationRouter.put("/:id", adminOnly, locationController.updateLocation);
 
 /**
  * @openapi
@@ -156,7 +162,7 @@ locationRouter.put("/:id", locationController.updateLocation);
  *       404:
  *         description: Location not found
  */
-locationRouter.delete("/:id", locationController.deleteLocation);
+locationRouter.delete("/:id", adminOnly, locationController.deleteLocation);
 
 /**
  * @openapi
