@@ -38,8 +38,9 @@ const shiftToEvent = (shift, colorId) => {
 
 const getSlingIdByEmail = async (email) => {
   const slingService = new SlingService();
-  await slingService.init();
-  const slingUsers = slingService.users;
+  // Only the users endpoint is needed here — it authenticates off SLING_AUTHORIZATION
+  // on its own, so there's no reason to pay for a full init() (session + positions).
+  const slingUsers = await slingService.getAllUsers();
 
   if (!slingUsers) {
     console.error(
@@ -48,8 +49,9 @@ const getSlingIdByEmail = async (email) => {
     return undefined;
   }
 
-  const user = slingUsers.find((user) => user.email === email);
-  return user ? user.slingId : undefined;
+  // getAllUsers() returns an object keyed by sling user id, not an array.
+  const user = Object.values(slingUsers).find((user) => user.email === email);
+  return user ? String(user.id) : undefined;
 };
 
 export default {

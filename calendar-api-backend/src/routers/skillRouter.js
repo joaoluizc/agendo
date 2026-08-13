@@ -1,7 +1,13 @@
 import express from "express";
 import skillController from "../controllers/skillController.js";
+import adminOnly from "../middlewares/adminOnly.js";
 
 const skillRouter = express.Router();
+
+// Skills are a global taxonomy assigned to users (see `skills` on the User model), not
+// per-user data — renaming or deleting one reaches every user holding it. No frontend
+// code calls these mutations at all today (the only frontend reference to skills is the
+// `skillTypes.ts` type), so they are admin-only config endpoints. Reads stay open.
 
 /**
  * @openapi
@@ -134,7 +140,7 @@ skillRouter.get("/:skillId", skillController.getSkillById);
  *                 message:
  *                   type: string
  */
-skillRouter.post("/", skillController.createSkill);
+skillRouter.post("/", adminOnly, skillController.createSkill);
 
 /**
  * @openapi
@@ -203,7 +209,7 @@ skillRouter.post("/", skillController.createSkill);
  *                 message:
  *                   type: string
  */
-skillRouter.put("/:skillId", skillController.updateSkill);
+skillRouter.put("/:skillId", adminOnly, skillController.updateSkill);
 
 /**
  * @openapi
@@ -248,6 +254,6 @@ skillRouter.put("/:skillId", skillController.updateSkill);
  *                 message:
  *                   type: string
  */
-skillRouter.delete("/:skillId", skillController.deleteSkill);
+skillRouter.delete("/:skillId", adminOnly, skillController.deleteSkill);
 
 export default skillRouter;
