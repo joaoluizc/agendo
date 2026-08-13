@@ -6,7 +6,7 @@ import { mergeShiftsFromSling } from "../utils/mergeShiftsFromSling.js";
 import gCalendarService from "../services/gCalendarService.js";
 import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
-import { userIsAdmin } from "../utils/userIsAdmin.js";
+import { resolveUser } from "../services/authz.js";
 import isISODate from "../utils/isISODate.js";
 
 function validateShift(shift) {
@@ -244,7 +244,7 @@ async function updateShift(req, res) {
 
   if (shiftBeforeUpdate.isSynced) {
     try {
-      const user = await userService.findUser_cl(shiftBeforeUpdate.userId);
+      const user = await userService.getClerkUserById(shiftBeforeUpdate.userId);
       await gCalendarService.deleteEvents_cl(
         user,
         [shiftBeforeUpdate.syncedEvent],
@@ -305,7 +305,7 @@ async function deleteShift(req, res) {
 
   if (shift.isSynced) {
     try {
-      const user = await userService.findUser_cl(shift.userId);
+      const user = await userService.getClerkUserById(shift.userId);
       await gCalendarService.deleteEvents_cl(
         user,
         [shift.syncedEvent],
@@ -391,7 +391,7 @@ function localDayWindow(isoInstant) {
 async function removeShiftAndEvent(shift, requestId) {
   if (shift.isSynced && shift.syncedEvent) {
     try {
-      const user = await userService.findUser_cl(shift.userId);
+      const user = await userService.getClerkUserById(shift.userId);
       await gCalendarService.deleteEvents_cl(
         user,
         [shift.syncedEvent],
@@ -436,8 +436,16 @@ async function duplicateShiftsFromDay(req, res) {
   } = req.body;
   const { userId } = req.auth;
 
-  if (!userId || !(await userIsAdmin(userId))) {
-    return res.status(403).json({ message: "Unauthorized" });
+  try {
+    const { isAdmin } = await resolveUser(userId);
+    if (!isAdmin) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+  } catch (err) {
+    // Express 4 does not catch async handler rejections; without this the request
+    // hangs with no response at all rather than failing.
+    console.error(`[${req.requestId}]: admin check failed: ${err.message}`);
+    return res.status(500).json({ message: "Could not verify permissions" });
   }
 
   const targets =
@@ -635,7 +643,7 @@ async function duplicateShiftsFromDay(req, res) {
         // does not exist.
         if (shift.isSynced) {
           try {
-            const user = await userService.findUser_cl(shift.userId);
+            const user = await userService.getClerkUserById(shift.userId);
             await gCalendarService.deleteEvents_cl(
               user,
               [shift.syncedEvent],

@@ -36,7 +36,9 @@ immediately. All of these funnel through `addEventForShift` → the single gate
 
 Each shift has a *position* (tickets, chats, "Unavailable", …). Each user picks
 which positions sync to their calendar, stored as `user.positionsToSync` =
-`[{ positionId, sync }]` (mirrored into Clerk `publicMetadata.positionsToSync`).
+`[{ positionId, sync }]` in Mongo. (This was once mirrored into Clerk
+`publicMetadata.positionsToSync`; it no longer is, and that copy must not be read —
+see [Clerk / Mongo boundary](clerk-mongo-boundary.md).)
 Sync only adds shifts whose position the user enabled. Admins can additionally
 force a position to always sync for everyone, overriding the per-user choice
 (`Position.enforceSync`).

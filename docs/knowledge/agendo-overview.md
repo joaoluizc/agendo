@@ -34,8 +34,9 @@ Two services run via docker-compose:
 - `calendar-api-frontend` — React + Vite + TypeScript + Tailwind/Radix, port 5173
 
 - **Auth:** Clerk. Account type is `normal` | `admin`, stored on the Mongo
-  `User.type` and mirrored in Clerk `publicMetadata.type`. Admin-only API routes
-  use an `adminOnly` middleware (which bypasses in `NODE_ENV=development`).
+  `User.type` — **Mongo is the only authority; Clerk `publicMetadata` is not read**
+  (see [Clerk / Mongo boundary](clerk-mongo-boundary.md)). Admin-only API routes use
+  an `adminOnly` middleware.
 - **Data:** MongoDB via Mongoose. **Supabase** backs a separate AI vector-search
   module (`discovai`). Redis/Upstash is used for caching.
 - **External integrations:** the **Sling API** (shift source) and the **Google
