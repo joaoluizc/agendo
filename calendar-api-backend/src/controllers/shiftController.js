@@ -243,7 +243,7 @@ async function updateShift(req, res) {
 
   if (shiftBeforeUpdate.isSynced) {
     try {
-      const user = await userService.findUser_cl(shiftBeforeUpdate.userId);
+      const user = await userService.getClerkUserById(shiftBeforeUpdate.userId);
       await gCalendarService.deleteEvents_cl(
         user,
         [shiftBeforeUpdate.syncedEvent],
@@ -304,7 +304,7 @@ async function deleteShift(req, res) {
 
   if (shift.isSynced) {
     try {
-      const user = await userService.findUser_cl(shift.userId);
+      const user = await userService.getClerkUserById(shift.userId);
       await gCalendarService.deleteEvents_cl(
         user,
         [shift.syncedEvent],
@@ -390,7 +390,7 @@ function localDayWindow(isoInstant) {
 async function removeShiftAndEvent(shift, requestId) {
   if (shift.isSynced && shift.syncedEvent) {
     try {
-      const user = await userService.findUser_cl(shift.userId);
+      const user = await userService.getClerkUserById(shift.userId);
       await gCalendarService.deleteEvents_cl(
         user,
         [shift.syncedEvent],
@@ -635,7 +635,7 @@ async function duplicateShiftsFromDay(req, res) {
         // does not exist.
         if (shift.isSynced) {
           try {
-            const user = await userService.findUser_cl(shift.userId);
+            const user = await userService.getClerkUserById(shift.userId);
             await gCalendarService.deleteEvents_cl(
               user,
               [shift.syncedEvent],

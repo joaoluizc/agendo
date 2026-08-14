@@ -5,6 +5,7 @@ gotchas, and decisions. Meant to survive across machines and help onboard
 teammates. Keep entries tight and skimmable; one topic per file.
 
 - [Agendo overview](agendo-overview.md) — what agendo is, its relationship to Sling, and where it's headed
+- [Clerk / Mongo boundary](clerk-mongo-boundary.md) — which store owns which user field, the id spaces, and why `publicMetadata` is banned
 - [Calendar sync paths](agendo-sync-paths.md) — the two ways shifts reach Google Calendar, and the position id-space gotcha
 - [Schedule screens & date handling](frontend-schedule-date.md) — the two schedule screens, the URL `?date=` convention, and the date footguns
 - [Frontend build & lint](frontend-build-and-lint.md) — what gates a build, and why ESLint is noisy

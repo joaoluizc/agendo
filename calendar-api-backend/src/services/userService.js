@@ -1,6 +1,5 @@
 import { clerkClient } from "@clerk/express";
 import { User } from "../models/UserModel.js";
-import { initialPositions } from "../database/seeds/initialPositions.js";
 import redisClient from "../database/redisClient.js";
 
 // Returns { user, created } so callers can tell an actual insert apart from a
@@ -36,7 +35,10 @@ const findUserByEmail = async (email) => {
 };
 
 const findAllUsers = async () => {
-  let users = await User.find();
+  // Sorted so the roster order is stable. Clerk's getUserList (the previous source for
+  // /user/all) returned newest-first; Mongo's natural order is insertion order, so
+  // without this the schedule grid would silently reorder.
+  let users = await User.find().sort({ firstName: 1, lastName: 1 });
   return users;
 };
 
@@ -50,7 +52,7 @@ const findUsersByClerkIds = async (clerkIds) => {
   return users;
 };
 
-const findUser_cl = async (userId) => {
+const getClerkUserById = async (userId) => {
   const user = await clerkClient.users.getUser(userId);
   return user;
 };
@@ -64,45 +66,57 @@ const getSlingIdByClerkId = async (clerkId) => {
   return user?.slingId;
 };
 
-const getAllUsersWithTokens = async () => {
-  const users = await User.find();
-  return users
-    .filter((user) => user.gapitoken)
-    .map((user) => ({
-      email: user.email,
-      id: user.id,
-      tokens: user.gapitoken,
-      slingId: user.slingId,
-      positionsToSync: user.positionsToSync,
-    }));
-};
-
-async function getAllUsers_cl() {
+async function getAllClerkUsers() {
   const response = await clerkClient.users.getUserList({ limit: 100 });
   return response.data;
 }
 
-async function getAllUsersSafeInfo_cl() {
-  const response = await clerkClient.users.getUserList({ limit: 100 });
-  return response.data.map((user) => {
+/**
+ * The user roster. Mongo is authoritative for identity and business data; Clerk is
+ * joined in for avatars only, because `imageUrl`/`hasImage` have no Mongo equivalent.
+ * See docs/knowledge/clerk-mongo-boundary.md.
+ *
+ * `id` is the CLERK id, not the Mongo _id. Consumers depend on that: the frontend
+ * joins this against `useUser().id` to highlight the viewer's own row, and passes it
+ * to endpoints that resolve users by Clerk id. Do not "fix" it to `_id`.
+ *
+ * Rows are driven by Mongo, so a Clerk account with no Mongo document does not appear.
+ * That is intentional — such a user has no schedule, positions or type to show.
+ */
+async function getAllUsersSafeInfo() {
+  const mongoUsers = await findAllUsers();
+
+  // One Clerk call for the whole roster rather than one per user.
+  const avatarsByClerkId = new Map();
+  try {
+    const response = await clerkClient.users.getUserList({ limit: 500 });
+    for (const clerkUser of response.data) {
+      avatarsByClerkId.set(clerkUser.id, {
+        imageUrl: clerkUser.imageUrl || "",
+        hasImage: clerkUser.hasImage || false,
+      });
+    }
+  } catch (err) {
+    // Avatars are cosmetic - never fail the roster over them.
+    console.error(`could not load clerk avatars: ${err.message}`);
+  }
+
+  return mongoUsers.map((user) => {
+    const avatar = avatarsByClerkId.get(user.clerkId);
     return {
-      id: user.id,
-      email: user.emailAddresses?.[0]?.emailAddress || "",
+      id: user.clerkId,
+      email: user.email || "",
       firstName: user.firstName || "",
       lastName: user.lastName || "",
-      imageUrl: user.imageUrl || "",
-      hasImage: user.hasImage || false,
-      publicMetadata: {
-        slingId: user.publicMetadata?.slingId || "",
-        type: user.publicMetadata?.type || "",
-        positionsToSync:
-          user.publicMetadata?.positionsToSync || initialPositions,
-      },
+      imageUrl: avatar?.imageUrl || "",
+      hasImage: avatar?.hasImage || false,
+      slingId: user.slingId || "",
+      type: user.type || "normal",
     };
   });
 }
 
-async function getUserGoogleOAuthToken_cl(userId) {
+async function getGoogleOAuthTokenByClerkId(userId) {
   const provider = "oauth_google";
   let response;
   try {
@@ -121,23 +135,23 @@ async function getUserGoogleOAuthToken_cl(userId) {
   return data;
 }
 
-async function getAllUsersWithTokens_cl() {
+async function getUsersWithGoogleTokens() {
   const cacheKey = "clerk:users:withTokens";
   // Try to get from cache
   const cached = await redisClient.get(cacheKey);
   if (cached) {
-    console.log("getAllUsersWithTokens_cl: Returning cached data");
+    console.log("getUsersWithGoogleTokens: Returning cached data");
     return JSON.parse(cached);
   }
 
-  const users = await getAllUsers_cl();
+  const users = await getAllClerkUsers();
 
   const usersWithTokens = await Promise.all(
     users.map(async (user) => {
-      const userTokensResponse = await getUserGoogleOAuthToken_cl(user.id);
+      const userTokensResponse = await getGoogleOAuthTokenByClerkId(user.id);
       if (!userTokensResponse) {
         console.log(
-          "getAllUsersWithTokens_cl: No Google OAuth token found for user:",
+          "getUsersWithGoogleTokens: No Google OAuth token found for user:",
           user.id,
         );
         return { ...user };
@@ -155,35 +169,10 @@ async function getAllUsersWithTokens_cl() {
     EX: 10 * 60,
     NX: true,
   });
-  console.log("getAllUsersWithTokens_cl: Cached data for 10 minutes");
+  console.log("getUsersWithGoogleTokens: Cached data for 10 minutes");
 
   return usersWithTokens;
 }
-
-const addGapiToken = async (email, token) => {
-  let user = await findUserByEmail(email);
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  const gapitokenKeys = [
-    "access_token",
-    "refresh_token",
-    "scope",
-    "token_type",
-    "expiry_date",
-  ];
-  const userTokens = gapitokenKeys.reduce((acc, key) => {
-    acc[key] = key in token ? token[key] : user.gapitoken[key];
-    if (!token[key] && !user.gapitoken[key]) {
-      throw new Error("Token not found");
-    }
-    return acc;
-  }, {});
-
-  user.gapitoken = userTokens;
-  await user.save();
-};
 
 const getGapiToken = async (email) => {
   let user = await findUserByEmail(email);
@@ -193,154 +182,16 @@ const getGapiToken = async (email) => {
   return user.gapitoken;
 };
 
-// async function addPositionsToSyncNewUser(userId) {
-//   console.log("Adding default positions to sync to new user. userId: ", userId);
-//   try {
-//     await clerkClient.users.updateUserMetadata(userId, {
-//       publicMetadata: {
-//         positionsToSync: initialPositions,
-//       },
-//     });
-//   } catch (err) {
-//     console.error(
-//       "Error syncinc initial positions to sync to new user: ",
-//       err.message
-//     );
-//   }
-// }
-
-// async function addBasicPropertiesToNewUser(userId, userEmail) {
-//   console.log("Adding slingId to new user. userId: ", userId);
-//   const slingId = utils.getSlingIdByEmail(userEmail);
-//   try {
-//     await clerkClient.users.updateUserMetadata(userId, {
-//       publicMetadata: {
-//         slingId,
-//         type: "normal",
-//         timeZone: 0,
-//       },
-//     });
-//   } catch (err) {
-//     console.error("Error adding slingId to new user: ", err.message);
-//   }
-// }
-
-const addClerkIdToAllUsers = async (_req, res) => {
-  try {
-    const mongoUsers = await findAllUsers();
-    const clerkUsers = await getAllUsersSafeInfo_cl();
-    const clerkUsersMap = new Map(
-      clerkUsers.map((user) => [user.email, user.id]),
-    );
-
-    for (const user of mongoUsers) {
-      if (!user.clerkId && clerkUsersMap.has(user.email)) {
-        const result = await User.updateOne(
-          { email: user.email },
-          { $set: { clerkId: clerkUsersMap.get(user.email) } },
-        );
-        console.log(`Mongo update result for ${user.email}:`, result);
-        console.log(
-          `Added Clerk ID for user: ${user.email} - ${clerkUsersMap.get(
-            user.email,
-          )}`,
-        );
-      }
-    }
-    console.log("Clerk IDs added to all users");
-  } catch (err) {
-    console.error("Error adding Clerk IDs to users:", err.message);
-    throw err;
-  }
-  return res.status(200).json({
-    message: "Clerk IDs added to all users successfully",
-  });
-};
-
-async function addNewClerkUsersToMongo(_req, res) {
-  try {
-    const mongoUsers = await findAllUsers();
-    const clerkUsers = await getAllUsersSafeInfo_cl();
-
-    const newClerkUsers = clerkUsers
-      .filter(
-        (clerkUser) =>
-          !mongoUsers.some((mongoUser) => mongoUser.email === clerkUser.email),
-      )
-      .map((clerkUser) => ({
-        firstName: clerkUser.firstName || "",
-        lastName: clerkUser.lastName || "",
-        email: clerkUser.email,
-        slingId: clerkUser.publicMetadata?.slingId || "",
-        positionsToSync:
-          clerkUser.publicMetadata?.positionsToSync || initialPositions,
-        type: clerkUser.publicMetadata?.type || "normal",
-        clerkId: clerkUser.id,
-      }));
-
-    if (newClerkUsers.length === 0) {
-      console.log("No new Clerk users to add to MongoDB.");
-      return;
-    }
-
-    await User.insertMany(newClerkUsers);
-    console.log(
-      "New Clerk users added to MongoDB:",
-      newClerkUsers.map((u) => u.email),
-    );
-  } catch (err) {
-    console.error("Error adding new Clerk users to MongoDB:", err.message);
-    throw err;
-  }
-  return res.status(200).json({
-    message: "New Clerk users added to MongoDB successfully",
-  });
-}
-
-async function updatePositionsToSyncOnMongoUsers() {
-  try {
-    const mongoUsers = await findAllUsers();
-    const clerkUsers = await getAllUsersSafeInfo_cl();
-
-    for (const clerkUser of clerkUsers) {
-      const mongoUser = mongoUsers.find(
-        (user) => user.email === clerkUser.email,
-      );
-      if (mongoUser) {
-        const positionsToSync =
-          clerkUser.publicMetadata?.positionsToSync || initialPositions;
-        await User.updateOne(
-          { email: mongoUser.email },
-          { $set: { positionsToSync } },
-        );
-        console.log(`Updated positions to sync for user: ${mongoUser.email}`);
-      }
-    }
-  } catch (err) {
-    console.error(
-      "Error updating positions to sync on MongoDB users:",
-      err.message,
-    );
-    throw err;
-  }
-}
-
 export default {
   createUser,
   findUser: findUserByEmail,
-  findUser_cl,
   findUserByClerkId,
   findUsersByClerkIds,
   getSlingIdByClerkId,
-  addGapiToken,
   getGapiToken,
-  getUserGoogleOAuthToken_cl,
-  getAllUsersWithTokens,
-  getAllUsersWithTokens_cl,
-  getAllUsersSafeInfo_cl,
-  // addPositionsToSyncNewUser,
-  // addBasicPropertiesToNewUser,
-  addClerkIdToAllUsers,
-  addNewClerkUsersToMongo,
-  updatePositionsToSyncOnMongoUsers,
+  getAllUsersSafeInfo,
+  // Clerk-backed. These are the only functions that may talk to Clerk.
+  getClerkUserById,
+  getGoogleOAuthTokenByClerkId,
+  getUsersWithGoogleTokens,
 };

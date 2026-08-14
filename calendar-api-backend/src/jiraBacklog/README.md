@@ -74,8 +74,9 @@ read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
 > request to time out). `autofill` overwrites the Jira-sourced fields (blank Jira values never
 > wipe existing data) and leaves the agendo-only triage `status` + urgency inputs untouched.
 
-> `adminOnly` intentionally bypasses the role check when `NODE_ENV=development`, matching
-> the rest of agendo — so locally every signed-in user can edit.
+> `adminOnly` enforces the role check in every environment. Set `ADMIN_BYPASS=1` locally
+> to skip it (it logs a warning on every request); otherwise your Clerk user needs
+> `type: "admin"` in `dev-users`.
 
 ## Urgency score
 

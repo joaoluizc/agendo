@@ -1,33 +1,17 @@
 import process from "process";
 import { Webhook } from "svix";
 import userService from "../services/userService.js";
+import { resolveUser } from "../services/authz.js";
 import utils from "../utils/utils.js";
 
-const userInfo = async (req, res) => {
-  const userId = req.auth.userId;
-  console.log(`[${req.requestId}]: getting user info for ${userId}`);
-  if (!userId) {
-    return res.status(400).json({ message: "userId is required" });
-  }
-
-  const user = await userService.findUser(userEmail);
-  if (!user) {
-    return res.status(400).json({ message: "User not found" });
-  }
-  const response = {
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    slingId: user.slingId,
-    timeZone: user.timeZone,
-    type: user.type,
-  };
-  res.status(200).json(response);
-};
-
-// an endpoint calling this function is redundant, since all of this info is already on the frontend via clerk
-// for time management purposes, this will remain until the frontend can be refactored
-const userInfo_cl = async (req, res) => {
+// The authoritative profile endpoint. Mongo owns every field returned here — Clerk
+// publicMetadata is not read (see docs/knowledge/clerk-mongo-boundary.md).
+//
+// This is the single point of failure for frontend authorization: every admin gate in
+// the UI reads `type` from this response, and the provider treats a failed fetch as
+// "loaded, type = ''". So a 500 here silently demotes an admin to a normal user rather
+// than showing an error — never let this throw past the guards below.
+const getMyProfile = async (req, res) => {
   const userId = req.auth.userId;
   console.log(`[${req.requestId}]: getting user info for ${userId}`);
   if (!userId) {
@@ -42,12 +26,24 @@ const userInfo_cl = async (req, res) => {
     return res.status(500).json({ message: `caught error: ${err.message}` });
   }
 
+  if (!user) {
+    console.error(
+      `[${req.requestId}]: no mongo user for clerk id ${userId} - profile unavailable`
+    );
+    return res.status(404).json({ message: "User not found" });
+  }
+
   const response = {
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
     slingId: user.slingId,
-    timeZone: user.timeZone,
+    // The schema path is `timezone`; `user.timeZone` is off-schema so Mongoose never
+    // hydrates it. NOTE this is not a full fix: every doc's `timezone` is still the
+    // schema default "UTC", while the real legacy value sits in the unreadable
+    // off-schema `timeZone` field. Nothing consumes this yet; migrating the real
+    // values is tracked separately.
+    timeZone: user.timezone,
     type: user.type,
   };
   res.status(200).json(response);
@@ -73,7 +69,8 @@ const provisionClerkUser = async ({
     }
   } catch (err) {
     // A sling outage must not block the signup — slingId is optional on the model
-    // and can be backfilled later via /user/add-clerk-id-to-all-users.
+    // and must currently be corrected by hand in Mongo (the old bulk backfill routes
+    // were removed - they seeded from Clerk publicMetadata, which is no longer written).
     console.error(
       `[${requestId}]: newClerkUser - sling lookup failed for ${userEmail}: ${err.message}. Continuing without a slingId.`,
     );
@@ -150,10 +147,25 @@ const newClerkUser = async (req, res) => {
   }
 };
 
-const getAllUsers_cl = async (_req, res) => {
+// The roster is readable by everyone - the schedule grid needs every agent's name and
+// avatar. But `type`, `slingId` and `email` are admin-only: previously they were
+// sourced from Clerk publicMetadata and came back empty, so nothing was exposed. Now
+// they carry real values, and without this filter any signed-in employee could
+// enumerate exactly who the admins are.
+const getAllUsers = async (req, res) => {
   try {
-    const users = await userService.getAllUsersSafeInfo_cl();
-    res.status(200).json(users);
+    const { isAdmin } = await resolveUser(req.auth?.userId);
+    const users = await userService.getAllUsersSafeInfo();
+    const payload = isAdmin
+      ? users
+      : users.map((user) => ({
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          imageUrl: user.imageUrl,
+          hasImage: user.hasImage,
+        }));
+    res.status(200).json(payload);
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: `caught error: ${err.message}` });
@@ -161,10 +173,7 @@ const getAllUsers_cl = async (_req, res) => {
 };
 
 export default {
-  // registerUser,
-  // loginUser,
-  userInfo,
-  userInfo_cl,
+  getMyProfile,
   newClerkUser,
-  getAllUsers_cl,
+  getAllUsers,
 };
