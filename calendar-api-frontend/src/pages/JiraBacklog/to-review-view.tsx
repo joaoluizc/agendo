@@ -8,6 +8,24 @@ import { FieldCell } from "./cells";
 const isGrow = (id: string) => id === "desc";
 
 /**
+ * Jira's live status is free text set by each project's own workflow, so unlike agendo's
+ * fixed STATUS_OPTIONS it can't be colour-mapped value-by-value. Bucket by keyword instead —
+ * covers the common Jira workflow vocabulary and falls back to neutral for anything else.
+ * Support/Open/To Do get amber: these are the "not yet looked at, needs eyes" states.
+ */
+function jiraStatusChipClasses(value: string): string {
+  const v = value.toLowerCase();
+  if (v.includes("block")) return "bg-red-500/15 text-red-700 dark:text-red-300";
+  if (v.includes("done") || v.includes("closed") || v.includes("resolved"))
+    return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+  if (v.includes("progress") || v.includes("review") || v.includes("development"))
+    return "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300";
+  if (v.includes("support") || v.includes("open") || v.includes("to do") || v.includes("todo"))
+    return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
+  return "bg-slate-500/15 text-slate-600 dark:text-slate-300";
+}
+
+/**
  * "To Review" view: the issues the page passes in (those whose status is selected in the
  * toolbar's status filter — "In a Sprint" and "Review with Squad" by default — intersected
  * with the search), grouped into collapsible squad sections (squads alphabetical, collapsed
@@ -89,6 +107,19 @@ export function ToReviewView({ issues, meta }: { issues: JiraIssue[]; meta: Jira
                               <p className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
                                 {issue.comment}
                               </p>
+                            )}
+                            {/* Show Jira's live status under the Jira link so reviewers don't need to open the panel. */}
+                            {desc.id === "jiraUrl" && issue.jiraStatus && (
+                              <div className="mt-1">
+                                <span
+                                  className={cn(
+                                    "inline-block max-w-full truncate rounded px-2 py-0.5 text-xs font-medium",
+                                    jiraStatusChipClasses(issue.jiraStatus),
+                                  )}
+                                >
+                                  {issue.jiraStatus}
+                                </span>
+                              </div>
                             )}
                           </td>
                         );
