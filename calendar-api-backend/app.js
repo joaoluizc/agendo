@@ -22,6 +22,8 @@ import discovaiRouter from "./src/discovai/discovaiRouter.js";
 // Jira backlog — self-contained module, see src/jiraBacklog/README.md to remove.
 import jiraBacklogRouter from "./src/jiraBacklog/jiraBacklogRouter.js";
 import { startJiraBacklogScheduler } from "./src/jiraBacklog/scheduler.js";
+// Reports — self-contained module, see src/reports/README.md to remove.
+import reportsRouter from "./src/reports/reportsRouter.js";
 
 dotenv.config();
 
@@ -83,6 +85,9 @@ app.use("/discovai", discovaiRouter);
 // Jira backlog (self-contained module). Authed like the rest of /app; admin-only
 // mutations are enforced inside the router via agendo's adminOnly middleware.
 app.use("/jira-backlog", requireAuth(), jiraBacklogRouter);
+
+// Reports (self-contained module). Admin-only end to end via adminOnly middleware.
+app.use("/reports", requireAuth(), reportsRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" }),

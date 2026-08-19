@@ -31,6 +31,10 @@ const ShiftSchema = new Schema({
   syncedEvent: GCalEventSchema,
 });
 
+// Speeds up findShiftsByRange's date-overlap query (schedule + reports) — Shift had no
+// indexes beyond _id before this.
+ShiftSchema.index({ startTime: 1, endTime: 1 });
+
 const Shift = mongoose.model("Shift", ShiftSchema);
 
 export default Shift;

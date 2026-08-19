@@ -19,6 +19,7 @@ import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 // Jira backlog — self-contained feature, see pages/JiraBacklog/README.md to remove.
 import JiraBacklog from "./pages/JiraBacklog/JiraBacklog.tsx";
 import Tasks from "./pages/Tasks/Tasks.tsx";
+import Reports from "./pages/Reports/Reports.tsx";
 
 const router = createBrowserRouter([
   {
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
             children: [
               { path: "/app/jira-backlog", element: <JiraBacklog /> },
               { path: "/app/tasks", element: <Tasks /> },
+              { path: "/app/reports", element: <Reports /> },
             ],
           },
         ],

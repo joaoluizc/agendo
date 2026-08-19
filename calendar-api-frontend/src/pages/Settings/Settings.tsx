@@ -8,6 +8,7 @@ import GenerateAPIToken from "./GenerateAPIToken/GenerateAPIToken.tsx";
 import ManageLocations from "./ManageLocations/ManageLocations.tsx";
 import ManagePositions from "./ManagePositions/ManagePositions.tsx";
 import CoverageTargets from "./CoverageTargets/CoverageTargets.tsx";
+import ReportGroups from "./ReportGroups/ReportGroups.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 export default function Settings() {
@@ -109,6 +110,15 @@ export default function Settings() {
                 Coverage targets
               </a>
             )}
+            {/* Report groups are admin-only, so the link is too. */}
+            {type === "admin" && (
+              <a
+                href="#report-groups"
+                className={"font-semibold text-primary"}
+              >
+                Report groups
+              </a>
+            )}
           </nav>
           <div className="grid gap-6" id="settings-wrapper">
             {/* <GoogleIntegration></GoogleIntegration> */}
@@ -119,6 +129,7 @@ export default function Settings() {
                 <ManageLocations />
                 <ManagePositions />
                 <CoverageTargets />
+                <ReportGroups />
               </div>
             )}
           </div>
