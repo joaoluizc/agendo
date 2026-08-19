@@ -26,6 +26,8 @@ import { NavigationMenuItem } from "@radix-ui/react-navigation-menu";
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
+const IS_LOCALHOST = import.meta.env.DEV;
+
 const Header = () => {
   const { setTheme, theme } = useTheme();
   const { type } = useUserSettings();
@@ -75,7 +77,12 @@ const Header = () => {
 
   return (
     <>
-      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50">
+      <header
+        className={cn(
+          "sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-50",
+          IS_LOCALHOST && "bg-red-500 dark:bg-red-900"
+        )}
+      >
         <NavigationMenu className="hidden md:flex gap-4 items-center flex-1">
           <NavigationMenuList>
             <NavigationMenuItem>
@@ -85,7 +92,7 @@ const Header = () => {
                 id="agendo-logo"
               >
                 <div
-                  className={`group inline-flex h-6 w-6 items-center justify-center rounded-md bg-background px-0.5 py-0.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-accent/50 data-[state=open]:bg-accent/50`}
+                  className={`group inline-flex h-6 w-6 items-center justify-center rounded-md px-0.5 py-0.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-accent/50 data-[state=open]:bg-accent/50`}
                 >
                   <img
                     src={theme === "light" ? agendoLogoDark : agendoLogoLight}
@@ -237,6 +244,11 @@ const Header = () => {
           </SheetContent>
         </Sheet>
         <div className="flex w-fit items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+          {IS_LOCALHOST && (
+            <span className="rounded-md bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-red-700 shadow-sm dark:bg-black dark:text-red-300">
+              localhost
+            </span>
+          )}
           <SignedIn>
             <UserButton />
           </SignedIn>
