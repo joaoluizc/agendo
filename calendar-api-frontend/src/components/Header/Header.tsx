@@ -180,6 +180,20 @@ const Header = () => {
                       </NavigationMenuLink>
                     </NavLink>
                   </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <NavLink
+                      to="/app/reports"
+                      className={({ isActive }) =>
+                        `${
+                          isActive ? "text-foreground" : "text-muted-foreground"
+                        } transition-colors hover:text-foreground`
+                      }
+                    >
+                      <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                        Reports
+                      </NavigationMenuLink>
+                    </NavLink>
+                  </NavigationMenuItem>
                 </>
               )}
             </SignedIn>
@@ -236,6 +250,9 @@ const Header = () => {
                     </NavLink>
                     <NavLink to="/app/tasks" className="text-muted-foreground hover:text-foreground">
                       Bug Tasks
+                    </NavLink>
+                    <NavLink to="/app/reports" className="text-muted-foreground hover:text-foreground">
+                      Reports
                     </NavLink>
                   </>
                 )}
