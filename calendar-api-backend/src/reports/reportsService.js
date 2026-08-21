@@ -163,17 +163,31 @@ async function computeHoursReport({ start, end, groupByLocation }) {
     rowsByKey.get(key).minutes[group] += minutes;
   }
 
-  // Native shifts.
+  // Native shifts. A shift whose userId matches no `users` doc is skipped outright rather
+  // than reported under its raw clerk id: `Shift` is one shared collection while `User`
+  // is env-split into `dev-users`/`users` (see models/UserModel.js), so a local dev run
+  // against the same cluster writes real rows into production `shifts` keyed by a
+  // dev-only clerk id. Those, plus shifts left behind by deleted accounts, are the only
+  // way this lookup can miss — a current agent always has a `users` doc — so dropping
+  // them keeps dev data out without touching any active roster member's hours.
   const nativeShifts = await shiftService.findShiftsByRange(rangeStart, rangeEnd);
+  let skippedUnmatched = 0;
   for (const shift of nativeShifts) {
     const minutes = clampedMinutes(shift.startTime, shift.endTime, rangeStart, rangeEnd);
     if (minutes <= 0) continue;
+    const user = userByClerkId.get(shift.userId);
+    if (!user) {
+      skippedUnmatched += 1;
+      continue;
+    }
     const positionName = shift.positionId ? positionNameById.get(String(shift.positionId)) : "";
     const group = classify(positionName);
-    const user = userByClerkId.get(shift.userId);
-    const key = user ? user.clerkId : `unmatched:${shift.userId}`;
-    const label = user ? `${user.firstName} ${user.lastName}`.trim() : shift.userId;
-    addMinutes(key, label, group, minutes);
+    addMinutes(user.clerkId, `${user.firstName} ${user.lastName}`.trim(), group, minutes);
+  }
+  if (skippedUnmatched > 0) {
+    console.log(
+      `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${end}`,
+    );
   }
 
   // Sling shifts — never let a Sling outage (or its eventual removal) fail the report.

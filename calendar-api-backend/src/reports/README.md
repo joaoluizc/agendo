@@ -29,6 +29,19 @@ a sensible default split on first read if the collection is empty (mirrors
   **clamps** each shift to the report's `[start, end]` window before computing duration —
   `findShiftsByRange` returns shifts that merely *overlap* the window uncut, so summing
   raw `endTime - startTime` would overcount any shift straddling a boundary.
+- **Drops native shifts whose `userId` matches no `users` document** (logged, with a
+  count). `Shift` is a single shared collection, but `User` is env-split into
+  `dev-users`/`users` (`models/UserModel.js`), so a backend run with
+  `NODE_ENV=development` against the same cluster writes real rows into the production
+  `shifts` collection keyed by a clerk id only `dev-users` knows. Before this guard those
+  rows surfaced in the production report as agents named `user_2ria…` — dev test data in
+  a management report. A *current* agent always has a `users` doc, so no active roster
+  member's hours are affected. Shifts orphaned by deleted accounts (departed agents, or a
+  re-created Clerk identity) are dropped by the same rule; the ones in this database
+  predate a rebuild of the `positions` collection, so their `positionId` no longer
+  resolves and they classified as "Other" — already filtered out by the rule below — but
+  a future orphan with a live `positionId` would be silently excluded. The log line is
+  the signal; `src/database/scripts/purgeOrphanShifts.js` lists and cleans them up.
 - Best-effort merges in Sling-sourced shifts via `slingController.getCalendar`, matching
   each Sling block to an agendo `User` by **email** (simpler and more reliably present on
   the Sling response than bridging through `User.slingId`). Wrapped in try/catch: a Sling
