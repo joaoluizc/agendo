@@ -9,12 +9,8 @@
     },
     {
       "name": "Frontend",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "calendar-api-frontend/node_modules/vite/bin/vite.js",
-        "calendar-api-frontend",
-        "--host"
-      ],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "calendar-api-frontend", "run", "dev"],
       "port": 5173
     }
   ]
