@@ -5,6 +5,7 @@ import { ColumnDesc, JiraIssue, JiraTableMeta, MRR_PROBLEM_STAGES } from "./type
 import { extractIssueKey } from "./api";
 import { urgencyCellClasses } from "./urgency";
 import { badgeClasses } from "./badges";
+import { JiraStatusChip } from "./jira-status-chip";
 
 interface CellProps {
   issue: JiraIssue;
@@ -19,9 +20,21 @@ interface CellProps {
  * client / urgency) carry the at-a-glance signal.
  */
 
-function Pill({ classes, children }: { classes: string; children: ReactNode }) {
+/**
+ * `wrap` lets the label break onto more lines instead of truncating — for the narrow columns
+ * (client, squad, sprint) that have to give up width at 1280px. Truncating is the default
+ * because it can't clip here anyway: the cell is whitespace-nowrap with no max width, so
+ * `max-w-full` has nothing to resolve against and a long label just widens the column.
+ */
+function Pill({ classes, children, wrap }: { classes: string; children: ReactNode; wrap?: boolean }) {
   return (
-    <span className={cn("inline-block max-w-full truncate rounded px-2 py-0.5 text-xs font-medium", classes)}>
+    <span
+      className={cn(
+        "inline-block max-w-full rounded px-2 py-0.5 text-xs font-medium",
+        wrap ? "whitespace-normal break-words" : "truncate",
+        classes,
+      )}
+    >
       {children}
     </span>
   );
@@ -31,7 +44,12 @@ const dash = <span className="text-muted-foreground">—</span>;
 
 function TextDisplay({ issue, desc }: CellProps) {
   const value = (issue[desc.field] as string) || "";
-  if (desc.badge && value) return <Pill classes={badgeClasses(desc.badge, value)}>{value}</Pill>;
+  if (desc.badge && value)
+    return (
+      <Pill classes={badgeClasses(desc.badge, value)} wrap={desc.wrap}>
+        {value}
+      </Pill>
+    );
   if (!value) return dash;
   return (
     <span className={cn("block", desc.wrap ? "whitespace-pre-wrap break-words" : "truncate")} title={value}>
@@ -43,9 +61,17 @@ function TextDisplay({ issue, desc }: CellProps) {
 function SelectDisplay({ issue, desc }: CellProps) {
   const value = (issue[desc.field] as string) || "";
   if (!value) return dash;
-  if (desc.badge) return <Pill classes={badgeClasses(desc.badge, value)}>{value}</Pill>;
+  if (desc.badge)
+    return (
+      <Pill classes={badgeClasses(desc.badge, value)} wrap={desc.wrap}>
+        {value}
+      </Pill>
+    );
   return (
-    <span className="block truncate" title={value}>
+    <span
+      className={cn("block", desc.wrap ? "whitespace-normal break-words" : "truncate")}
+      title={value}
+    >
       {value}
     </span>
   );
@@ -121,20 +147,37 @@ function MrrDisplay({ issue }: CellProps) {
   );
 }
 
+/**
+ * The Jira key as a link, with Jira's own status chipped underneath it. Stacking them keeps
+ * Jira's state in the column it belongs to — beside agendo's triage `status`, not competing
+ * with it — and costs no extra table width. Every view that renders this column gets the chip,
+ * so the main table and the To Review view can't drift apart.
+ *
+ * Jira statuses are free text and can run long ("Waiting for support"), so the chip is bounded
+ * and truncates with the full value in its tooltip: the column never widens to fit a status.
+ * 68px is this column's 92px min width minus the cell's px-3 padding on both sides.
+ */
 function JiraUrlDisplay({ issue }: CellProps) {
   const key = issue.issueKey || extractIssueKey(issue.url);
   if (!issue.url) return dash;
   return (
-    <a
-      href={issue.url}
-      target="_blank"
-      rel="noreferrer"
-      className="font-medium text-primary hover:underline"
-      title={issue.url}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {key || "link"}
-    </a>
+    <div>
+      <a
+        href={issue.url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium text-primary hover:underline"
+        title={issue.url}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {key || "link"}
+      </a>
+      {issue.jiraStatus && (
+        <div className="mt-1 max-w-[68px]">
+          <JiraStatusChip issue={issue} compact />
+        </div>
+      )}
+    </div>
   );
 }
 

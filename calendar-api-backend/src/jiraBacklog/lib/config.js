@@ -44,6 +44,10 @@ export const jiraConfig = {
   get partnerField() {
     return process.env.JIRA_PARTNER_FIELD || "customfield_11200";
   },
+  // Jira "Complexity" single-select — mapped onto the row's `complexity` dropdown on sync.
+  get complexityField() {
+    return process.env.JIRA_COMPLEXITY_FIELD || "customfield_14340";
+  },
 };
 
 /** True when the minimum needed to call Jira is present. */

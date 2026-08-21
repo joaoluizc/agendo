@@ -1,13 +1,18 @@
 import jiraBacklogService from "./jiraBacklogService.js";
-import { isJiraConfigured, isMrrConfigured } from "./lib/config.js";
+import { isJiraConfigured, isMrrConfigured, jiraConfig } from "./lib/config.js";
 import { DROPDOWN_OPTIONS } from "./lib/dropdowns.js";
 
 // GET /jira-backlog/config — lets the UI know whether Jira fetches are available and
 // supplies the canonical dropdown options (single source of truth for both ends).
+//
+// `jiraBaseUrl` lets the UI build a browse link from a bare issue key (someone searching
+// "SUP-7174" or "7174" and creating the row from the empty state) without hardcoding the
+// Atlassian host in the frontend. Empty string when Jira isn't configured.
 const getConfig = async (_req, res) => {
   res.status(200).json({
     jiraConfigured: isJiraConfigured(),
     mrrConfigured: isMrrConfigured(),
+    jiraBaseUrl: jiraConfig.baseUrl,
     dropdownOptions: DROPDOWN_OPTIONS,
   });
 };

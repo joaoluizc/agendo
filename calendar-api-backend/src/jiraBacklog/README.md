@@ -58,7 +58,7 @@ read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
 
 | Method | Path | Purpose | Admin? |
 | --- | --- | --- | --- |
-| GET | `/jira-backlog/config` | `{ jiraConfigured, dropdownOptions }` | no |
+| GET | `/jira-backlog/config` | `{ jiraConfigured, mrrConfigured, jiraBaseUrl, dropdownOptions }` | no |
 | GET | `/jira-backlog/issues` | All issues (seeds on first call if empty) | no |
 | POST | `/jira-backlog/issues` | Create a row | yes |
 | PATCH | `/jira-backlog/issues/:id` | Update fields on a row | yes |
@@ -67,12 +67,36 @@ read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
 | POST | `/jira-backlog/issues/:id/refresh-mrr` | Re-resolve one row's MRR (Jira -> Zendesk -> DOMO) | yes |
 | GET/POST | `/jira-backlog/mrr-overrides` | List / add MRR resolution overrides | yes |
 | DELETE | `/jira-backlog/mrr-overrides/:id` | Delete an MRR override | yes |
-| POST | `/jira-backlog/issues/:id/autofill` | Pull title/priority/squad/sprint/client/ZD count from Jira onto the row | yes |
+| POST | `/jira-backlog/issues/:id/autofill` | Pull status/title/priority/squad/sprint/client/complexity/ZD count from Jira onto the row | yes |
 
 > The toolbar **"Sync from Jira"** action refreshes each visible row through the per-row
 > `autofill` endpoint above (bounded concurrency on the client — no long-running batch
 > request to time out). `autofill` overwrites the Jira-sourced fields (blank Jira values never
 > wipe existing data) and leaves the agendo-only triage `status` + urgency inputs untouched.
+>
+> **`complexity` is Jira-owned and read-only here.** It mirrors Jira's own **Complexity**
+> field (`customfield_14340`: Trivial, Low, Moderate, High, Very High, Uncertain), so Jira is its
+> source of truth: it is excluded from the user-writable set (`JIRA_OWNED_DROPDOWN_FIELDS`), a
+> `PATCH` carrying it is ignored exactly as one carrying `jiraStatus` is, and the detail panel
+> shows it without an editor. To change it, change it in Jira and sync. It stays in
+> `DROPDOWN_OPTIONS` because the UI still needs the option list to render and filter it, and
+> `matchComplexity` validates against it.
+>
+> It is also the one Jira-sourced field written **even when Jira's field is empty**. The other
+> fields skip blanks so Jira can't wipe what a human typed — but nobody types complexity any
+> more, an unset field in Jira is a real state (**"Needs research"**), and skipping it would let
+> a value predating the Jira field survive every sync forever. A value Jira has that isn't in
+> the option list is left alone and logged, so a new Jira option surfaces in the logs instead of
+> being silently coerced.
+>
+> Note `complexity` does **not** feed the urgency score: that formula's inputs are scope, plan
+> tier, frustration and workaround (plus scopeConf / workaroundQ / bugType) only.
+>
+> The detail panel's refresh button calls the same `autofill`. That matters because `autofill` is
+> the **only** writer of `jiraStatus` (Jira's own status name) and `jiraStatusFetchedAt` — the
+> time of the last *successful* Jira read, stamped even when Jira returns no status name, since
+> the UI uses it to flag a status that may have drifted. `refresh-zd` and `refresh-mrr` touch
+> neither field, so neither can bring a stale Jira status up to date.
 
 > `adminOnly` enforces the role check in every environment. Set `ADMIN_BYPASS=1` locally
 > to skip it (it logs a warning on every request); otherwise your Clerk user needs
@@ -161,7 +185,9 @@ from a Jira custom field (`customfield_13671` by default). Configured via the fe
   email is set the client uses Basic; with no email it falls back to Bearer (OAuth
   tokens). Despite the spec, an `ATATT` token sent as Bearer fails with 403 "Failed to
   parse Connect Session Auth Token" — see `lib/jiraClient.js`.
-- Optional: `JIRA_CLOUD_ID`, `JIRA_ZD_COUNT_FIELD`
+- Optional: `JIRA_CLOUD_ID`, and the custom-field id overrides `JIRA_ZD_COUNT_FIELD`,
+  `JIRA_SQUAD_FIELD`, `JIRA_SPRINT_FIELD`, `JIRA_PARTNER_FIELD`, `JIRA_COMPLEXITY_FIELD`
+  (each defaults to the id used by Duda's "Weekly Bugs" (SUP) project)
 
 Until those are set, `isJiraConfigured()` is false: the column simply shows `—`, the
 refresh controls are hidden, and `refresh-zd` returns `409 JIRA_NOT_CONFIGURED`. A
@@ -243,24 +269,29 @@ parent_account_email, billing_master_business_name, account_plan_type, 2020_segm
 revenue_net_amount`). Validated end-to-end against the BI agent's reference case
 (`sofia.mazzoli@register.it` -> owner `websitebuilder@register.it`, MRR 22535.63 for 2026-06).
 
-## Daily automatic sync
+## Automatic sync
 
 `jiraBacklogService.syncAllFromJira()` runs the bulk "Sync from Jira" server-side: it
 autofills every linked bug (key or URL) a few at a time, tallying ok/failed and skipping
 gracefully when Jira isn't configured. It never throws for a single-row failure. A second,
 independently-gated MRR-refresh pass rides along (logs with a `[jira-backlog][mrr-sync]`
 prefix) — skipped entirely unless `isMrrConfigured()` (see "MRR resolution" above). Two ways to
-run it daily at **00:00 UTC** — both call the same function and log with a `[jira-backlog][sync]`
-prefix so runs are easy to confirm in Render's log stream:
+run it at **07:00, 12:00 and 16:00 São Paulo time** — spread across the Brazilian workday so a
+stale status is usually corrected before anyone reports it, rather than overnight when nobody is
+looking. Both call the same function and log with a `[jira-backlog][sync]` prefix so runs are
+easy to confirm in Render's log stream:
 
 1. **In-process cron** (`scheduler.js`, started once from `app.js` via
-   `startJiraBacklogScheduler()`): a `node-cron` job (`0 0 * * *`, timezone UTC). Reliable on an
-   **always-on** web service; on a tier that sleeps when idle the midnight tick can be missed
-   (you'll see no `tick` log at 00:00). Logs on registration and on every run.
+   `startJiraBacklogScheduler()`): a `node-cron` job (`0 7,12,16 * * *`, timezone
+   `America/Sao_Paulo`). Reliable on an **always-on** web service; on a tier that sleeps when
+   idle a tick can be missed (you'll see no `tick` log at that hour) — running inside working
+   hours makes that less likely than a midnight run, and three spread-out ticks are unlikely to
+   all be missed. Logs on registration and on every run.
 2. **Standalone script** for a **Render Cron Job** (robust even if the web service sleeps — it
    runs in its own process): set the job command to
-   `node src/jiraBacklog/scripts/sync-all-jira.js --prod` and schedule `0 0 * * *` (Render cron
-   is UTC). Exits non-zero if Jira is unconfigured so the platform flags it.
+   `node src/jiraBacklog/scripts/sync-all-jira.js --prod` and schedule `0 10,15,19 * * *`
+   (Render cron is UTC — the same three times in São Paulo terms). Exits non-zero if Jira is
+   unconfigured so the platform flags it.
 
 Pick whichever fits your setup (running both is harmless — the sync just overwrites the same
 Jira-sourced fields twice). To confirm it works right now, run the script manually and watch the
@@ -278,7 +309,7 @@ jiraBacklog/
 ├── seed/jiraBacklogSeed.js     89 cleaned seed issues from the sheet (auto-generated, do not edit)
 ├── seed/mapSeedRecord.js       seed-record → JiraIssue doc mapping (shared by seeding + import)
 ├── taskModel.js / taskService.js / taskController.js  tasks + kanban statuses (+ No-ETA review)
-├── scheduler.js                daily 00:00 UTC "Sync from Jira" (node-cron, started from app.js)
+├── scheduler.js                07:00/12:00/16:00 Sao Paulo "Sync from Jira" (node-cron, from app.js)
 ├── scripts/migrate-status.js   one-time booleans→status migration (idempotent)
 ├── scripts/import-sheet-data.js  refresh an existing DB from the sheet (upsert by key)
 ├── scripts/add-bug-statuses.js  back-fill missing STATUS_OPTIONS into existing DBs (idempotent)

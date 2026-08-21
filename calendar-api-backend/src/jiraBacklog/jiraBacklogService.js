@@ -20,7 +20,20 @@ const STRING_FIELDS = [
   "sprint",
   "comment",
 ];
-const DROPDOWN_FIELDS = Object.keys(DROPDOWN_OPTIONS); // status, priority, squad, complexity, ...
+/**
+ * Dropdown fields whose value comes from Jira, so Jira is their source of truth and they are
+ * NOT user-writable — sanitizeWritable drops them like any unknown key, and PATCH silently
+ * ignores them. `complexity` mirrors Jira's own Complexity field and is rewritten on every
+ * sync, so an edit made here would only revert at the next tick; the value is changed in Jira
+ * instead. They stay in DROPDOWN_OPTIONS because the UI still needs the option list to render
+ * and filter them, and matchComplexity validates against it.
+ */
+const JIRA_OWNED_DROPDOWN_FIELDS = new Set(["complexity"]);
+
+// status, priority, squad, ... (see JIRA_OWNED_DROPDOWN_FIELDS for the read-only ones)
+const DROPDOWN_FIELDS = Object.keys(DROPDOWN_OPTIONS).filter(
+  (f) => !JIRA_OWNED_DROPDOWN_FIELDS.has(f),
+);
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -226,11 +239,40 @@ function matchSquad(jiraValue) {
   return contains.length === 1 ? contains[0] : "";
 }
 
+/** What our complexity dropdown records when nobody has set Jira's Complexity field. */
+const COMPLEXITY_UNSET = "Needs research";
+
+/**
+ * Jira's "Complexity" option -> our dropdown value. The two option lists are deliberately
+ * identical (see lib/dropdowns.js), so an exact case-insensitive match is all that is needed —
+ * no substring fallback like matchSquad, where the vocabularies genuinely differ.
+ *
+ * Empty means nobody set the field in Jira, which is precisely what "Needs research" records.
+ * A value Jira has but we don't returns null so the sync leaves the row alone rather than
+ * guessing; that can only happen if an option is added in Jira, and the warning is how we
+ * find out.
+ */
+function matchComplexity(jiraValue) {
+  const v = (jiraValue || "").trim();
+  if (!v) return COMPLEXITY_UNSET;
+  const match = DROPDOWN_OPTIONS.complexity.find((o) => o.toLowerCase() === v.toLowerCase());
+  if (match) return match;
+  console.warn(
+    `[jira-backlog] unknown Jira Complexity value "${v}" — leaving the row's complexity unchanged. ` +
+      `Add it to DROPDOWN_OPTIONS.complexity in lib/dropdowns.js.`,
+  );
+  return null;
+}
+
 /**
  * Pull as much as we can from the linked Jira ticket onto a row: summary -> description,
- * priority, squad, sprint, and the Zendesk count. Only non-empty fetched values are applied
+ * priority, squad, sprint, complexity, and the Zendesk count. Only non-empty fetched values are applied
  * (so blank Jira fields never wipe existing data), and dropdown values are validated by
  * sanitizeWritable. Throws on Jira errors; returns null if the row is gone.
+ *
+ * Also stamps `jiraStatusFetchedAt` — the time of the last *successful* Jira read, which is
+ * what the UI's staleness indicator is built on. See the comment at the assignment for why it
+ * is stamped unconditionally rather than only when a status name came back.
  */
 async function autofillFromJira(id) {
   const doc = await JiraIssue.findById(id);
@@ -249,7 +291,30 @@ async function autofillFromJira(id) {
   Object.assign(doc, sanitizeWritable(patch));
 
   // Jira-sourced, read-only fields — set directly, not part of the user-writable set.
+  //
+  // Complexity is applied even when Jira's field is empty, unlike everything above: the guards
+  // above skip blanks so Jira can't wipe what a human typed, but nobody types complexity any
+  // more. An unset field in Jira is a real state here ("Needs research"), and skipping it would
+  // let a value predating the Jira field survive every sync forever. matchComplexity returns
+  // null only for a value Jira has that we don't, where leaving the row alone is right.
+  const complexity = matchComplexity(details.complexityValue);
+  if (complexity != null) doc.complexity = complexity;
+
   if (details.jiraStatusName) doc.jiraStatus = details.jiraStatusName;
+  else {
+    // A Jira issue always has a status, so an empty name means we couldn't read the field
+    // (permissions, or it was omitted) — the guard above then keeps the previous value, which
+    // would otherwise be indistinguishable from a fresh one. Make it visible in the logs.
+    console.warn(
+      `[jira-backlog] ${doc.issueKey || doc.url}: Jira returned no status name — keeping the previous jiraStatus ("${doc.jiraStatus}")`,
+    );
+  }
+  // Stamped on every *successful* fetch, deliberately outside the guard above: fetchIssueDetails
+  // throws on any Jira error, so reaching here means "we asked Jira just now" — which is exactly
+  // what the staleness indicator needs to know. Gating this on a non-empty status (the way
+  // zdCount below gates its own stamp) would make the empty-name case worse, not better: the row
+  // would keep displaying the old status while still reporting that it had never synced.
+  doc.jiraStatusFetchedAt = new Date();
 
   if (details.zdCount != null) {
     doc.zdCount = details.zdCount;

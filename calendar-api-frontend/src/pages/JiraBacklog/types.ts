@@ -6,6 +6,8 @@ export interface JiraIssue {
   status: string;
   /** The ticket's status in Jira ("To Do", "Closed", ...) — Jira-sourced, read-only. */
   jiraStatus: string;
+  /** When jiraStatus was last successfully read from Jira; null if it never was. */
+  jiraStatusFetchedAt: string | null;
   desc: string;
   client: string;
   priority: string;
@@ -175,6 +177,12 @@ export interface ColumnDesc {
   badge?: BadgeKind;
   /** Let this column absorb leftover width (Description). */
   grow?: boolean;
+  /**
+   * Value comes from Jira, so it's displayed but never editable here — the backend refuses
+   * writes to it too (JIRA_OWNED_DROPDOWN_FIELDS in jiraBacklogService.js). Change it in Jira
+   * and sync.
+   */
+  readOnly?: boolean;
 }
 
 /**

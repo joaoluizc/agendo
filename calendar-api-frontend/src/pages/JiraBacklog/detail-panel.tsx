@@ -22,6 +22,7 @@ import { TasksSection } from "./tasks-section";
 import { extractIssueKey } from "./api";
 import { urgencyCellClasses } from "./urgency";
 import { badgeClasses } from "./badges";
+import { isJiraStatusStale, relativeToNow } from "./dates";
 
 /**
  * Notion-style detail panel. Clicking a row opens this slide-over; every field is
@@ -41,6 +42,30 @@ const inputClass =
 
 function patch(field: keyof JiraIssue, value: unknown): IssuePatch {
   return { [field]: value } as IssuePatch;
+}
+
+/**
+ * Jira status is synced by a cron, not read live, so it can lag the real ticket. Spell out how
+ * old the value is — without this the panel presents a possibly week-old status with the same
+ * confidence as a fresh one. Amber once stale (which includes an unknown sync time).
+ */
+function JiraStatusSyncNote({ issue }: { issue: JiraIssue }) {
+  const at = issue.jiraStatusFetchedAt;
+  const stale = isJiraStatusStale(at);
+  const label = at
+    ? `Synced ${relativeToNow(at)}`
+    : issue.jiraStatus
+      ? "Last sync time unknown"
+      : "Never synced from Jira";
+
+  return (
+    <p
+      title={at ? `Fetched ${new Date(at).toLocaleString()}` : undefined}
+      className={cn("text-xs", stale ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}
+    >
+      {label}
+    </p>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -188,7 +213,36 @@ function SelectField({ issue, desc, meta }: FieldProps) {
 }
 
 function FieldEditor(props: FieldProps) {
+  if (props.desc.readOnly) return <ReadOnlyField {...props} />;
   return props.desc.type === "select" ? <SelectField {...props} /> : <TextField {...props} />;
+}
+
+/**
+ * A field Jira owns: shown, never editable — the backend refuses writes to it, so there is
+ * deliberately no editor here. It changes in Jira and arrives on the next sync.
+ */
+function ReadOnlyField({ issue, desc }: FieldProps) {
+  const value = (issue[desc.field] as string) || "";
+  return (
+    <Field label={desc.header}>
+      {value ? (
+        desc.badge ? (
+          <span
+            className={cn(
+              "inline-block rounded px-2 py-0.5 text-xs font-medium",
+              badgeClasses(desc.badge, value),
+            )}
+          >
+            {value}
+          </span>
+        ) : (
+          <p className="py-1.5 text-sm">{value}</p>
+        )
+      ) : (
+        <p className="py-1.5 text-sm text-muted-foreground">—</p>
+      )}
+    </Field>
+  );
 }
 
 function UrgencyField({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }) {
@@ -326,7 +380,7 @@ function ZdMrrSummary({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }
                 {issue.zdCount == null ? "—" : issue.zdCount}
               </span>
             )}
-            {meta.canEdit && (
+            {meta.canEdit && issue.url && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -334,9 +388,9 @@ function ZdMrrSummary({ issue, meta }: { issue: JiraIssue; meta: JiraTableMeta }
                 disabled={issue._zdBusy}
                 onClick={(e) => {
                   e.stopPropagation();
-                  meta.refreshZd(issue._id);
+                  meta.autofill(issue._id);
                 }}
-                title="Refresh count from Jira"
+                title="Sync from Jira — updates status, description, client, priority, squad, sprint and the Zendesk count"
               >
                 <RefreshCw className="h-3 w-3" />
               </Button>
@@ -539,6 +593,7 @@ export function DetailPanel({
               ) : (
                 <p className="py-1.5 text-sm text-muted-foreground">—</p>
               )}
+              <JiraStatusSyncNote issue={issue} />
             </Field>
           </div>
 

@@ -115,6 +115,7 @@ export async function fetchIssueDetails(keyOrUrl) {
     jiraConfig.squadField,
     jiraConfig.sprintField,
     jiraConfig.partnerField,
+    jiraConfig.complexityField,
   ].join(",");
   const url = `${jiraConfig.baseUrl}/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=${encodeURIComponent(fields)}`;
 
@@ -147,6 +148,7 @@ export async function fetchIssueDetails(keyOrUrl) {
     squadValue: extractOptionValue(f[jiraConfig.squadField]),
     sprintName: pickSprintName(f[jiraConfig.sprintField]),
     partnerValue: extractOptionValue(f[jiraConfig.partnerField]),
+    complexityValue: extractOptionValue(f[jiraConfig.complexityField]),
     zdCount: Number.isFinite(zd) ? Number(zd) : null,
   };
 }
