@@ -23,13 +23,18 @@ export const DROPDOWN_OPTIONS = {
     "Store front (eCommerce)",
     "Vibe",
   ],
+  // Mirrors the SUP project's "Complexity" field (customfield_14340) so the value can be
+  // pulled straight from Jira on sync. Jira's own six options, in Jira's order, plus
+  // "Needs research" for a ticket where nobody has set the field yet. Note "Uncertain" is a
+  // deliberate Jira choice and "Needs research" is the absence of one — they are not the same.
   complexity: [
     "Needs research",
-    "1 - Small",
-    "2 - Minor",
-    "3 - Medium",
-    "4 - Moderate",
-    "5 - Complex",
+    "Trivial",
+    "Low",
+    "Moderate",
+    "High",
+    "Very High",
+    "Uncertain",
   ],
   scope: [
     "Confirmed all sites / master",

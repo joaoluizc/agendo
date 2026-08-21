@@ -22,6 +22,23 @@ places (the route and the nav link — see "Remove it").
   comment, squad, sprint, priority, status and bug type. It accepts a pasted **Jira link** —
   the query is reduced to the issue key (`normalizeQuery` in `constants.ts`) — so pasting a
   browse URL jumps straight to that ticket, the most common case. Available to all users.
+  Searching also **switches the view to All** (with a toast saying so): the narrower views can
+  hide a bug that *is* tracked, which reads as "not on the backlog" when it was only filtered
+  out — the wrong answer when you're deciding whether to add it. The view stays on All once the
+  search is cleared.
+- **Nothing found → track it (`empty-search-state.tsx`):** when a search matches no rows and
+  what you typed looks like a Jira ticket, the empty state offers to start tracking it.
+  `classifyIssueRef` (`constants.ts`) recognises the three shapes people paste — a browse URL,
+  a bare key (`SUP-7174`), or just the number (`7174`, where the `SUP` prefix is assumed). The
+  offer always names the **resolved key**, so an assumed prefix is confirmed before anything is
+  created, never applied silently.
+- **Add row (`add-issue-dialog.tsx`):** asks for the Jira ticket up front and creates nothing
+  until it has one — a keyless row can't pull any of its fields (they all come from Jira) and
+  can't be de-duplicated either. On submit the row is created with its browse URL already
+  attached (built from `jiraBaseUrl` in `/config`), appears at the top, opens its panel, and is
+  autofilled from Jira; once the data lands it settles into its real sorted position
+  (`compareByUrgencyThenOrder`, mirroring the server's `urgency desc, order asc`). An already
+  tracked key hits the existing duplicate dialog and offers to open the row instead.
 - **Detail panel (`detail-panel.tsx`):** clicking a row opens a right-side panel where
   **every field is editable**. The urgency-composing fields (scope, plan tier, workaround,
   frustration, scope confidence, workaround quality, bug type) plus comment and the
@@ -52,7 +69,14 @@ places (the route and the nav link — see "Remove it").
   statuses; grouped into squad sections that are collapsed by default; within a group, by
   status (`In a Sprint` before `Review with Squad`), then Regressions first, then urgency
   desc, nulls last. Each row shows its **comment under the title** so the review rationale is
-  visible at a glance).
+  visible at a glance, plus a chip with **Jira's own status** as of the last sync).
+- **Jira status freshness (`dates.ts`):** `jiraStatus` is a snapshot written by the backend
+  sync, not a live read, so it can lag the real ticket. `jiraStatusFetchedAt` records the last
+  successful Jira read; past `JIRA_STATUS_STALE_HOURS` (18h — sized against the sync's overnight
+  gap) the To Review chip grows an amber ⚠ and the panel's "Synced X ago" line turns amber. A row
+  that has never synced reads "Never synced from Jira" without the warning — unknown age isn't
+  the same claim as stale age. The detail panel's ↻ (beside the Zendesk count) runs a full
+  autofill, which is the only action that refreshes the status for a single row.
 - **Colours (`badges.ts`):** Client = light purple when set; Priority = Minor blue / Major
   red / Critical louder red; Status = one hue each; Urgency = ≥80 red, 60–79 amber, <60 green.
 - **Urgency:** auto-calculated; admins override it in the panel and clear it to revert to

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { BadgeDollarSign, ListChecks, Loader2, Plus, RefreshCw } from "lucide-react";
@@ -23,13 +23,18 @@ import { ToReviewView } from "./to-review-view";
 import { DetailPanel } from "./detail-panel";
 import { BugStatus, IssuePatch, JiraIssue, JiraTableMeta, ViewKey } from "./types";
 import {
+  classifyIssueRef,
   COLUMN_DEFS,
+  compareByUrgencyThenOrder,
   DEFAULT_TO_REVIEW_STATUSES,
+  issueBrowseUrl,
   matchesQuery,
   normalizeQuery,
   POSSIBLE_NO_ETA_STATUS,
   STATUS_OPTIONS,
 } from "./constants";
+import { AddIssueDialog } from "./add-issue-dialog";
+import { EmptySearchState } from "./empty-search-state";
 import { ColumnsSelect } from "./columns-select";
 import { ManageStatusesDialog } from "./manage-statuses-dialog";
 import { ManageMrrOverridesDialog } from "./manage-mrr-overrides-dialog";
@@ -38,6 +43,15 @@ import { StatusMultiSelect } from "./status-multi-select";
 import { usePageFavicon } from "./use-page-favicon";
 import { usePageTitle } from "./use-page-title";
 import favicon from "./favicon.svg";
+
+/**
+ * The toolbar's action labels, hidden below 1440px so those buttons collapse to icons. 1440 is
+ * measured rather than guessed: the full-label toolbar needs about 1350px against the roughly
+ * 1233px available at a 1280 viewport, and it still overflows at 1366. Not a default Tailwind
+ * breakpoint, hence the arbitrary variant — cheaper than adding a screen to the shared theme
+ * for a single row.
+ */
+const TOOLBAR_LABEL = "hidden min-[1440px]:inline";
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: "open", label: "Open" },
@@ -95,6 +109,8 @@ export default function JiraBacklog() {
   const [hiddenColumns, setHiddenColumns] = useState<HiddenColumns>({ open: [], all: [] });
   const [jiraConfigured, setJiraConfigured] = useState(false);
   const [mrrConfigured, setMrrConfigured] = useState(false);
+  // Jira host from the server, so a browse URL can be built from a key the user typed.
+  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -103,6 +119,10 @@ export default function JiraBacklog() {
   const [manageOpen, setManageOpen] = useState(false);
   const [mrrOverridesOpen, setMrrOverridesOpen] = useState(false);
   const [dup, setDup] = useState<{ existingId: string; issueKey: string } | null>(null);
+  // "Add row" asks for the Jira ticket up front: a row with no key can't pull any data and
+  // would just be dead weight in the backlog, so nothing is persisted until we have one.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
   // When a bug is set to "Possible No-ETA", offer to create the 30-day re-evaluation task.
   const [noEtaPrompt, setNoEtaPrompt] = useState<{ issueId: string } | null>(null);
 
@@ -132,6 +152,7 @@ export default function JiraBacklog() {
       const [cfg, list] = await Promise.all([jiraApi.getConfig(), jiraApi.getIssues()]);
       setJiraConfigured(cfg.jiraConfigured);
       setMrrConfigured(cfg.mrrConfigured);
+      setJiraBaseUrl(cfg.jiraBaseUrl || "");
       setIssues(list);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load");
@@ -266,19 +287,6 @@ export default function JiraBacklog() {
     }
   }, [noEtaPrompt]);
 
-  const addRow = useCallback(async () => {
-    try {
-      const created = await jiraApi.createIssue({});
-      setIssues((prev) => [...prev, created]);
-      setView("all"); // new row has no status filter signal yet
-      setQuery(""); // an active search would otherwise hide the empty new row
-      setSelectedId(created._id); // open the panel so it can be filled in
-      toast.success("Row added — fill in its details in the panel.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not add row");
-    }
-  }, []);
-
   const confirmDelete = useCallback(async () => {
     const id = pendingDeleteId;
     setPendingDeleteId(null);
@@ -357,6 +365,62 @@ export default function JiraBacklog() {
     [patchIssue],
   );
 
+  // Create a tracked row from whatever was typed — a browse URL, a bare key, or just the
+  // number half of one. The row is created with its Jira link already attached, then autofilled,
+  // so it never exists in the blank, un-pullable state the old "Add row" produced.
+  const createFromRef = useCallback(
+    async (raw: string) => {
+      const ref = classifyIssueRef(raw);
+      if (!ref.key) {
+        toast.error("Paste a Jira link, or type a key like SUP-7174 or just its number.");
+        return;
+      }
+
+      setAddBusy(true);
+      try {
+        const created = await jiraApi.createIssue({
+          issueKey: ref.key,
+          url: issueBrowseUrl(jiraBaseUrl, ref.key),
+        });
+        // Straight to the top so it is visibly there, and the panel opens on it.
+        setIssues((prev) => [created, ...prev]);
+        setView("all");
+        setQuery("");
+        setSelectedId(created._id);
+        setAddOpen(false);
+        toast.success(`${ref.key} added — pulling its details from Jira…`);
+
+        if (jiraConfigured) await autofill(created._id);
+        // Now that it has an urgency, let it settle where a reload would put it rather than
+        // clinging to the top. The panel is already open on it, so nothing is lost.
+        setIssues((prev) => [...prev].sort(compareByUrgencyThenOrder));
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "DUPLICATE_ISSUE") {
+          setAddOpen(false);
+          setDup({ existingId: e.existingId || "", issueKey: ref.key });
+        } else {
+          toast.error(e instanceof Error ? e.message : "Could not add row");
+        }
+      } finally {
+        setAddBusy(false);
+      }
+    },
+    [jiraBaseUrl, jiraConfigured, autofill],
+  );
+
+  // Searching jumps to "All". The narrower views can hide a bug that *is* tracked, which
+  // reads as "not on the backlog" when it was only filtered out — the exact wrong answer
+  // when someone is checking whether to add it. Announced, because a view changing on its
+  // own is otherwise a surprise. Keyed off the query alone (view is read through a ref) so
+  // switching view by hand mid-search isn't immediately undone.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useEffect(() => {
+    if (!query.trim() || viewRef.current === "all") return;
+    setView("all");
+    toast.info("View changed to All for a complete search.");
+  }, [query]);
+
   // Rows for the current view, before search. Every view now has a toolbar status filter:
   // "To Review" shows exactly the selected statuses; "Open" / "All" narrow their base set
   // only once the user unchecks something (null = inert).
@@ -377,7 +441,8 @@ export default function JiraBacklog() {
   );
 
   // Bulk "Sync from Jira": pull every Jira-sourced field (title, client, priority, squad,
-  // sprint, ZD count) onto each visible row via the same per-row autofill the panel uses.
+  // sprint, ZD count) onto each visible row via the same per-row autofill the detail panel's
+  // refresh button uses.
   const syncVisible = useCallback(async () => {
     const ids = visibleIssues.map((i) => i._id);
     if (!ids.length) return;
@@ -542,23 +607,46 @@ export default function JiraBacklog() {
         </span>
         <div className="ml-auto flex items-center gap-2">
           <SearchBox value={query} onChange={setQuery} className="w-40 sm:w-52 lg:w-64" />
+          {/* Below 1440px these four collapse to icons. With every label shown the toolbar
+              needs about 1350px, which overflows a 1280 and even a 1366 viewport — and the
+              labels are the only part that can be given up without removing a control. The
+              `title` carries the name while collapsed, so nothing becomes unidentifiable. */}
           {canEdit && (
             <>
-              <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
-                <ListChecks className="h-4 w-4" /> Manage statuses
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setManageOpen(true)}
+                title="Manage statuses"
+              >
+                <ListChecks className="h-4 w-4" />
+                <span className={TOOLBAR_LABEL}>Manage statuses</span>
               </Button>
               {mrrConfigured && (
-                <Button variant="outline" size="sm" onClick={() => setMrrOverridesOpen(true)}>
-                  <BadgeDollarSign className="h-4 w-4" /> MRR overrides
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMrrOverridesOpen(true)}
+                  title="MRR overrides"
+                >
+                  <BadgeDollarSign className="h-4 w-4" />
+                  <span className={TOOLBAR_LABEL}>MRR overrides</span>
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={addRow}>
-                <Plus className="h-4 w-4" /> Add row
+              <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} title="Add row">
+                <Plus className="h-4 w-4" />
+                <span className={TOOLBAR_LABEL}>Add row</span>
               </Button>
               {jiraConfigured && (
-                <Button variant="outline" size="sm" onClick={syncVisible} disabled={bulkBusy}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={syncVisible}
+                  disabled={bulkBusy}
+                  title="Sync from Jira"
+                >
                   {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Sync from Jira
+                  <span className={TOOLBAR_LABEL}>Sync from Jira</span>
                 </Button>
               )}
             </>
@@ -578,6 +666,13 @@ export default function JiraBacklog() {
               Retry
             </Button>
           </div>
+        ) : term && visibleIssues.length === 0 ? (
+          <EmptySearchState
+            query={query}
+            canEdit={canEdit}
+            busy={addBusy}
+            onCreate={createFromRef}
+          />
         ) : view === "toReview" ? (
           <ToReviewView issues={visibleIssues} meta={meta} />
         ) : (
@@ -652,6 +747,15 @@ export default function JiraBacklog() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {canEdit && (
+        <AddIssueDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          busy={addBusy}
+          onSubmit={createFromRef}
+        />
+      )}
 
       {canEdit && (
         <ManageStatusesDialog

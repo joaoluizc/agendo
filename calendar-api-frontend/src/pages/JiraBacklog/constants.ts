@@ -50,7 +50,10 @@ export const DROPDOWN_OPTIONS: Record<string, readonly string[]> = {
     "Store front (eCommerce)",
     "Vibe",
   ],
-  complexity: ["Needs research", "1 - Small", "2 - Minor", "3 - Medium", "4 - Moderate", "5 - Complex"],
+  // Mirrors Jira's "Complexity" field (customfield_14340) — keep in step with the backend's
+  // lib/dropdowns.js, which validates every write. "Uncertain" is a deliberate Jira choice;
+  // "Needs research" is the absence of one (nobody set the field in Jira).
+  complexity: ["Needs research", "Trivial", "Low", "Moderate", "High", "Very High", "Uncertain"],
   scope: [
     "Confirmed all sites / master",
     "One site, one client",
@@ -77,12 +80,13 @@ export const DROPDOWN_OPTIONS: Record<string, readonly string[]> = {
 const F: Record<string, ColumnDesc> = {
   jiraUrl: { id: "jiraUrl", field: "url", header: "Jira", type: "jiraUrl", minWidth: 92 },
   status: { id: "status", field: "status", header: "Status", type: "select", options: DROPDOWN_OPTIONS.status, badge: "status", minWidth: 150 },
-  desc: { id: "desc", field: "desc", header: "Title", type: "text", minWidth: 240, wrap: true, grow: true },
-  client: { id: "client", field: "client", header: "Client", type: "text", badge: "client", minWidth: 110 },
+  desc: { id: "desc", field: "desc", header: "Title", type: "text", minWidth: 170, wrap: true, grow: true },
+  client: { id: "client", field: "client", header: "Client", type: "text", badge: "client", minWidth: 90, wrap: true },
   priority: { id: "priority", field: "priority", header: "Priority", type: "select", options: DROPDOWN_OPTIONS.priority, badge: "priority", minWidth: 100 },
-  squad: { id: "squad", field: "squad", header: "Squad", type: "select", options: DROPDOWN_OPTIONS.squad, minWidth: 150 },
-  sprint: { id: "sprint", field: "sprint", header: "Sprint", type: "text", minWidth: 110 },
-  complexity: { id: "complexity", field: "complexity", header: "Complexity", type: "select", options: DROPDOWN_OPTIONS.complexity, minWidth: 130 },
+  squad: { id: "squad", field: "squad", header: "Squad", type: "select", options: DROPDOWN_OPTIONS.squad, minWidth: 100, wrap: true },
+  sprint: { id: "sprint", field: "sprint", header: "Sprint", type: "text", minWidth: 90, wrap: true },
+  // Jira-owned (its Complexity field) — read-only here; edits happen in Jira and arrive on sync.
+  complexity: { id: "complexity", field: "complexity", header: "Complexity", type: "select", options: DROPDOWN_OPTIONS.complexity, minWidth: 122, wrap: true, readOnly: true },
   urgency: { id: "urgency", field: "urgency", header: "Urgency", type: "urgency", minWidth: 84 },
   zd: { id: "zd", field: "zdCount", header: "Tickets", type: "zd", minWidth: 88 },
   mrr: { id: "mrr", field: "mrr", header: "MRR", type: "mrr", minWidth: 100 },
@@ -199,6 +203,85 @@ const ISSUE_KEY_RE = /[A-Za-z]+-\d+/;
 export function normalizeQuery(raw: string): string {
   const key = raw.match(ISSUE_KEY_RE);
   return (key ? key[0] : raw).trim().toLowerCase();
+}
+
+/**
+ * Project prefix assumed when someone types only the number half of a key ("7174"). The
+ * backlog is overwhelmingly SUP, but not exclusively — so the resolved key is always shown
+ * back to the user for confirmation before a row is created, never applied silently.
+ */
+export const DEFAULT_ISSUE_PREFIX = "SUP";
+
+/** What a search box / prompt entry turned out to be, once parsed. */
+export type IssueRefKind = "url" | "key" | "number" | "none";
+
+export interface IssueRef {
+  kind: IssueRefKind;
+  /** Canonical upper-case key ("SUP-7174"), or "" when kind is "none". */
+  key: string;
+  /** True when the prefix was assumed rather than typed — worth saying out loud in the UI. */
+  prefixAssumed: boolean;
+}
+
+const FULL_KEY_RE = /^[A-Za-z]+-\d+$/;
+const DIGITS_RE = /^\d+$/;
+
+/**
+ * Classify what the user typed so the UI can name it back to them precisely. The three
+ * shapes people actually paste into this backlog:
+ *
+ *   - a browse URL   https://dudamobile.atlassian.net/browse/SUP-7174  -> kind "url"
+ *   - a bare key     SUP-7174                                          -> kind "key"
+ *   - just digits    7174                                              -> kind "number" (prefix assumed)
+ *
+ * Anything else is "none": it may still be a useful free-text search, but there's no issue
+ * to offer to create from it. Deliberately separate from normalizeQuery, which only needs a
+ * lowercase substring to filter on — this needs the canonical key to *create* a row.
+ */
+export function classifyIssueRef(raw: string): IssueRef {
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return { kind: "none", key: "", prefixAssumed: false };
+
+  // A URL is only a URL if it also carries a key — a bare domain gives us nothing to create.
+  if (/^https?:\/\//i.test(trimmed) || trimmed.includes("/browse/")) {
+    const m = trimmed.match(ISSUE_KEY_RE);
+    return m
+      ? { kind: "url", key: m[0].toUpperCase(), prefixAssumed: false }
+      : { kind: "none", key: "", prefixAssumed: false };
+  }
+
+  if (FULL_KEY_RE.test(trimmed)) {
+    return { kind: "key", key: trimmed.toUpperCase(), prefixAssumed: false };
+  }
+
+  if (DIGITS_RE.test(trimmed)) {
+    return { kind: "number", key: `${DEFAULT_ISSUE_PREFIX}-${trimmed}`, prefixAssumed: true };
+  }
+
+  return { kind: "none", key: "", prefixAssumed: false };
+}
+
+/** Build the Jira browse URL for a key. Returns "" without a configured base URL. */
+export function issueBrowseUrl(baseUrl: string, key: string): string {
+  if (!baseUrl || !key) return "";
+  return `${baseUrl.replace(/\/+$/, "")}/browse/${key}`;
+}
+
+/**
+ * The order the server returns rows in for the All / Open views: most urgent first, null
+ * urgency last (incomplete rows / regressions), `order` as the stable tiebreaker. Mirrors
+ * `JiraIssue.find().sort({ urgency: -1, order: 1 })` in the backend service — kept in step
+ * with it. Used to re-place a freshly created row once its Jira data lands, so it settles
+ * where a reload would put it instead of clinging to the top of the list.
+ */
+export function compareByUrgencyThenOrder(a: JiraIssue, b: JiraIssue): number {
+  const aNull = a.urgency == null;
+  const bNull = b.urgency == null;
+  if (aNull !== bNull) return aNull ? 1 : -1;
+  if (!aNull && !bNull && a.urgency !== b.urgency) {
+    return (b.urgency as number) - (a.urgency as number);
+  }
+  return (a.order ?? 0) - (b.order ?? 0);
 }
 
 /**

@@ -22,6 +22,10 @@ const JiraIssueSchema = new Schema(
     // The ticket's status *in Jira* ("To Do", "Closed", ...) — Jira-sourced on autofill/sync,
     // read-only in the UI (agendo's own triage state above is the editable one).
     jiraStatus: { type: String, default: "" },
+    // When we last *successfully* read the status from Jira — not when the value last changed.
+    // Drives the staleness indicator in the UI: a row that keeps failing to sync (renamed Jira
+    // key, permissions) holds a plausible-looking jiraStatus forever, and this is what exposes it.
+    jiraStatusFetchedAt: { type: Date, default: null },
     desc: { type: String, default: "" },
     client: { type: String, default: "" },
     priority: { type: String, default: "" },

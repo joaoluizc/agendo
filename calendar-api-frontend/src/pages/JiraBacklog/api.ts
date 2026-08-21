@@ -46,6 +46,8 @@ async function request<T>(path: string, options: { method?: string; body?: unkno
 export interface JiraConfig {
   jiraConfigured: boolean;
   mrrConfigured: boolean;
+  /** Jira host, no trailing slash — used to build a browse URL from a bare issue key. */
+  jiraBaseUrl: string;
   dropdownOptions: Record<string, string[]>;
 }
 

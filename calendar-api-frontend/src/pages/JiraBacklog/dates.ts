@@ -1,4 +1,11 @@
-import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from "date-fns";
+import {
+  differenceInHours,
+  format,
+  formatDistanceToNow,
+  isAfter,
+  isBefore,
+  startOfDay,
+} from "date-fns";
 
 /**
  * Task deadlines are date-only values stored as UTC midnight. We read the calendar day from
@@ -41,6 +48,29 @@ export function deadlineRelative(deadline: string): string {
 /** "5 days ago" relative to now, for a full timestamp (e.g. noEtaReview.flaggedAt). */
 export function relativeToNow(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
+}
+
+/**
+ * Jira status is a snapshot synced by the backend's cron, not a live read — so it can lag the
+ * real ticket. The sync runs at 07:00, 12:00 and 16:00 São Paulo time (CRON_EXPRESSION in the
+ * backend's jiraBacklog/scheduler.js), so the binding gap is the overnight one — 16:00 to 07:00,
+ * 15h — and 18h is that plus a 3h grace for a late start or a long run. Past it, at least one
+ * tick was missed or the row fails to sync every time; both are worth flagging.
+ * Keep in step with the backend cron if that schedule changes.
+ */
+export const JIRA_STATUS_STALE_HOURS = 18;
+
+/**
+ * Whether a synced-from-Jira status is old enough not to be trusted.
+ *
+ * A missing timestamp is deliberately NOT stale: every row predating jiraStatusFetchedAt starts
+ * null, so treating unknown-age as stale would flag the whole board on deploy over a state that
+ * clears itself at the next sync. Absence of evidence isn't evidence of staleness — the UI says
+ * "last sync time unknown" instead, which is the claim we can actually support.
+ */
+export function isJiraStatusStale(iso?: string | null): boolean {
+  if (!iso) return false;
+  return differenceInHours(new Date(), new Date(iso)) >= JIRA_STATUS_STALE_HOURS;
 }
 
 /** ISO deadline → "yyyy-MM-dd" for a date-only value (UTC date part). */
