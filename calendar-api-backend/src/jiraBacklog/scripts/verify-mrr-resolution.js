@@ -1,30 +1,42 @@
 /**
  * Read-only end-to-end check of the DOMO half of MRR resolution: email -> owner account ->
  * latest-complete-month MRR. Touches no database and writes nothing — it only runs the same
- * two lib/domoClient.js functions the refresh endpoint uses, against four accounts chosen to
- * cover every shape the resolver has to handle.
+ * two lib/domoClient.js functions the refresh endpoint uses.
  *
- * Why these four (all verified live 2026-08-24, latest complete month 2026-07):
+ * CLIENT DATA NEVER LIVES IN THIS REPO. The accounts to check are read from
+ * `scripts/mrr-verification-accounts.local.json`, which is gitignored. Real customer account
+ * emails, account ids, and revenue figures must not be committed — this repo is public.
  *
- *   websitebuilder@thryv.com     IVR sub whose charges are booked on its BILLING MASTER.
- *                                Own account_id (576/dex) has zero revenue rows; the money
- *                                ($105,797.32) sits on thryv-master@dexyp.com (596/dex).
- *                                This is the case that used to report $0 — the regression
- *                                guard for the billing-master fallback.
- *   websitebuilder@register.it   IVR sub whose charges ARE booked on its own account_id
- *                                (2085490/duda). Its billing_master_accountid points at
- *                                dada_eu_master@dudamobile.com, which bills 10 sibling
- *                                accounts — so an unconditional roll-up would more than
- *                                double this client's MRR. The guard against "just always
- *                                use the billing master".
- *   duda-owner-ionos@ionos.com   The seeded 1&1/IONOS override target. Own id and billing
- *                                master agree, so it must be unaffected either way.
- *   sofia.mazzoli@register.it    A STAFF account that must roll up through
- *                                parent_account_uuid to websitebuilder@register.it and
- *                                report exactly that owner's MRR.
+ * Create the fixture locally (see the four shapes it must cover, below):
+ *
+ *   [
+ *     {
+ *       "email": "<requester or account email to resolve>",
+ *       "expectOwnerEmail": "<the owner account it must resolve to>",
+ *       "expectSource": "billing_master",   // or "account"
+ *       "expectNonZero": true,
+ *       "note": "why this case is here"
+ *     }
+ *   ]
+ *
+ * The four shapes worth pinning — pick one real account for each from Domo:
+ *
+ *   1. `expectSource: "billing_master"` — an invoiced reseller (`is_ivr = 1`) whose own
+ *      account_id has NO revenue rows because its charges are booked on its billing master.
+ *      This is the case the billing-master fallback exists for; without it the account
+ *      reports $0. The regression guard.
+ *   2. `expectSource: "account"` — an invoiced reseller whose charges ARE booked on its own
+ *      account_id, while `billing_master_accountid` points at a group master billing many
+ *      sibling accounts. Guards against "just always use the billing master", which would
+ *      attribute the whole group's revenue to this one client.
+ *   3. `expectSource: "account"` — an account whose own id and billing master agree, so it
+ *      must be unaffected either way (a good pick: whichever account an MRR override targets).
+ *   4. A STAFF account that must roll up through `parent_account_uuid` to its owner, and
+ *      report exactly that owner's MRR. Set `crossCheckWith` to the owner's entry `email` to
+ *      assert the two produce an identical figure.
  *
  * Assertions are on SHAPE (which key produced the number, whether it's non-zero), never on
- * dollar amounts — those move every month. The amounts are printed for eyeballing.
+ * dollar amounts — those move every month, and they do not belong in source control.
  *
  * Requires the `# === MRR resolution ===` DOMO vars in calendar-api-backend/.env.
  *
@@ -33,6 +45,9 @@
  *
  * Exits 0 when every case matches, 1 otherwise.
  */
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import process from "process";
 import { resolveOwnerAccount, fetchMrrForOwner } from "../lib/domoClient.js";
@@ -40,50 +55,37 @@ import { domoConfig } from "../lib/config.js";
 
 dotenv.config();
 
-const CASES = [
-  {
-    email: "websitebuilder@thryv.com",
-    expectOwnerEmail: "websitebuilder@thryv.com",
-    expectSource: "billing_master",
-    expectNonZero: true,
-    note: "IVR sub — MRR lives on the billing master (thryv-master@dexyp.com)",
-  },
-  {
-    email: "websitebuilder@register.it",
-    expectOwnerEmail: "websitebuilder@register.it",
-    expectSource: "account",
-    expectNonZero: true,
-    note: "IVR sub billed on its own id — must NOT roll up to the group master",
-  },
-  {
-    email: "duda-owner-ionos@ionos.com",
-    expectOwnerEmail: "duda-owner-ionos@ionos.com",
-    expectSource: "account",
-    expectNonZero: true,
-    note: "seeded IONOS override target — own id and billing master agree",
-  },
-  {
-    email: "sofia.mazzoli@register.it",
-    expectOwnerEmail: "websitebuilder@register.it",
-    expectSource: "account",
-    expectNonZero: true,
-    note: "STAFF account — must roll up to its parent owner",
-  },
-];
+const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "mrr-verification-accounts.local.json");
 
+/** Amounts are printed for eyeballing only — never asserted on, never committed. */
 const money = (n) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function loadCases() {
+  if (!fs.existsSync(FIXTURE)) {
+    throw new Error(
+      `Missing ${path.basename(FIXTURE)}.\n` +
+        "This script reads its accounts from a gitignored local fixture so that client\n" +
+        "identifiers and revenue figures stay out of the repo. See the header of this file\n" +
+        "for the format and the four shapes to cover.",
+    );
+  }
+  const cases = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
+  if (!Array.isArray(cases) || !cases.length) throw new Error(`${path.basename(FIXTURE)} must be a non-empty array.`);
+  return cases;
+}
 
 async function run() {
   if (!domoConfig.clientId || !domoConfig.clientSecret) {
     throw new Error("DOMO is not configured — set DOMO_CLIENT_ID / DOMO_CLIENT_SECRET in .env");
   }
 
+  const cases = loadCases();
   const failures = [];
   const byEmail = new Map();
 
-  for (const c of CASES) {
+  for (const c of cases) {
     console.log(`\n### ${c.email}`);
-    console.log(`    (${c.note})`);
+    if (c.note) console.log(`    (${c.note})`);
 
     const owner = await resolveOwnerAccount(c.email);
     if (!owner) {
@@ -107,10 +109,10 @@ async function run() {
     console.log(`    MRR         ${money(result.mrr)}  via ${result.source} ${result.accountIdUsed}  [month ${result.latestMonth}]`);
 
     const problems = [];
-    if (owner.ownerEmail?.toLowerCase() !== c.expectOwnerEmail) {
+    if (c.expectOwnerEmail && owner.ownerEmail?.toLowerCase() !== c.expectOwnerEmail.toLowerCase()) {
       problems.push(`owner is ${owner.ownerEmail}, expected ${c.expectOwnerEmail}`);
     }
-    if (result.source !== c.expectSource) {
+    if (c.expectSource && result.source !== c.expectSource) {
       problems.push(`MRR came from "${result.source}", expected "${c.expectSource}"`);
     }
     if (c.expectNonZero && !(result.mrr > 0)) {
@@ -125,17 +127,18 @@ async function run() {
     }
   }
 
-  // The STAFF roll-up must land on exactly the same number as the owner it rolls up to —
-  // catches a roll-up that resolves to the right *name* but the wrong account row.
-  const staff = byEmail.get("sofia.mazzoli@register.it");
-  const owner = byEmail.get("websitebuilder@register.it");
-  if (staff && owner) {
-    console.log("\n### cross-check: STAFF roll-up matches its owner");
-    if (staff.result.mrr === owner.result.mrr) {
-      console.log(`    OK — both ${money(owner.result.mrr)}`);
+  // A roll-up case must land on exactly the same number as the owner it rolls up to — catches
+  // a roll-up that resolves to the right *name* but the wrong account row.
+  for (const c of cases.filter((x) => x.crossCheckWith)) {
+    const a = byEmail.get(c.email);
+    const b = byEmail.get(c.crossCheckWith);
+    if (!a || !b) continue;
+    console.log(`\n### cross-check: ${c.email} matches ${c.crossCheckWith}`);
+    if (a.result.mrr === b.result.mrr) {
+      console.log(`    OK — both ${money(b.result.mrr)}`);
     } else {
-      console.log(`    FAIL — staff ${money(staff.result.mrr)} vs owner ${money(owner.result.mrr)}`);
-      failures.push("STAFF roll-up MRR differs from its owner's");
+      console.log(`    FAIL — ${money(a.result.mrr)} vs ${money(b.result.mrr)}`);
+      failures.push(`${c.email}: MRR differs from ${c.crossCheckWith}`);
     }
   }
 
@@ -145,11 +148,11 @@ async function run() {
     failures.forEach((f) => console.log(`  - ${f}`));
     process.exitCode = 1;
   } else {
-    console.log(`All ${CASES.length} cases + cross-check passed.`);
+    console.log(`All ${cases.length} case(s) + cross-checks passed.`);
   }
 }
 
 run().catch((err) => {
-  console.error(err);
+  console.error(err.message || err);
   process.exitCode = 1;
 });

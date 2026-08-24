@@ -165,7 +165,7 @@ async function queryMrr(keyColumn, keyValue, instance) {
  * (athena-views `mview/view_account_attributes.sql:28,135`), coalesced to the account's own
  * id when it isn't an IVR sub — so the fallback is a no-op for ordinary accounts.
  *
- * Own-id FIRST, always: for most enterprise accounts (register.it, IONOS) the charges *are*
+ * Own-id FIRST, always: for most enterprise accounts the charges *are*
  * booked on the account itself while `billing_master_accountid` points at a group master that
  * bills many siblings — rolling up unconditionally would attribute the whole group's MRR to
  * one client. Verified against all four shapes in scripts/verify-mrr-resolution.js.

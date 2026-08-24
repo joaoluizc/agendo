@@ -236,19 +236,20 @@ triggers the roll-up.
 **Invoiced resellers — the billing-master fallback.** An enterprise account can resolve
 perfectly and still have *no revenue rows of its own*, because it is an invoiced reseller
 (`is_ivr = 1`, the `INVOICED_RESELLER` role) whose charges are billed through a master
-account. `websitebuilder@thryv.com` is the canonical case: account 576 on `dex`, zero rows in
-the revenue dataset by any key, while its billing master `thryv-master@dexyp.com` (596/`dex`)
-holds the whole $105k. So `fetchMrrForOwner` keys on the owner's own `account_id` first and
-retries **once** on `billing_master_accountid` only when the first query matched no rows at
-all (`COUNT(*) = 0`, which is why the query selects a row count — it separates "genuinely $0"
-from "billed elsewhere").
+account: its own `account_id` has zero rows in the revenue dataset by any key, while its
+billing master holds the revenue. So `fetchMrrForOwner` keys on the owner's own `account_id`
+first and retries **once** on `billing_master_accountid` only when the first query matched no
+rows at all (`COUNT(*) = 0`, which is why the query selects a row count — it separates
+"genuinely $0" from "billed elsewhere").
 
 Own-id must stay first: for most enterprise accounts the charges *are* on their own
-`account_id` while `billing_master_accountid` points at a group master billing many siblings.
-`websitebuilder@register.it` bills $22,356.36 on its own id; its master
-(`dada_eu_master@dudamobile.com`) covers 10 accounts totalling $48,900.63 — rolling up
-unconditionally would more than double that client's MRR. `scripts/verify-mrr-resolution.js`
-pins all four shapes.
+`account_id` while `billing_master_accountid` points at a group master billing many siblings,
+so rolling up unconditionally would attribute a whole partner group's revenue to one client.
+`scripts/verify-mrr-resolution.js` pins the four shapes against live data.
+
+> The verification cases are named in a **gitignored, uncommitted** fixture file
+> (`scripts/mrr-verification-accounts.local.json`) — client account identifiers and revenue
+> figures must never be committed to this repo. See the script header for the format.
 
 Source of truth for these semantics is Duda's **`athena-views`** repo, which builds both
 datasets: `billing_master_accountid` is `bi_par.view_invoiced_reseller.parent_account_id`,
@@ -284,9 +285,8 @@ orgs are curated by Duda's support team) or `matchType "email"` (exact requester
 Overrides **win** over requester-email resolution — a partner employee's personal Duda
 account must never be counted in place of the real enterprise account. Endpoints:
 `GET/POST /jira-backlog/mrr-overrides`, `DELETE /jira-backlog/mrr-overrides/:id` (admin);
-UI: the toolbar's "MRR overrides" dialog. Seeded mapping: Zendesk org `16877541108` ("1&1",
-domains 1und1.de/ionos.com/web.de/gmx.net) -> `duda-owner-ionos@ionos.com` (account_id 354 on
-the `one` instance — verified to hold all of that instance's latest-month recurring revenue).
+UI: the toolbar's "MRR overrides" dialog. One seeded mapping ships in `seed/` for a large
+partner on the `one` instance — see the seed file for the values; they are not repeated here.
 
 **Configured via env vars** (`ZD_SUBDOMAIN`, `ZD_API_EMAIL`, `ZD_API_TOKEN`, `DOMO_CLIENT_ID`,
 `DOMO_CLIENT_SECRET`, `DOMO_ACCOUNTS_DATASET_ID`, `DOMO_REVENUE_DATASET_ID` — see the
@@ -298,8 +298,9 @@ MRR pass is skipped entirely. The two dataset ids in Duda's instance: **"Account
 parent_account_email, billing_master_business_name, account_plan_type, 2020_segment`) and
 **"Revenues"** (`8062fa5b-e2c1-4b2c-877f-0c0d71967b35`, mirrors `bi_dwh.fact_revenues` — has
 `account_id, athena_env, charge_date, max_netsuite_charge_date, payment_type, frequency,
-revenue_net_amount`). Validated end-to-end against the BI agent's reference case
-(`sofia.mazzoli@register.it` -> owner `websitebuilder@register.it`, MRR 22535.63 for 2026-06).
+revenue_net_amount`). Validated end-to-end against the BI agent's reference case (a staff
+account rolling up to its owner) — the account identifiers and figures live in the
+gitignored fixture described above, not in this repo.
 
 ## Automatic sync
 
