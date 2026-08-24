@@ -70,7 +70,8 @@ async function runQuery(datasetId, sql) {
 
 const ACCOUNT_COLUMNS =
   "account_uuid, account_id, instance, account_name, user_type, parent_account_uuid, " +
-  "parent_account_email, billing_master_business_name, account_plan_type";
+  "parent_account_email, billing_master_business_name, account_plan_type, " +
+  "billing_master_accountid, billing_master_accountname";
 
 /**
  * Resolve an email (a Zendesk ticket requester) to its owning account. Staff/child accounts
@@ -117,28 +118,71 @@ export async function resolveOwnerAccount(email) {
     ownerEmail: owner.account_name,
     ownerBusinessName: owner.billing_master_business_name || "",
     ownerPlanType: owner.account_plan_type || "",
+    // The account that actually gets invoiced for this owner — see fetchMrrForOwner().
+    ownerBillingMasterAccountId: owner.billing_master_accountid ?? null,
+    ownerBillingMasterName: owner.billing_master_accountname || "",
     inputUserType: matched.user_type || "",
   };
 }
 
-/**
- * Latest-complete-month MRR for a resolved owner account: recurring, non-onetime/sfl revenue
- * in the most recently closed Netsuite month (the canonical MRR definition from the BI agent).
- */
-export async function fetchMrrForOwner({ accountId, instance }) {
-  assertDomoConfig();
+/** The canonical MRR measure, per athena-views' revenue skill: recurring, non-onetime/sfl. */
+const MRR_SUM =
+  "SUM(CASE WHEN payment_type = 'recurring' AND frequency NOT IN ('onetime', 'sfl') THEN revenue_net_amount ELSE 0 END)";
+/** The latest complete Netsuite month. `max_netsuite_charge_date` is the same on every row. */
+const LATEST_MONTH_WINDOW =
+  "charge_date >= max_netsuite_charge_date AND charge_date < DATE_ADD(max_netsuite_charge_date, INTERVAL 1 MONTH)";
 
+/** Latest-complete-month MRR for one revenue key. `rows` distinguishes "$0" from "no rows". */
+async function queryMrr(keyColumn, keyValue, instance) {
   const sql = `
     SELECT
-      SUM(CASE WHEN payment_type = 'recurring' AND frequency NOT IN ('onetime', 'sfl') THEN revenue_net_amount ELSE 0 END) AS mrr,
+      ${MRR_SUM} AS mrr,
+      COUNT(*) AS row_count,
       MAX(max_netsuite_charge_date) AS latest_month
     FROM table
-    WHERE account_id = ${sqlLiteral(accountId)}
+    WHERE ${keyColumn} = ${sqlLiteral(keyValue)}
       AND athena_env = ${sqlLiteral(instance)}
-      AND charge_date >= max_netsuite_charge_date
-      AND charge_date < DATE_ADD(max_netsuite_charge_date, INTERVAL 1 MONTH)
+      AND ${LATEST_MONTH_WINDOW}
   `;
   const [row] = await runQuery(domoConfig.revenueDatasetId, sql);
-  const mrr = row?.mrr != null ? Math.round(Number(row.mrr) * 100) / 100 : 0;
-  return { mrr, latestMonth: row?.latest_month || null };
+  // Domo returns '' (not null) for an aggregate over an empty row set.
+  const num = (v) => (v === "" || v == null ? 0 : Number(v));
+  return {
+    mrr: Math.round(num(row?.mrr) * 100) / 100,
+    rows: num(row?.row_count),
+    latestMonth: row?.latest_month || null,
+  };
+}
+
+/**
+ * Latest-complete-month MRR for a resolved owner account.
+ *
+ * Keyed on the owner's own `account_id` + `athena_env` first. If the owner has *no revenue
+ * rows at all* in that month, retry once against its `billing_master_accountid` — the owner
+ * is an invoiced reseller (`is_ivr = 1`, the `INVOICED_RESELLER` role) whose charges are
+ * billed through a master account, so the money is booked on the master, not on it.
+ * `billing_master_accountid` is literally `view_invoiced_reseller.parent_account_id`
+ * (athena-views `mview/view_account_attributes.sql:28,135`), coalesced to the account's own
+ * id when it isn't an IVR sub — so the fallback is a no-op for ordinary accounts.
+ *
+ * Own-id FIRST, always: for most enterprise accounts (register.it, IONOS) the charges *are*
+ * booked on the account itself while `billing_master_accountid` points at a group master that
+ * bills many siblings — rolling up unconditionally would attribute the whole group's MRR to
+ * one client. Verified against all four shapes in scripts/verify-mrr-resolution.js.
+ *
+ * Returns `source` so the caller can record which key produced the number.
+ */
+export async function fetchMrrForOwner({ accountId, instance, billingMasterAccountId = null }) {
+  assertDomoConfig();
+
+  const own = await queryMrr("account_id", accountId, instance);
+  if (own.rows > 0) return { ...own, source: "account", accountIdUsed: accountId };
+
+  const canFallBack = billingMasterAccountId != null && String(billingMasterAccountId) !== String(accountId);
+  if (!canFallBack) return { ...own, source: "account", accountIdUsed: accountId };
+
+  const master = await queryMrr("account_id", billingMasterAccountId, instance);
+  if (master.rows === 0) return { ...own, source: "account", accountIdUsed: accountId };
+
+  return { ...master, source: "billing_master", accountIdUsed: billingMasterAccountId };
 }

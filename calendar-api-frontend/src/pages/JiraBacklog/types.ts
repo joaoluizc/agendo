@@ -60,6 +60,8 @@ export interface MrrTraceEntry {
   email: string;
   stage:
     | "ok"
+    /** Resolved fine, but the MRR came from the owner's billing master (invoiced reseller). */
+    | "via_billing_master"
     | "via_override"
     | "duplicate_owner"
     | "no_tickets_found"
