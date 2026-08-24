@@ -429,23 +429,40 @@ async function refreshMrr(id) {
     seenOwners.add(ownerKey);
 
     let mrr = 0;
+    let viaBillingMaster = false;
     try {
-      const result = await fetchMrrForOwner({ accountId: owner.ownerAccountId, instance: owner.ownerInstance });
+      const result = await fetchMrrForOwner({
+        accountId: owner.ownerAccountId,
+        instance: owner.ownerInstance,
+        billingMasterAccountId: owner.ownerBillingMasterAccountId,
+      });
       mrr = result.mrr;
+      viaBillingMaster = result.source === "billing_master";
     } catch (e) {
       entry.stage = "mrr_lookup_failed";
       entry.detail = `Owner ${owner.ownerEmail} resolved, but the revenue query errored: ${e.message}`;
       continue;
     }
 
+    // An invoiced reseller's charges are booked on its billing master, so the owner's own
+    // account_id has no revenue rows — worth surfacing, since the number then belongs to the
+    // master account rather than the one the requester's email named. See fetchMrrForOwner().
+    const billedVia = viaBillingMaster
+      ? ` Billed through ${owner.ownerBillingMasterName || `account ${owner.ownerBillingMasterAccountId}`} (invoiced reseller).`
+      : "";
+
     if (mrr === 0) {
       entry.stage = "zero_mrr";
       entry.detail = `Owner ${owner.ownerEmail} resolved, but latest-month MRR is $0 — free account or a data gap.`;
+    } else if (override) {
+      entry.stage = "via_override";
+      entry.detail = `Resolved via override "${override.label || override.matchValue}" -> ${owner.ownerEmail}.${billedVia}`;
+    } else if (viaBillingMaster) {
+      entry.stage = "via_billing_master";
+      entry.detail = `Resolved to ${owner.ownerEmail}.${billedVia}`;
     } else {
-      entry.stage = override ? "via_override" : "ok";
-      entry.detail = override
-        ? `Resolved via override "${override.label || override.matchValue}" -> ${owner.ownerEmail}.`
-        : `Resolved to ${owner.ownerEmail}.`;
+      entry.stage = "ok";
+      entry.detail = `Resolved to ${owner.ownerEmail}.`;
     }
 
     accounts.push({ email: requester.email || resolveEmail, ownerEmail: owner.ownerEmail, businessName: owner.ownerBusinessName, mrr });

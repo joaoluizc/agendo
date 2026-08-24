@@ -233,15 +233,47 @@ row, so the lookup falls back to `parent_account_email` (also instance-pinned). 
 self-reference (`parent_account_uuid` == own `account_uuid`) — only a *different* parent uuid
 triggers the roll-up.
 
+**Invoiced resellers — the billing-master fallback.** An enterprise account can resolve
+perfectly and still have *no revenue rows of its own*, because it is an invoiced reseller
+(`is_ivr = 1`, the `INVOICED_RESELLER` role) whose charges are billed through a master
+account. `websitebuilder@thryv.com` is the canonical case: account 576 on `dex`, zero rows in
+the revenue dataset by any key, while its billing master `thryv-master@dexyp.com` (596/`dex`)
+holds the whole $105k. So `fetchMrrForOwner` keys on the owner's own `account_id` first and
+retries **once** on `billing_master_accountid` only when the first query matched no rows at
+all (`COUNT(*) = 0`, which is why the query selects a row count — it separates "genuinely $0"
+from "billed elsewhere").
+
+Own-id must stay first: for most enterprise accounts the charges *are* on their own
+`account_id` while `billing_master_accountid` points at a group master billing many siblings.
+`websitebuilder@register.it` bills $22,356.36 on its own id; its master
+(`dada_eu_master@dudamobile.com`) covers 10 accounts totalling $48,900.63 — rolling up
+unconditionally would more than double that client's MRR. `scripts/verify-mrr-resolution.js`
+pins all four shapes.
+
+Source of truth for these semantics is Duda's **`athena-views`** repo, which builds both
+datasets: `billing_master_accountid` is `bi_par.view_invoiced_reseller.parent_account_id`,
+coalesced to the account's own id when it isn't an IVR sub
+(`mview/view_account_attributes.sql:28,135`), so the fallback is inert for ordinary accounts;
+`is_ivr` is the `INVOICED_RESELLER` role check (`mview/view_account_segment_flat.sql:398`);
+and the MRR measure above is verbatim the canonical one in
+`.agents/skills/athena-bi-skills/modules/revenue.md`. Note the admin "Domo Link"
+(`duda/DudaAccount/.../UIFeedbackServiceRest.java:188`) is *not* a resolver — it is a
+hardcoded page-1200117747 URL filtered by the account owner's `account_name`, the same key
+this code matches on, which is also stored as the `domo_page_url` column.
+
 **Diagnostics (`mrrTrace`).** Every refresh records one trace entry per Zendesk ticket (plus a
 single `no_tickets_found` entry when the search found none): `{ ticketId, email, stage,
-detail }`, stage one of `ok | via_override | duplicate_owner | no_tickets_found |
-requester_lookup_failed | no_account_match | mrr_lookup_failed | zero_mrr`. A ticket failure
+detail }`, stage one of `ok | via_billing_master | via_override | duplicate_owner |
+no_tickets_found | requester_lookup_failed | duda_employee | no_account_match |
+mrr_lookup_failed | zero_mrr`. A ticket failure
 never aborts the row — it's recorded and skipped, so a 0 or missing MRR is diagnosable after
 the fact. The UI shows an amber warning on the MRR cell when any ticket has a problem stage,
 and the detail panel lists each failed ticket with its reason. `zero_mrr` is deliberately its
 own stage: the account resolved fine but latest-month MRR is $0 (free account or data gap) —
-different from "couldn't resolve".
+different from "couldn't resolve". `via_billing_master` is a *success* stage (it is not in the
+UI's `MRR_PROBLEM_STAGES`): the number is real, it just came from the owner's invoicing master
+rather than the owner's own account id — worth showing so the figure can be traced back to the
+account that actually holds it.
 
 **Overrides (`mrr-overrides` collection, managed in the UI).** Some enterprise clients file
 Zendesk tickets from emails that aren't Duda accounts — e.g. 1&1/IONOS's
