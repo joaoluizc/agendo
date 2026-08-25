@@ -130,6 +130,20 @@ function emptyMinutes() {
 }
 
 /**
+ * Midnight tonight, in the server's local time (same convention as utils.todayISO). The
+ * report only ever covers time up to today: a range reaching past this is clamped to it,
+ * so shifts booked for tomorrow and beyond can't inflate anyone's hours just because the
+ * selected preset runs to the end of the quarter. Today stays whole — every preset the
+ * frontend picker produces is day-aligned, so cutting off mid-day would make the numbers
+ * shift hour by hour within a single day.
+ */
+function endOfToday() {
+  const end = new Date();
+  end.setHours(24, 0, 0, 0);
+  return end;
+}
+
+/**
  * Hours worked per agent, per report group, over [start, end]. Merges agendo-native
  * shifts with Sling-sourced ones (best-effort — a Sling failure or empty response still
  * returns native-only results, since Sling is expected to go away eventually). Hours are
@@ -142,7 +156,11 @@ function emptyMinutes() {
  */
 async function computeHoursReport({ start, end, groupByLocation }) {
   const rangeStart = new Date(start);
-  const rangeEnd = new Date(end);
+  const rangeEnd = new Date(Math.min(new Date(end).getTime(), endOfToday().getTime()));
+  // The whole range sits in the future — nothing has been worked yet, so there is no
+  // report to build (and no reason to hit Mongo or Sling for it).
+  if (!(rangeEnd > rangeStart)) return [];
+  const effectiveEnd = rangeEnd.toISOString();
   const classify = await buildClassifier();
 
   const positions = await Position.find().select("name").lean();
@@ -186,13 +204,13 @@ async function computeHoursReport({ start, end, groupByLocation }) {
   }
   if (skippedUnmatched > 0) {
     console.log(
-      `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${end}`,
+      `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${effectiveEnd}`,
     );
   }
 
   // Sling shifts — never let a Sling outage (or its eventual removal) fail the report.
   try {
-    const slingBlocks = await slingController.getCalendar(`${start}/${end}`);
+    const slingBlocks = await slingController.getCalendar(`${start}/${effectiveEnd}`);
     for (const block of slingBlocks || []) {
       const email = block?.email ? String(block.email).toLowerCase() : "";
       const user = email ? userByEmail.get(email) : null;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy, Info } from "lucide-react";
+import { endOfDay, format } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -159,6 +160,12 @@ export default function Reports() {
     }
   };
 
+  // The backend never counts time past the end of today, so any range running into the
+  // future (every "current" preset does, most of the way through the period) covers less
+  // than its label implies. Say so inline rather than leaving the numbers looking short.
+  const cutoff = endOfDay(new Date());
+  const rangeRunsPastToday = range.end > cutoff;
+
   const canNavigate = preset !== "custom";
 
   return (
@@ -170,7 +177,16 @@ export default function Reports() {
         <div className="mx-auto w-full max-w-5xl">
           <Card>
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Agent hours</CardTitle>
+              <div className="grid gap-1.5">
+                <CardTitle>Agent hours</CardTitle>
+                {rangeRunsPastToday && (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 shrink-0" />
+                    Counted through today, {format(cutoff, "MMM d")} — shifts scheduled after
+                    today aren’t included.
+                  </p>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <DateRangePicker
                   value={range}
