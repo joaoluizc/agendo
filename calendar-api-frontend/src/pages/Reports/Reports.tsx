@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy, Info } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy, Info, Rows3 } from "lucide-react";
 import { endOfDay, format } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,15 @@ import { cn } from "@/lib/utils";
 import DateRangePicker, { DateRangeValue, PresetKey, presetRange, shiftRange } from "./DateRangePicker";
 import { reportsApi, HoursReportRow } from "./api";
 import { usePageTitle } from "./use-page-title";
+import CopyLayoutDialog from "./CopyLayoutDialog";
+import {
+  CopyLayout,
+  EMPTY_LAYOUT,
+  buildCopyEntries,
+  copyText,
+  isEmptyLayout,
+  viewKey,
+} from "./copyLayout";
 
 type ColumnKey = "name" | "Tickets" | "Chats" | "Other" | "totalHours";
 type SortState = { key: ColumnKey; direction: "asc" | "desc" } | null;
@@ -112,6 +121,17 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>(null);
+  // Clipboard padding for the sheet these numbers get pasted into. Scoped to one view:
+  // `layoutView` records the period+sort the layout was built against, so changing either
+  // drops it and the next copy starts from a clean list — blanks placed against one order
+  // mean nothing in another.
+  const [layout, setLayout] = useState<CopyLayout>(EMPTY_LAYOUT);
+  const [layoutView, setLayoutView] = useState<string | null>(null);
+  // Opened either to set up a copy (and then run it) or, from "Adjust", to edit the
+  // layout on its own — the second must not put anything on the clipboard.
+  const [dialog, setDialog] = useState<
+    { mode: "copy"; column: ColumnKey } | { mode: "adjust" } | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,19 +165,48 @@ export default function Reports() {
     });
   }, [rows, sort]);
 
-  const copyColumn = async (key: ColumnKey) => {
-    if (sortedRows.length === 0) {
-      toast.error("Nothing to copy — the report is empty.");
+  const currentView = viewKey(
+    range.start,
+    range.end,
+    sort ? `${sort.key}:${sort.direction}` : "default",
+  );
+  const layoutIsCurrent = layoutView === currentView;
+
+  const writeColumn = async (key: ColumnKey, withLayout: CopyLayout) => {
+    const entries = buildCopyEntries(sortedRows, withLayout);
+    if (entries.length === 0) {
+      toast.error("Nothing to copy — every row is left out.");
       return;
     }
-    const text = sortedRows.map((row) => columnValue(row, key)).join("\n");
+    const blanks = entries.filter((entry) => entry.kind === "blank").length;
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`Copied ${sortedRows.length} ${COLUMN_LABELS[key]} value${sortedRows.length === 1 ? "" : "s"}.`);
+      await navigator.clipboard.writeText(copyText(entries, key));
+      toast.success(
+        `Copied ${entries.length} ${COLUMN_LABELS[key]} line${entries.length === 1 ? "" : "s"}` +
+          (blanks > 0 ? ` (${blanks} blank).` : "."),
+      );
     } catch (err) {
       console.error("Failed to copy column to clipboard:", err);
       toast.error("Failed to copy to clipboard.");
     }
+  };
+
+  /**
+   * The first copy of a view opens the dialog so the padding can be set against the sheet;
+   * every copy after that reuses it silently, which is what keeps "paste each column in
+   * turn" at one click per column. "Adjust" in the header reopens it.
+   */
+  const copyColumn = (key: ColumnKey) => {
+    if (sortedRows.length === 0) {
+      toast.error("Nothing to copy — the report is empty.");
+      return;
+    }
+    if (!layoutIsCurrent) {
+      setLayout(EMPTY_LAYOUT);
+      setDialog({ mode: "copy", column: key });
+      return;
+    }
+    void writeColumn(key, layout);
   };
 
   // The backend never counts time past the end of today, so any range running into the
@@ -184,6 +233,20 @@ export default function Reports() {
                     <Info className="h-3.5 w-3.5 shrink-0" />
                     Counted through today, {format(cutoff, "MMM d")} — shifts scheduled after
                     today aren’t included.
+                  </p>
+                )}
+                {layoutIsCurrent && (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Rows3 className="h-3.5 w-3.5 shrink-0" />
+                    Copy layout: {buildCopyEntries(sortedRows, layout).length} lines
+                    {!isEmptyLayout(layout) && " (padded)"}
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ mode: "adjust" })}
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      Adjust
+                    </button>
                   </p>
                 )}
               </div>
@@ -314,6 +377,23 @@ export default function Reports() {
           </Card>
         </div>
       </main>
+
+      <CopyLayoutDialog
+        open={dialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setDialog(null);
+        }}
+        rows={sortedRows}
+        layout={layout}
+        onLayoutChange={setLayout}
+        columnLabel={dialog?.mode === "copy" ? COLUMN_LABELS[dialog.column] : null}
+        onConfirm={() => {
+          const current = dialog;
+          setDialog(null);
+          setLayoutView(currentView);
+          if (current?.mode === "copy") void writeColumn(current.column, layout);
+        }}
+      />
     </div>
   );
 }
