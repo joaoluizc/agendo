@@ -119,6 +119,15 @@ type TimeRangeStepperProps = {
   /** Durations in hours offered as one-click presets. Omit to hide the row. */
   presets?: number[];
   compact?: boolean;
+  /**
+   * Highest end hour, as hours from the start day's midnight. Above 24 the end may run
+   * past midnight — 25 being 01:00 the next day.
+   *
+   * Only the edit dialog raises this, and only for a shift that already crosses midnight,
+   * so editing one stops truncating it. Left at the default everywhere else, which keeps a
+   * range inside a single day.
+   */
+  maxEnd?: number;
 };
 
 /**
@@ -136,8 +145,12 @@ const TimeRangeStepper = ({
   onChange,
   presets,
   compact,
+  maxEnd = DAY_HOURS,
 }: TimeRangeStepperProps) => {
   const duration = range.end - range.start;
+  /** The end may run past midnight, so a typed time can mean the next day. */
+  const overnightAllowed = maxEnd > DAY_HOURS;
+  const endsNextDay = range.end > DAY_HOURS;
 
   /**
    * Typing a start past the end carries the end along, keeping the duration — someone
@@ -149,16 +162,28 @@ const TimeRangeStepper = ({
     onChange(
       clampRange(
         hour,
-        hour >= range.end ? Math.min(DAY_HOURS, hour + duration) : range.end
+        hour >= range.end ? Math.min(maxEnd, hour + duration) : range.end,
+        maxEnd
       )
     );
 
-  const typeEnd = (hour: number) =>
-    onChange(
-      hour <= range.start
-        ? clampRange(Math.max(0, hour - duration), hour)
-        : clampRange(range.start, hour)
-    );
+  /**
+   * A typed end at or before the start reads as the next day when that is allowed — on a
+   * 21:00 shift, "02:00" means 02:00 tomorrow, which is the only thing it can sensibly
+   * mean. Otherwise it keeps the old behaviour of dragging the start back to fit, since
+   * within a single day an end before the start is a mistake rather than a wrap.
+   */
+  const typeEnd = (hour: number) => {
+    if (hour <= range.start) {
+      if (overnightAllowed) {
+        onChange(clampRange(range.start, hour + DAY_HOURS, maxEnd));
+        return;
+      }
+      onChange(clampRange(Math.max(0, hour - duration), hour, maxEnd));
+      return;
+    }
+    onChange(clampRange(range.start, hour, maxEnd));
+  };
 
   return (
     <>
@@ -174,13 +199,15 @@ const TimeRangeStepper = ({
                 delta > 0
                   ? Math.min(range.end - HOUR_STEP, range.start + delta)
                   : range.start + delta,
-                range.end
+                range.end,
+                maxEnd
               )
             )
           }
         />
+        {/* The label carries the day, so the number stays a plain clock time. */}
         <HourField
-          label="End"
+          label={endsNextDay ? "End · next day" : "End"}
           value={range.end}
           compact={compact}
           isEnd
@@ -189,7 +216,8 @@ const TimeRangeStepper = ({
             onChange(
               clampRange(
                 range.start,
-                Math.max(range.start + HOUR_STEP, range.end + delta)
+                Math.max(range.start + HOUR_STEP, range.end + delta),
+                maxEnd
               )
             )
           }
@@ -212,7 +240,8 @@ const TimeRangeStepper = ({
                 onChange(
                   clampRange(
                     range.start,
-                    Math.min(DAY_HOURS, range.start + preset)
+                    Math.min(maxEnd, range.start + preset),
+                    maxEnd
                   )
                 )
               }

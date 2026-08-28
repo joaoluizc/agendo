@@ -25,6 +25,11 @@ type CoverageStripProps = {
  * add, the thin rule is that hour's target, and an hour that still falls short is
  * tinted. The outline marks the slot being filled.
  *
+ * The grey splits in two: solid for shifts already published, faded and dashed on top for
+ * the ones still in draft. Both are "scheduled" as far as the target is concerned — the
+ * strip is about whether the plan covers the hour — but a bar held up entirely by drafts
+ * is a plan nobody has committed to, and that difference has to be readable.
+ *
  * This is the whole point of the dialog rework: the coverage row on the grid could only
  * tell you about a gap after you had already created the shift.
  */
@@ -58,18 +63,39 @@ const CoverageStrip = ({
           <div className="flex items-end gap-px" style={{ height }}>
             {Array.from({ length: DAY_HOURS }, (_, hour) => {
               const base = series.base[hour];
+              const draftBase = series.draftBase[hour];
               const delta = series.delta[hour];
               const target = series.targets[hour];
               const total = base + delta;
               const below = total < target;
               const baseHeight = scale(base);
+              // Scale the committed part and take the draft part as the remainder, so the
+              // two segments always add up to exactly the grey bar's height.
+              const publishedHeight = scale(base - draftBase);
+              const draftHeight = baseHeight - publishedHeight;
 
               const cell = (
                 <>
                   <span
-                    className="absolute inset-x-0 bottom-0 rounded-t-[2px] bg-muted-foreground"
-                    style={{ height: baseHeight }}
+                    className={cn(
+                      "absolute inset-x-0 bottom-0 bg-muted-foreground",
+                      draftHeight === 0 && "rounded-t-[2px]"
+                    )}
+                    style={{ height: publishedHeight }}
                   />
+                  {/* Dotted hatch, matching the grid's coverage row — see the comment
+                      there for why this is a pattern rather than a translucent fill. */}
+                  {draftHeight > 0 && (
+                    <span
+                      className="absolute inset-x-0 rounded-t-[2px] border-t-2 border-dotted border-muted-foreground"
+                      style={{
+                        height: draftHeight,
+                        bottom: publishedHeight,
+                        backgroundImage:
+                          "repeating-linear-gradient(45deg, hsl(var(--muted-foreground)) 0 2px, transparent 2px 5px)",
+                      }}
+                    />
+                  )}
                   {delta > 0 && (
                     <span
                       className="absolute inset-x-0 rounded-t-[2px]"
@@ -90,8 +116,8 @@ const CoverageStrip = ({
               );
 
               const title = `${formatHour(hour)} · ${total} scheduled · target ${target}${
-                delta > 0 ? ` · ${delta} from this change` : ""
-              }`;
+                draftBase > 0 ? ` · ${draftBase} unpublished` : ""
+              }${delta > 0 ? ` · ${delta} from this change` : ""}`;
               const className = cn(
                 "relative h-full flex-1 rounded-[2px]",
                 below && "bg-warn-bg"
@@ -143,7 +169,17 @@ const CoverageStrip = ({
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-[2px] bg-muted-foreground" />
-            scheduled
+            published
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-2 w-2 rounded-[2px] border-t border-dotted border-muted-foreground"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(45deg, hsl(var(--muted-foreground)) 0 2px, transparent 2px 5px)",
+              }}
+            />
+            draft
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span

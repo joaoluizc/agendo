@@ -9,6 +9,8 @@ import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import ScheduleToolbar from "./calendar-components/ScheduleToolbar.tsx";
 import AgentRow from "./calendar-components/AgentRow.tsx";
 import CoverageRow from "./calendar-components/CoverageRow.tsx";
+import PublishDraftsBar from "./calendar-components/PublishDraftsBar.tsx";
+import PendingChangePrompt from "./calendar-components/PendingChangePrompt.tsx";
 import NowLine from "./calendar-components/NowLine.tsx";
 import ScheduleLegend from "./calendar-components/ScheduleLegend.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
@@ -27,6 +29,7 @@ const Schedule = () => {
     setShifts,
     setEvents,
     setScheduleIsLoading,
+    exitBulkSelect,
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
@@ -115,6 +118,22 @@ const Schedule = () => {
     fetchData(selectedDate);
   }, [dateKey, type]);
 
+  /**
+   * Leave select-shifts mode entirely when the day changes.
+   *
+   * This is a data-loss fix, not tidiness. The selection lives on the provider and used to
+   * survive navigation, while only the visible day's blocks render — so shifts selected on
+   * one day stayed selected, invisibly, with no way to see or deselect them. Selecting a
+   * few more on the next day and hitting Delete then deleted both days' worth. It happened.
+   *
+   * Exiting the mode rather than only emptying the selection, so it matches every other way
+   * a bulk flow ends: navigating away is finishing with that day, and coming back into an
+   * armed mode with nothing selected is a state nobody asked for.
+   */
+  useEffect(() => {
+    exitBulkSelect();
+  }, [dateKey]);
+
   return (
     <div>
       <ScheduleToolbar
@@ -123,6 +142,16 @@ const Schedule = () => {
         isToday={isToday}
         onReload={() => fetchData(selectedDate)}
       />
+
+      {/* Creating a shift no longer syncs it, so the day needs somewhere that says
+          out loud what has not been committed yet. Renders nothing when the day is
+          fully published. */}
+      {isAdmin && (
+        <PublishDraftsBar
+          shifts={shifts}
+          onPublished={() => fetchData(selectedDate)}
+        />
+      )}
 
       {/* One card, one horizontal scroll container. The 252px agent column is sticky
           inside it, so the whole grid scrolls together instead of every row owning
@@ -186,6 +215,10 @@ const Schedule = () => {
         </div>
 
         <ScheduleLegend showCoverage={isAdmin} showEvents={isAdmin} />
+
+        {/* One prompt for every grid gesture — a resize or a drop — rendered here rather
+            than per shift, since any of the 384 EmptySlots can raise one. */}
+        {isAdmin && <PendingChangePrompt />}
       </div>
     </div>
   );

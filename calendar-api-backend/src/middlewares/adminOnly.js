@@ -1,7 +1,6 @@
-import process from "process";
 import { getAuth } from "@clerk/express";
 import dotenv from "dotenv";
-import { resolveUser } from "../services/authz.js";
+import { resolveUser, adminBypassEnabled } from "../services/authz.js";
 dotenv.config();
 
 /**
@@ -24,7 +23,6 @@ dotenv.config();
  * With the bypass off, a 403 locally means your Clerk user needs `type: "admin"` in the
  * `dev-users` collection (collections are environment-split — see models/UserModel.js).
  */
-const adminBypassEnabled = process.env.ADMIN_BYPASS === "1";
 
 export default async function adminOnly(req, res, next) {
   const { userId } = getAuth(req);
@@ -32,7 +30,7 @@ export default async function adminOnly(req, res, next) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (adminBypassEnabled) {
+  if (adminBypassEnabled()) {
     console.warn(
       `[${req.requestId}] - ADMIN_BYPASS=1, admin check skipped for ${userId} on ${req.method} ${req.originalUrl}`,
     );

@@ -2,8 +2,12 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
-import { NewShift, Shift } from "@/types/shiftTypes";
-import { toast } from "sonner";
+import { prettyTimeRange, startOfLocalDay } from "../scheduleUtils";
+import {
+  DAY_HOURS,
+  HOUR_STEP,
+  hourToDate,
+} from "../shift-dialogs/shiftPlanning";
 import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
 
 type EmptySlotProps = {
@@ -14,109 +18,159 @@ type EmptySlotProps = {
 
 function EmptySlot(props: EmptySlotProps) {
   const { userId, currentHour, selectedDate } = props;
-  const { type: userType } = useUserSettings();
-  const { shiftInDrag, setShiftInDrag, shifts, setShifts, events, setEvents } =
-    useSchedule();
+  const { type: userType, allUsers, allPositions } = useUserSettings();
+  const {
+    shiftInDrag,
+    setShiftInDrag,
+    setPendingChange,
+    dropTarget,
+    setDropTarget,
+  } = useSchedule();
   const [createOpen, setCreateOpen] = useState(false);
   const date = new Date(selectedDate);
   date.setHours(currentHour);
   date.setMinutes(0);
 
-  const submitShiftUpdate = async (newShift: NewShift, prevUserId: string) => {
-    let responseData: { message: string; data: Shift } = {
-      message: "",
-      data: {} as Shift,
-    };
-
-    try {
-      const response = await fetch(`/api/shift?shiftId=${newShift._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newShift),
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to edit shift");
-
-      responseData = await response.json();
-
-      toast.success("Shift updated successfully");
-    } catch (error) {
-      console.error("Error updating shift:", error);
-      toast.error("Failed to update shift");
-    }
-
-    const shiftDate = new Date(newShift.startTime);
-    const scheduleDate = new Date(selectedDate);
-
-    if (
-      shiftDate.getDate() !== scheduleDate.getDate() ||
-      shiftDate.getMonth() !== scheduleDate.getMonth() ||
-      shiftDate.getFullYear() !== scheduleDate.getFullYear()
-    ) {
-      return;
-    }
-
-    const createdShift = responseData.data;
-    const targetUserId = createdShift.userId;
-
-    // Replace every level rather than mutating in place: the grid memoises each
-    // agent's lane packing on their own shift array, so an array that keeps its
-    // identity leaves the moved shift invisible until a reload. Filtering the
-    // target as well as the source keeps a same-agent drop from duplicating it.
-    const withoutMoved = (userShifts: Shift[] | undefined) =>
-      (userShifts ?? []).filter((shift) => shift._id !== createdShift._id);
-
-    const updated = { ...shifts };
-    updated[prevUserId] = withoutMoved(updated[prevUserId]);
-    updated[targetUserId] = [
-      ...withoutMoved(updated[targetUserId]),
-      createdShift,
-    ].sort(
-      (a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
-
-    setShifts(updated);
-
-    if (createdShift.isSynced) {
-      setEvents(
-        events.map((calendarUser) =>
-          calendarUser.userId === targetUserId
-            ? {
-                ...calendarUser,
-                events: [...calendarUser.events, createdShift.syncedEvent].sort(
-                  (a, b) =>
-                    new Date(a.start.dateTime).getTime() -
-                    new Date(b.start.dateTime).getTime()
-                ),
-              }
-            : calendarUser
-        )
-      );
-    }
+  /**
+   * The quarter-hour the pointer is actually over, as a fractional hour.
+   *
+   * The cells are one per hour, but a drop lands on a 15-minute boundary like a resize
+   * does, so the landing time comes from where inside the cell the pointer sits rather
+   * than from the cell alone. Rounding is done on the absolute hour, not on the fraction,
+   * so the far right of the 09:00 cell resolves to 10:00 instead of being pinned to 09:45.
+   *
+   * Both the preview and the drop call this, which is what stops them disagreeing.
+   */
+  const pointerHour = (event: React.DragEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const withinCell = rect.width
+      ? (event.clientX - rect.left) / rect.width
+      : 0;
+    const snapped =
+      Math.round((currentHour + withinCell) / HOUR_STEP) * HOUR_STEP;
+    return Math.min(DAY_HOURS - HOUR_STEP, Math.max(0, snapped));
   };
 
-  const handleDrop = () => {
-    const prevUserId = shiftInDrag.data?.userId || "";
+  /**
+   * Names for the prompt. Looked up on demand inside the drop handler rather than memoised
+   * per cell: there are 384 of these on a full roster and only the one being dropped on
+   * ever needs a name.
+   */
+  const agentName = (id: string) => {
+    const agent = allUsers.find((entry) => String(entry.id) === String(id));
+    return agent
+      ? `${agent.firstName ?? ""} ${agent.lastName ?? ""}`.trim() || "that agent"
+      : "that agent";
+  };
 
-    if (shiftInDrag && shiftInDrag.data) {
-      const shiftDuration =
-        new Date(shiftInDrag.data.endTime).getTime() -
-        new Date(shiftInDrag.data.startTime).getTime();
+  const positionName = (id: string) =>
+    allPositions.find((entry) => String(entry._id) === String(id))?.name ??
+    "Shift";
 
-      const newShift = {
-        ...shiftInDrag.data,
-        userId: userId,
-        startTime: new Date(date).toISOString(),
-        endTime: new Date(date.getTime() + shiftDuration).toISOString(),
-      };
+  /** The dragged shift's duration in ms — a move keeps its length. */
+  const draggedDuration = () => {
+    const dragged = shiftInDrag?.data;
+    if (!dragged) return 0;
+    return (
+      new Date(dragged.endTime).getTime() -
+      new Date(dragged.startTime).getTime()
+    );
+  };
 
-      submitShiftUpdate(newShift, prevUserId);
+  /** Do these instants fall on different local days? */
+  const crossesMidnight = (startTime: string, endTime: string) => {
+    const startDay = startOfLocalDay(new Date(startTime)).getTime();
+    const endDay = startOfLocalDay(new Date(endTime)).getTime();
+    // An end at exactly midnight closes the day rather than spilling into the next one,
+    // which is how the grid draws it too.
+    return endDay > startDay && new Date(endTime).getTime() > endDay;
+  };
+
+  /** Absolute instants for a landing at `hour` on the selected day. */
+  const landing = (hour: number) => {
+    const start = hourToDate(selectedDate, hour);
+    return {
+      startTime: start.toISOString(),
+      endTime: new Date(start.getTime() + draggedDuration()).toISOString(),
+    };
+  };
+
+  /**
+   * Land a dragged shift on this hour, for this agent.
+   *
+   * The move is not written here. It asks the same question a resize does — commit this, or
+   * keep it a plan? — so it is parked on `pendingChange` and one shared prompt asks, then
+   * saves. The first version of this posted the update itself and forced the result to
+   * draft silently, which was safe and completely unexplained.
+   */
+  const handleDrop = (event: React.DragEvent) => {
+    const dragged = shiftInDrag?.data;
+    const clear = () => {
       setShiftInDrag({ isBeingDragged: false, data: null });
-    }
+      setDropTarget(null);
+    };
+    if (!dragged) return clear();
+
+    const { startTime, endTime } = landing(pointerHour(event));
+
+    // Dropping a shift back where it already is is not a change, so it does not get a
+    // prompt or a write. Without this, picking a shift up and putting it down asked whether
+    // to publish a change that did not exist — and answering would have re-timed it to
+    // identical values and, if published, deleted and recreated its calendar event.
+    const sameSlot =
+      String(dragged.userId) === userId &&
+      new Date(dragged.startTime).getTime() === new Date(startTime).getTime();
+    if (sameSlot) return clear();
+
+    const movedAgent = String(dragged.userId) !== userId;
+    setPendingChange({
+      intent: "retime",
+      shift: dragged,
+      startTime,
+      endTime,
+      userId,
+      summary: `${positionName(dragged.positionId)} · ${prettyTimeRange(
+        dragged.startTime,
+        dragged.endTime
+      )} → ${prettyTimeRange(startTime, endTime)}`,
+      // Naming both people matters more here than anywhere else: a drop can land on a row
+      // you did not mean, and "moved to another agent" would not have told you which.
+      // A drop late in the day can push the end past midnight, which is legitimate but
+      // easy to do without noticing — the shift then appears on two days and its times
+      // can only be edited from the dialog, so it is worth saying before you commit.
+      detail: [
+        movedAgent
+          ? `${agentName(dragged.userId)} → ${agentName(userId)}`
+          : null,
+        crossesMidnight(startTime, endTime)
+          ? `Crosses midnight — ends ${new Date(endTime).toLocaleString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || undefined,
+    });
+    clear();
+  };
+
+  /**
+   * Report this cell as the landing spot, for the row to draw a preview from.
+   *
+   * `dragover` fires continuously while the pointer moves, so the write is guarded on the
+   * target actually changing — otherwise every mouse move would re-render the whole
+   * schedule. With the guard it fires at most once per cell entered.
+   */
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    if (!shiftInDrag?.data) return;
+    const hour = pointerHour(event);
+    if (dropTarget?.userId === userId && dropTarget?.hour === hour) return;
+    setDropTarget({ userId, hour });
   };
 
   // One cell per hour, sitting underneath the shift lanes as a full-height click and
@@ -136,7 +190,7 @@ function EmptySlot(props: EmptySlotProps) {
           "hover:bg-foreground/[0.04]"
         )}
         onClick={() => setCreateOpen(true)}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
         <span className="hidden text-[11px] leading-none text-muted-foreground group-hover:block">

@@ -19,9 +19,17 @@ const ScheduleLegend = ({ showCoverage, showEvents }: ScheduleLegendProps) => (
     )}
     {showCoverage && (
       <>
+        {/* No "target met" swatch: met bars keep each meter's own colour, so there is no
+            single square that would stand for it — the row's own label carries that. A
+            shortfall is that colour mixed toward warn, which the warn square stands in for
+            well enough. See CoverageRow. */}
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[2px] bg-warn" />
           Below target
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-[2px] border-t-2 border-dotted border-muted-foreground bg-transparent" />
+          Includes drafts
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-[2px] w-3.5 bg-muted-foreground/50" />

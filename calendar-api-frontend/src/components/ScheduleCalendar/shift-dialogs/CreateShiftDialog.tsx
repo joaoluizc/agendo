@@ -8,13 +8,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
 import { Shift } from "@/types/shiftTypes";
-import { positionDisplay } from "../scheduleUtils";
+import { byRecentUse, positionDisplay } from "../scheduleUtils";
 import TimeRangeStepper from "./TimeRangeStepper";
 import PositionCombobox from "./PositionCombobox";
 import CoverageStrip from "./CoverageStrip";
@@ -55,7 +56,7 @@ type CreateShiftDialogProps = {
 
 type AgentFilter = "all" | "free" | "busy" | "off";
 
-const DURATION_PRESETS = [0.5, 1, 2, 4];
+const DURATION_PRESETS = [0.25, 0.5, 0.75, 1, 2, 4];
 
 /** `13:00` -> `13`, `13:30` stays — for the tight overlap badge. */
 const compactHour = (hour: number) => formatHour(hour).replace(":00", "");
@@ -116,16 +117,57 @@ const CreateShiftDialog = ({
   initialRange,
   initialPositionId,
 }: CreateShiftDialogProps) => {
-  const { allUsers, allPositions, coverageMeters } = useUserSettings();
+  const { allUsers, allPositions, coverageMeters, markPositionUsed } =
+    useUserSettings();
   const { shifts, events, setShifts, setEvents } = useSchedule();
 
-  const [range, setRange] = useState<HourRange>({ start: 9, end: 10 });
-  const [positionId, setPositionId] = useState("");
+  /**
+   * The slot to open on: the clicked hour, or the next whole hour when there is no prefill.
+   *
+   * Also used to seed the state below, so the very first render is already right. It used
+   * to be a hardcoded `{ start: 9, end: 10 }` corrected by an effect, which meant 09:00 was
+   * what you saw if the effect had not run yet — and 09:00 for a click at 11:00 is
+   * indistinguishable from a bug.
+   */
+  const openingRange = (): HourRange => {
+    if (initialRange) return clampRange(initialRange.start, initialRange.end);
+    const start = Math.min(23, new Date().getHours() + 1);
+    return clampRange(start, start + 1);
+  };
+
+  /**
+   * Which position to preselect.
+   *
+   * Follows the picker's own order — most recently used first — so the position you reached
+   * for last time is already selected. Until something has been used they all tie at
+   * "never", and alphabetical-first would land on "1:1"; lead with a live channel in that
+   * case, which is what a support scheduler is nearly always filling.
+   */
+  const openingPositionId = (): string => {
+    if (initialPositionId) {
+      const prefilled = allPositions.find(
+        (position) => String(position._id) === String(initialPositionId)
+      );
+      if (prefilled) return String(prefilled._id);
+    }
+    const [mostRecent] = [...allPositions].sort(byRecentUse);
+    if (mostRecent?.lastUsedAt) return String(mostRecent._id);
+    const channel = allPositions.find(
+      (position) => position.type === "live channel"
+    );
+    return String((channel ?? allPositions[0])?._id ?? "");
+  };
+
+  const [range, setRange] = useState<HourRange>(openingRange);
+  const [positionId, setPositionId] = useState(openingPositionId);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AgentFilter>("all");
   const [submitting, setSubmitting] = useState(false);
+  // Off by default: a new shift is a draft unless you say otherwise, so the reviewable
+  // outcome is the one you get without thinking about it.
+  const [publishNow, setPublishNow] = useState(false);
 
   const positionsById = useMemo(
     () => new Map(allPositions.map((position) => [String(position._id), position])),
@@ -144,28 +186,15 @@ const CreateShiftDialog = ({
    */
   useEffect(() => {
     if (!open) return;
-    if (initialRange) {
-      setRange(clampRange(initialRange.start, initialRange.end));
-    } else {
-      // No prefill: the next whole hour, as the old toolbar dialog defaulted to.
-      const start = Math.min(23, new Date().getHours() + 1);
-      setRange(clampRange(start, start + 1));
-    }
+    // Same two helpers that seeded the initial state, so an open and a re-open cannot
+    // disagree about where the dialog starts.
+    setRange(openingRange());
+    setPositionId(openingPositionId());
     setSelectedIds(initialUserId ? [String(initialUserId)] : []);
     setResolutions({});
     setQuery("");
     setFilter("all");
-    setPositionId((current) => {
-      if (initialPositionId && positionsById.has(String(initialPositionId))) {
-        return String(initialPositionId);
-      }
-      if (current && positionsById.has(current)) return current;
-      // A support scheduler is nearly always filling a channel, so lead with one.
-      const channel = allPositions.find(
-        (position) => position.type === "live channel"
-      );
-      return String((channel ?? allPositions[0])?._id ?? "");
-    });
+    setPublishNow(false);
   }, [open, initialUserId, initialRange?.start, initialRange?.end, initialPositionId]);
 
   const position = positionDisplay(positionsById.get(positionId));
@@ -308,11 +337,16 @@ const CreateShiftDialog = ({
         ...rangeToIso(selectedDate, range),
         userIds: creating,
         positionId,
+        status: publishNow ? "published" : "draft",
       });
 
       const next = applyShiftChanges({ shifts, events, removed, created });
       setShifts(next.shifts);
       setEvents(next.events);
+
+      // Mirror the backend's usage stamp so this position leads the picker on the next
+      // shift, without waiting for a page reload to refetch the list.
+      if (created.length > 0) markPositionUsed(positionId);
 
       if (errors.length) {
         toast.error(
@@ -590,6 +624,18 @@ const CreateShiftDialog = ({
               {summaryNote}
             </div>
           </div>
+          {/* Skips the draft step entirely: the shift is created published and synced in
+              the same request. Sits next to the create button because it changes what that
+              button does, and its label spells out the consequence — "publish now" alone
+              would not tell you a calendar event is about to appear. */}
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 pr-1 text-[12.5px] text-muted-foreground">
+            <Checkbox
+              id="publish-now"
+              checked={publishNow}
+              onCheckedChange={(checked) => setPublishNow(checked as boolean)}
+            />
+            Publish now
+          </label>
           <Button
             variant="outline"
             className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium"
@@ -603,10 +649,14 @@ const CreateShiftDialog = ({
             onClick={handleSubmit}
           >
             {submitting
-              ? "Creating…"
+              ? publishNow
+                ? "Publishing…"
+                : "Creating…"
               : creating.length === 0
-                ? "Create shift"
-                : `Create ${creating.length} ${
+                ? publishNow
+                  ? "Create & publish"
+                  : "Create draft"
+                : `${publishNow ? "Create & publish" : "Create"} ${creating.length} ${
                     creating.length === 1 ? "shift" : "shifts"
                   }`}
           </Button>

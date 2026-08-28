@@ -2,7 +2,7 @@
 
 _What agendo is, how it relates to Sling, and the plan for shift creation._
 
-_Last updated: 2026-06-22_
+_Last updated: 2026-08-25_
 
 Agendo is an internal **shift-scheduling tool for Duda's customer-support team**.
 Support managers (accounts of type `admin`) schedule every support agent's
@@ -18,6 +18,14 @@ templates, and so on. Agendo reads the Sling calendar and pushes shifts into
 people's Google Calendars. The agendo UI shows **two shift views: a Sling view
 and an agendo view.** Agendo also has its own native shift creation, but it is
 secondary today.
+
+## Shifts start as drafts
+
+Agendo-native shift creation no longer syncs on its own: a new shift (and any copy of one)
+lands as a **draft**, and only publishing puts it on an agent's Google Calendar or counts
+it as time worked. That is the first step of the migration below — it gives agendo the
+build-then-commit flow that was the practical reason Sling's UX won. See
+[shift drafts](shift-drafts.md).
 
 ## Plan / intent
 

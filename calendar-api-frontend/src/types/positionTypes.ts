@@ -15,6 +15,12 @@ export type Position = {
   // Google Calendar event colorId ("1".."11") the user picked for this shift.
   // null/undefined => no color => Google uses the calendar's default color.
   colorId?: string | null;
+  /**
+   * Start of the UTC day this position was last put on a shift. Written by the backend,
+   * never edited here — it exists to order the position pickers (see `byRecentUse`).
+   * Absent on a position that has never been used.
+   */
+  lastUsedAt?: string | null;
 };
 
 export type PositionSync = {

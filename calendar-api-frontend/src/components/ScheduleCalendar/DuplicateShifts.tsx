@@ -26,7 +26,7 @@ const DuplicateShifts = ({
         className="flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px]"
         onClick={() => setOpen(true)}
       >
-        <Copy size={15} /> Duplicate day
+        <Copy size={16} /> Duplicate day
       </Button>
       {open && (
         <DuplicateDayDialog

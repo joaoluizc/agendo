@@ -1,4 +1,4 @@
-import { Shift, SortedCalendar } from "@/types/shiftTypes";
+import { Shift, ShiftStatus, SortedCalendar } from "@/types/shiftTypes";
 import { CalendarUser, GCalendarEvent } from "@/types/gCalendarTypes";
 import utils from "@/utils/utils";
 
@@ -17,6 +17,12 @@ type CreateShiftsInput = {
   endTime: string;
   userIds: string[];
   positionId: string;
+  /**
+   * Omit for a draft, which is the default and the normal case. `"published"` creates the
+   * shift already committed and syncs it to the agent's calendar in the same request —
+   * for when the shift is known to be final and a second step is just friction.
+   */
+  status?: ShiftStatus;
 };
 
 type CreateShiftsResult = {
@@ -60,6 +66,11 @@ export const updateShift = async (
     endTime: string;
     userId: string;
     positionId: string;
+    /**
+     * Moves the shift between draft and published as part of the edit — this is how
+     * un-publishing exists. Omit to leave the status untouched.
+     */
+    status?: ShiftStatus;
   }
 ): Promise<Shift | null> => {
   const response = await fetch(`/api/shift?shiftId=${shiftId}`, {
@@ -69,8 +80,12 @@ export const updateShift = async (
     body: JSON.stringify(input),
   });
 
-  if (!response.ok) throw new Error("Failed to update shift");
   const payload = await response.json().catch(() => null);
+  // Carry the server's reason up. Throwing a fixed string here is what made a 400 from
+  // this endpoint show as a bare "1 change could not be saved" with nothing to act on.
+  if (!response.ok) {
+    throw new Error(payload?.message ?? "Failed to update shift");
+  }
   return payload?.data ?? null;
 };
 
@@ -80,6 +95,96 @@ export const deleteShift = async (shiftId: string): Promise<void> => {
     credentials: "include",
   });
   if (!response.ok) throw new Error("Failed to delete shift");
+};
+
+export type PublishResult = {
+  message: string;
+  published: number;
+  alreadyPublished: number;
+  data: Shift[];
+  /** Shifts that published but whose calendar event failed. */
+  errors?: { shiftId: string; message: string }[];
+  notFound?: string[];
+};
+
+/**
+ * Commit drafts.
+ *
+ * The only call that puts a shift on an agent's real calendar — creating or editing one
+ * no longer does — which is why it is a separate, explicit action rather than something
+ * the save buttons do quietly.
+ */
+export const publishShifts = async (
+  shiftIds: string[]
+): Promise<PublishResult> => {
+  const response = await fetch("/api/shift/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ shiftIds }),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  // 207 means the shifts published but at least one calendar event failed. They are real
+  // shifts either way, so the grid still updates and the caller warns about the rest.
+  if (!response.ok && response.status !== 207) {
+    throw new Error(payload?.message ?? "Failed to publish shifts");
+  }
+
+  return {
+    message: payload?.message ?? "",
+    published: payload?.published ?? 0,
+    alreadyPublished: payload?.alreadyPublished ?? 0,
+    data: payload?.data ?? [],
+    errors: payload?.errors,
+    notFound: payload?.notFound,
+  };
+};
+
+export type UnpublishResult = {
+  message: string;
+  unpublished: number;
+  alreadyDraft: number;
+  data: Shift[];
+  /** Shifts moved back to draft whose calendar event could not be removed. */
+  errors?: { shiftId: string; message: string }[];
+  notFound?: string[];
+};
+
+/**
+ * Move published shifts back to draft, deleting their calendar events.
+ *
+ * The bulk counterpart to unchecking Published in the edit dialog. A shift already in draft
+ * is counted rather than rejected, so a mixed selection can be sent as-is.
+ */
+export const unpublishShifts = async (
+  shiftIds: string[]
+): Promise<UnpublishResult> => {
+  const response = await fetch("/api/shift/unpublish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ shiftIds }),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  // 207 means they are drafts now but at least one calendar event survived — worth saying,
+  // since an agent left holding a meeting for an uncommitted shift is the failure that
+  // nothing else would notice.
+  if (!response.ok && response.status !== 207) {
+    throw new Error(payload?.message ?? "Failed to unpublish shifts");
+  }
+
+  return {
+    message: payload?.message ?? "",
+    unpublished: payload?.unpublished ?? 0,
+    alreadyDraft: payload?.alreadyDraft ?? 0,
+    data: payload?.data ?? [],
+    errors: payload?.errors,
+    notFound: payload?.notFound,
+  };
 };
 
 /** Every shift between two instants, ungrouped. Used to find days that already have shifts. */

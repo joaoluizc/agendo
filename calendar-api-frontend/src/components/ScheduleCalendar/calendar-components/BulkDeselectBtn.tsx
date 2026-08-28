@@ -48,6 +48,7 @@ function BulkDeselectBtn() {
           <Button
             variant="ghost"
             className="h-5 w-fit"
+            disabled={bulkSelectedShifts.length === 0}
             onClick={handleBulkDeselect}
           >
             <CopyX style={{ height: "0.9rem", width: "0.9rem" }} />

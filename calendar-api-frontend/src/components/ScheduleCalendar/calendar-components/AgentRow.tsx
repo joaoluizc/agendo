@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
-import { CalendarIcon, RepeatIcon } from "lucide-react";
+import { CalendarIcon, Check, Minus, RepeatIcon } from "lucide-react";
 import { Markup } from "interweave";
 import {
   HoverCard,
@@ -23,6 +23,8 @@ import {
   scheduledHours,
 } from "../scheduleUtils";
 import { cn } from "@/lib/utils";
+import { useSchedule } from "@/providers/useSchedule";
+import { formatHour } from "../shift-dialogs/shiftPlanning";
 
 type AgentRowProps = {
   user: UserSafeInfo;
@@ -35,7 +37,17 @@ type AgentRowProps = {
 };
 
 /** Fixed geometry for variant B. */
-const SHIFT_LANE = 22;
+/**
+ * Shift lane height.
+ *
+ * Sized against the two-line block (time above position), which is the tallest thing a
+ * lane holds. Keep the arithmetic in mind before tuning it: at `leading-tight` those lines
+ * come to 10px × 1.25 + 10.5px × 1.25 ≈ 25.6px, so 26 fits with a hair to spare where 24
+ * clipped both edges. ~28 is where it would gain a visible 1px margin top and bottom.
+ *
+ * Every row's height derives from this, so all of them grow together.
+ */
+const SHIFT_LANE = 26;
 const EVENT_LANE = 9;
 const LANE_GAP = 2;
 const LANE_PADDING = 5;
@@ -71,6 +83,14 @@ const AgentRow = ({
   isVisitor,
   reloadScheduleCalendar,
 }: AgentRowProps) => {
+  const {
+    shiftInDrag,
+    dropTarget,
+    isBulkSelectorActive,
+    bulkSelectedShifts,
+    setBulkSelectedShifts,
+  } = useSchedule();
+
   const shiftLanes = useMemo(() => {
     const spans = shifts.map((shift) => ({
       shift,
@@ -94,6 +114,81 @@ const AgentRow = ({
     () => scheduledHours(shifts, positionsById, selectedDate),
     [shifts, positionsById, selectedDate]
   );
+
+  /**
+   * Select every shift in this row, in one click.
+   *
+   * A three-state toggle rather than a "select all" button, because the state is the useful
+   * half: at a glance you can see which agents are fully in the selection, which are
+   * partly in, and which are untouched — an action-only button tells you none of that. It
+   * is hand-rolled rather than the shared `Checkbox` because that one always renders a
+   * check and only styles `data-[state=checked]`, so a partial state would be
+   * indistinguishable from a full one, and bending a primitive used across Settings for
+   * this row's sake is the wrong trade.
+   *
+   * Scoped to the shifts on screen, which is all this row has — selecting a day at a time
+   * is the point, and it keeps the selection from ever spanning days.
+   */
+  const rowShiftIds = useMemo(
+    () => new Set(shifts.map((shift) => shift._id)),
+    [shifts]
+  );
+  const selectedInRow = bulkSelectedShifts.filter((shift) =>
+    rowShiftIds.has(shift._id)
+  ).length;
+  const allRowSelected = shifts.length > 0 && selectedInRow === shifts.length;
+  const someRowSelected = selectedInRow > 0 && !allRowSelected;
+
+  const toggleRowSelection = () => {
+    if (allRowSelected) {
+      setBulkSelectedShifts(
+        bulkSelectedShifts.filter((shift) => !rowShiftIds.has(shift._id))
+      );
+      return;
+    }
+    const alreadySelected = new Set(
+      bulkSelectedShifts.map((shift) => shift._id)
+    );
+    setBulkSelectedShifts([
+      ...bulkSelectedShifts,
+      ...shifts.filter((shift) => !alreadySelected.has(shift._id)),
+    ]);
+  };
+
+  /**
+   * Where a dragged shift would land in this row, if it would land here at all.
+   *
+   * Drawn from the drop target plus the dragged shift's own duration rather than stored
+   * anywhere: the browser's drag image is a snapshot of the block under the cursor, which
+   * shows what is moving and nothing about where it goes.
+   *
+   * `dropTarget.hour` is a fractional hour on 15-minute boundaries, produced by the same
+   * function the drop itself uses — so what is previewed is exactly what lands.
+   */
+  const ghost = useMemo(() => {
+    const dragged = shiftInDrag?.data;
+    if (!dragged || dropTarget?.userId !== String(user.id)) return null;
+    const hours =
+      (new Date(dragged.endTime).getTime() -
+        new Date(dragged.startTime).getTime()) /
+      3_600_000;
+    const start = dropTarget.hour;
+    return {
+      start,
+      end: Math.min(24, start + hours),
+      /**
+       * The drop would run past midnight. The preview stops at the edge of the day, the
+       * same way a real overnight block does, and loses its right corner to say so.
+       */
+      clipped: start + hours > 24,
+      label: positionsById.get(String(dragged.positionId))?.name ?? "",
+      /** Already sitting exactly here, so the drop would change nothing. */
+      noop:
+        String(dragged.userId) === String(user.id) &&
+        dayBounds(dragged.startTime, dragged.endTime, selectedDate).start ===
+          start,
+    };
+  }, [shiftInDrag?.data, dropTarget, user.id, positionsById, selectedDate]);
 
   const rowHeight =
     shiftLaneCount * SHIFT_LANE +
@@ -135,6 +230,37 @@ const AgentRow = ({
               : "unavailable"}
           </div>
         </div>
+
+        {/* Sits at the trailing edge rather than before the avatar so entering select mode
+            does not shove the name and hours sideways. Hidden on a row with nothing to
+            select — an empty row has no "all" to check. */}
+        {isBulkSelectorActive && shifts.length > 0 && (
+          <button
+            type="button"
+            aria-pressed={allRowSelected}
+            title={
+              allRowSelected
+                ? `Deselect ${shifts.length} shift${shifts.length === 1 ? "" : "s"}`
+                : `Select all ${shifts.length} shift${shifts.length === 1 ? "" : "s"}`
+            }
+            aria-label={`${allRowSelected ? "Deselect" : "Select"} all shifts for ${user.firstName} ${user.lastName}`}
+            onClick={toggleRowSelection}
+            className={cn(
+              "ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
+              allRowSelected
+                ? "border-primary bg-primary text-primary-foreground"
+                : someRowSelected
+                  ? "border-primary text-primary"
+                  : "border-muted-foreground/50 text-transparent hover:border-primary"
+            )}
+          >
+            {allRowSelected ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : someRowSelected ? (
+              <Minus className="h-3.5 w-3.5" />
+            ) : null}
+          </button>
+        )}
       </div>
 
       {/* The timeline. EmptySlot cells sit underneath as the click/drop target; the
@@ -143,6 +269,31 @@ const AgentRow = ({
         className="relative"
         style={{ gridColumn: "span 48", height: rowHeight }}
       >
+        {/* Drop preview. Positioned as a percentage of the timeline, which is exactly 24
+            hours wide, so it needs no lane packing and cannot disagree with the ruler. It
+            spans the row's full height on purpose — the question being answered is "which
+            agent, and when", not "which lane". */}
+        {ghost && (
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-y-[3px] z-[2] flex items-center overflow-hidden rounded-[6px] border-[1.5px] border-dashed px-1.5",
+              ghost.noop
+                ? "border-border bg-muted/30"
+                : "border-foreground/70 bg-foreground/[0.09]",
+              ghost.clipped && "rounded-r-none border-r-0"
+            )}
+            style={{
+              left: `${(ghost.start / 24) * 100}%`,
+              width: `${((ghost.end - ghost.start) / 24) * 100}%`,
+            }}
+          >
+            <span className="truncate text-[10px] font-semibold tabular-nums">
+              {formatHour(ghost.start)}
+              {ghost.label ? ` · ${ghost.label}` : ""}
+            </span>
+          </div>
+        )}
+
         <div
           className="absolute inset-0 grid"
           style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}

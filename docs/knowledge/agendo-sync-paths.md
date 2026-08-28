@@ -2,7 +2,7 @@
 
 _The two ways shifts reach Google Calendar, plus the position id-space gotcha._
 
-_Last updated: 2026-06-22_
+_Last updated: 2026-08-25_
 
 Agendo syncs shifts to each user's Google Calendar through **two distinct paths**
 in `calendar-api-backend/src/services/gCalendarService.js`. Anyone changing sync
@@ -27,10 +27,13 @@ exist but are unwired/dead.)
 
 ## 2. Agendo sync (per-shift)
 
-When a shift is created, updated, or duplicated in agendo (`POST /shift/new`,
-`PUT /shift/`, `POST /shift/duplicate-shifts`), that one shift is synced
-immediately. All of these funnel through `addEventForShift` → the single gate
-`shouldSyncShift`.
+Publishing a draft (`POST /shift/publish`) is what syncs an agendo-native shift. Creating,
+editing or duplicating one does **not** — a new shift is a draft, and a draft never reaches
+a calendar (see [shift drafts](shift-drafts.md)). Editing or moving an already-published
+shift still re-syncs it as it always did.
+
+All of these funnel through `addEventForShift` → the single gate `shouldSyncShift`, which
+now also refuses anything still in draft.
 
 ## The sync filter = per-position user preference
 
