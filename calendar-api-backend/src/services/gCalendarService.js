@@ -742,9 +742,25 @@ async function shouldSyncShift(
   requestId = "req-id-nd",
   enforcedObjectIds = null,
 ) {
+  // A draft is a plan, not a commitment: it never reaches an agent's calendar. Publishing
+  // is what syncs it (see shiftService.publishShifts), so this returns false until then.
+  //
+  // The check sits here, in the single gate every per-shift caller already passes through,
+  // rather than at each call site — that way the drag-to-move path (PUT /shift/) and
+  // anything added later are covered without anyone having to remember.
+  //
+  // It also comes before the log line below, which dereferences `clerkUser.id`: a draft
+  // must be refused even when the caller's user lookup came back empty, rather than
+  // throwing on the way to the answer.
+  if (shift.status === "draft") {
+    console.log(`[${requestId}] - Shift is a draft; not syncing.`);
+    return false;
+  }
+
   console.log(
     `[${requestId}] - Checking if shift should be synced for user ${clerkUser.id}`,
   );
+
   const shiftPositionId = shift.positionId.toString();
 
   // Admin-enforced positions always sync, overriding the user's preference.

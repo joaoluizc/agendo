@@ -6,6 +6,7 @@ import { targetAt } from "@/utils/coverageTargets";
 import {
   PositionDisplay,
   dayBounds,
+  isDraft,
   isUnavailablePosition,
   positionDisplay,
   startOfLocalDay,
@@ -25,7 +26,7 @@ import {
  * anything is submitted.
  */
 
-export const HOUR_STEP = 0.5;
+export const HOUR_STEP = 0.25;
 export const DAY_HOURS = 24;
 
 /** A candidate shift's span, in fractional local hours on the selected day. */
@@ -36,28 +37,48 @@ export type HourRange = { start: number; end: number };
  *
  * The end is clamped after the start so dragging the start past the end shortens the
  * shift instead of inverting it — the steppers rely on that to stay monotonic.
+ *
+ * `maxEnd` above 24 lets the end run past midnight, expressed as hours from the *start*
+ * day's midnight: 25 is 01:00 the next day, which `hourToDate` already builds correctly.
+ * Only the edit dialog raises it, and only for a shift that already crosses midnight —
+ * otherwise the default keeps every range inside one day. Flattening 25 to 24 here is what
+ * silently truncated overnight shifts on save.
+ *
+ * The **start** ceiling stays inside the day whatever `maxEnd` is. A shift is anchored to
+ * the day it begins, so "earlier than midnight" is a different day's shift, not a negative
+ * hour — and with shifts never running much past 9 hours, an end at or before the start
+ * unambiguously means the next day rather than a 24-hour span.
  */
-export const clampRange = (start: number, end: number): HourRange => {
+export const clampRange = (
+  start: number,
+  end: number,
+  maxEnd: number = DAY_HOURS
+): HourRange => {
   const snappedStart = Math.min(
     DAY_HOURS - HOUR_STEP,
     Math.max(0, Math.round(start / HOUR_STEP) * HOUR_STEP)
   );
   const snappedEnd = Math.min(
-    DAY_HOURS,
+    maxEnd,
     Math.max(snappedStart + HOUR_STEP, Math.round(end / HOUR_STEP) * HOUR_STEP)
   );
   return { start: snappedStart, end: snappedEnd };
 };
 
 /**
- * `13` -> `13:00`, `13.5` -> `13:30`, `24` -> `24:00`.
+ * `13` -> `13:00`, `13.5` -> `13:30`, `24` -> `24:00`, `25` -> `01:00`.
  *
  * Hour 24 stays 24 rather than wrapping to 00: a shift labelled `22:00–00:00` reads as
  * ending before it started. Same reasoning as `formatSlotTime` in scheduleUtils.
+ *
+ * Past 24 it does wrap, because those are real next-day clock times on an overnight
+ * shift — `21:00–01:00` is how people write it, and `21:00–25:00` is not. Which day the
+ * end falls on is carried by the field's own label, not smuggled into the number.
  */
 export const formatHour = (hour: number): string => {
-  const whole = Math.floor(hour);
-  const minutes = Math.round((hour - whole) * 60);
+  const onClock = hour > DAY_HOURS ? hour - DAY_HOURS : hour;
+  const whole = Math.floor(onClock);
+  const minutes = Math.round((onClock - whole) * 60);
   return `${String(whole).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 };
 
@@ -104,7 +125,7 @@ export const parseHourInput = (
     else if (isPm) hour += 12;
   }
 
-  let value = Math.round((hour + minutes / 60) * 2) / 2;
+  let value = Math.round((hour + minutes / 60) * 4) / 4;
   if (options.isEnd && value === 0) value = DAY_HOURS;
   if (value < 0 || value > DAY_HOURS) return null;
   return value;
@@ -120,7 +141,7 @@ export const formatDuration = (hours: number): string => {
 
 /** `7.5` -> `7.5`, `8` -> `8` — for the `7.5h scheduled` metas. */
 export const formatHourTotal = (hours: number): string => {
-  const rounded = Math.round(hours * 2) / 2;
+  const rounded = Math.round(hours * 4) / 4;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
 
@@ -235,6 +256,35 @@ export const buildRoster = (
  */
 export type ConflictKind = "clear" | "overlap" | "same" | "unavailable";
 
+/**
+ * Where each kind sits in the agent list: whoever can simply take the shift first, then
+ * whoever is already covering this very position, then everyone whose day would have to
+ * be argued with.
+ *
+ * `same` sits second rather than with the other conflicts because it is not really one —
+ * the agent is already doing this job over this slot, so they are the obvious person to
+ * extend, and burying them among genuine clashes hides that. `unavailable` sits last
+ * because it is the only kind that needs the day itself changed, not just a shift moved.
+ */
+const PICK_ORDER: Record<ConflictKind, number> = {
+  clear: 0,
+  same: 1,
+  overlap: 2,
+  unavailable: 3,
+};
+
+/** Free agents first, then agents already on this position, then everyone conflicting. */
+export const byAvailability =
+  (statuses: Map<string, AgentStatus>) =>
+  (a: AgentDay, b: AgentDay): number => {
+    const rank =
+      PICK_ORDER[statuses.get(a.id)?.kind ?? "clear"] -
+      PICK_ORDER[statuses.get(b.id)?.kind ?? "clear"];
+    // Ties keep the roster's own order, which is alphabetical — so the list stays
+    // scannable within a group and doesn't reshuffle as the time range changes.
+    return rank !== 0 ? rank : a.name.localeCompare(b.name);
+  };
+
 /** What to do about a conflict. `replace` deletes the overlapping shifts first. */
 export type Resolution = "add" | "replace" | "skip";
 
@@ -328,8 +378,13 @@ export const meterForPosition = (
 };
 
 export type StripSeries = {
-  /** Head count per local hour before the pending change. */
+  /** Head count per local hour before the pending change, drafts included. */
   base: number[];
+  /**
+   * How much of `base` rests on shifts nobody has published yet. A subset of `base`, not
+   * an addition to it.
+   */
+  draftBase: number[];
   /** Extra head count the pending change would add, stacked on top of `base`. */
   delta: number[];
   targets: number[];
@@ -357,7 +412,9 @@ type StripInput = {
  *
  * An agent counts in an hour when a shift on one of the meter's positions covers the
  * whole hour, matching `buildCoverageSeries` — so the strip and the grid's coverage row
- * never disagree.
+ * never disagree. That agreement includes how drafts are treated: both count them, and
+ * both report the unpublished share separately. Change one and you have to change the
+ * other.
  */
 export const buildStripSeries = ({
   meter,
@@ -370,26 +427,34 @@ export const buildStripSeries = ({
   const meterPositions = new Set(meter.positionIds.map(String));
   const contributors = new Set(contributorIds.map(String));
 
-  const countsAt = (agent: AgentDay, hour: number) =>
+  const countsAt = (
+    agent: AgentDay,
+    hour: number,
+    { publishedOnly = false } = {}
+  ) =>
     agent.spans.some(
       (span) =>
         meterPositions.has(span.positionId) &&
         !removedShiftIds?.has(span.shift._id) &&
+        (!publishedOnly || !isDraft(span.shift)) &&
         span.start <= hour &&
         span.end >= hour + 1
     );
 
   const base: number[] = [];
+  const draftBase: number[] = [];
   const delta: number[] = [];
   const targets: number[] = [];
 
   for (let hour = 0; hour < DAY_HOURS; hour++) {
     let covered = 0;
+    let committed = 0;
     let added = 0;
 
     for (const agent of roster) {
       const already = countsAt(agent, hour);
       if (already) covered++;
+      if (countsAt(agent, hour, { publishedOnly: true })) committed++;
 
       // Only agents not already counted move the needle — otherwise replacing one
       // meter position with another would read as adding coverage that isn't new.
@@ -398,6 +463,9 @@ export const buildStripSeries = ({
     }
 
     base.push(covered);
+    // The part of `base` that only a draft is holding up. An agent already covering the
+    // hour with a published shift contributes nothing here.
+    draftBase.push(covered - committed);
     delta.push(added);
     targets.push(
       Math.max(
@@ -409,6 +477,7 @@ export const buildStripSeries = ({
 
   return {
     base,
+    draftBase,
     delta,
     targets,
     peak: Math.max(

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,18 +18,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
 import type { Shift } from "@/types/shiftTypes";
-import { dayBounds, positionDisplay } from "../scheduleUtils";
+import { isDraft, positionDisplay, startOfLocalDay } from "../scheduleUtils";
 import TimeRangeStepper from "./TimeRangeStepper";
 import PositionCombobox from "./PositionCombobox";
 import CoverageStrip from "./CoverageStrip";
 import CreateShiftDialog from "./CreateShiftDialog";
 import {
   AgentShiftSpan,
+  DAY_HOURS,
   HourRange,
   buildRoster,
   buildStripSeries,
@@ -80,16 +82,54 @@ const EditShiftDialog = ({
   onOpenChange,
   reloadScheduleCalendar,
 }: EditShiftDialogProps) => {
-  const { allUsers, allPositions, coverageMeters } = useUserSettings();
+  const { allUsers, allPositions, coverageMeters, markPositionUsed } =
+    useUserSettings();
   const { shifts, events, setShifts, setEvents } = useSchedule();
 
+  /**
+   * The day this shift's times are measured from — its own start day, not the day you are
+   * looking at.
+   *
+   * This is the fix for overnight shifts. The range used to come from `dayBounds`, which
+   * clamps to the *viewed* day, and was written back with `rangeToIso(selectedDate, …)` —
+   * so a 21:00→01:00 shift read as 21:00–24:00 from its start day and 00:00–01:00 from the
+   * next one, and saving either wrote that truncated version back. Three of its four hours
+   * could vanish from one edit.
+   *
+   * Anchoring on the shift itself makes the range the same from both days, and lets the end
+   * exceed 24 to mean the next morning — `hourToDate` already builds that correctly.
+   */
+  const anchorDate = useMemo(
+    () => startOfLocalDay(new Date(shift.startTime)),
+    [shift.startTime]
+  );
+
   const original = useMemo(() => {
-    const bounds = dayBounds(shift.startTime, shift.endTime, selectedDate);
+    const anchor = anchorDate.getTime();
+    const toHours = (iso: string) =>
+      (new Date(iso).getTime() - anchor) / 3_600_000;
     return {
-      range: { start: bounds.start, end: bounds.end } as HourRange,
+      // Deliberately unclamped: an overnight shift's end is > 24 here.
+      range: {
+        start: toHours(shift.startTime),
+        end: toHours(shift.endTime),
+      } as HourRange,
       positionId: String(shift.positionId),
+      published: !isDraft(shift),
     };
-  }, [shift.startTime, shift.endTime, shift.positionId, selectedDate]);
+  }, [shift.startTime, shift.endTime, shift.positionId, shift.status, anchorDate]);
+
+  /** True when the shift runs past its start day's midnight. */
+  const crossesMidnight = original.range.end > DAY_HOURS;
+  /**
+   * Only a shift that *already* crosses midnight may be edited past it. A normal shift
+   * stays inside its day, so this dialog never gains the ability to create an overnight —
+   * that would be a new feature rather than the fix for a bug.
+   */
+  const maxEnd = crossesMidnight ? DAY_HOURS * 2 : DAY_HOURS;
+  /** Opened from the day it spills into rather than the day it starts. */
+  const viewingSpillDay =
+    anchorDate.getTime() !== startOfLocalDay(selectedDate).getTime();
 
   const [range, setRange] = useState<HourRange>(original.range);
   const [positionId, setPositionId] = useState(original.positionId);
@@ -97,6 +137,16 @@ const EditShiftDialog = ({
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [published, setPublished] = useState(original.published);
+  /**
+   * Whether the re-time auto-drop has already fired for this edit.
+   *
+   * Re-timing a published shift turns the toggle off, so saving leaves it a draft rather
+   * than quietly pushing the new time to the agent's calendar. It has to be one-shot:
+   * without this, deliberately re-checking the box and then nudging the time again would
+   * keep switching it back off, and the toggle would feel broken.
+   */
+  const autoDropped = useRef(false);
   const [addAgentsOpen, setAddAgentsOpen] = useState(false);
 
   const positionsById = useMemo(
@@ -108,6 +158,8 @@ const EditShiftDialog = ({
     [allUsers, shifts, positionsById, selectedDate]
   );
 
+  // Drives the status line in the footer; the toggle beside it carries the live choice.
+  const draft = isDraft(shift);
   const agent = roster.find((entry) => entry.id === String(shift.userId));
   const positionRecord = positionsById.get(positionId);
   const position = positionDisplay(positionRecord);
@@ -121,10 +173,34 @@ const EditShiftDialog = ({
     String(shift.userId)
   );
 
+  const timeChanged =
+    range.start !== original.range.start || range.end !== original.range.end;
+
   const dirty =
-    range.start !== original.range.start ||
-    range.end !== original.range.end ||
-    positionId !== original.positionId;
+    timeChanged ||
+    positionId !== original.positionId ||
+    published !== original.published;
+
+  // Reset the toggle whenever the dialog is opened afresh — the instance outlives a single
+  // use, same reason CreateShiftDialog resets on open.
+  useEffect(() => {
+    if (!open) {
+      autoDropped.current = false;
+      return;
+    }
+    setPublished(original.published);
+  }, [open, original.published]);
+
+  // Moving a published shift drops it back to draft, once, so the new time cannot reach a
+  // calendar without someone saying so. Re-check the toggle to publish it at the new time.
+  useEffect(() => {
+    if (!timeChanged || autoDropped.current) return;
+    autoDropped.current = true;
+    if (original.published) setPublished(false);
+  }, [timeChanged, original.published]);
+
+  /** The shift was published, its time moved, and the toggle has not been re-checked. */
+  const unpublishedByRetime = original.published && timeChanged && !published;
 
   // Memoised because the coverage series keys off it — see CreateShiftDialog.
   const meterContext = useMemo(
@@ -341,10 +417,13 @@ const EditShiftDialog = ({
     if (!dirty && removedIds.length === 0) return;
     setSaving(true);
 
-    const iso = rangeToIso(selectedDate, range);
+    // Anchored on the shift's own start day, so an end past 24 becomes the next morning
+    // rather than being flattened onto the viewed day. See anchorDate.
+    const iso = rangeToIso(anchorDate, range);
     const removed: Shift[] = [];
     const created: Shift[] = [];
     let failures = 0;
+    let failureReason: string | undefined;
 
     // Removals first, so a slot that is being both trimmed and retimed cannot briefly
     // hold two shifts for the same agent.
@@ -372,14 +451,21 @@ const EditShiftDialog = ({
           ...iso,
           userId: target.userId,
           positionId,
+          status: published ? "published" : "draft",
         });
         // The response carries the fresh sync state, so swapping the whole shift keeps
         // the Google Calendar under-lane honest. Without one, keep the sync state we
         // already had rather than guessing — dropping it would orphan the event.
         removed.push(target);
         created.push(updated ?? { ...target, ...iso, positionId });
-      } catch {
+      } catch (error) {
         failures++;
+        // Keep the first reason. Discarding it is what left a failed save saying only
+        // "1 change could not be saved", with the actual cause visible nowhere.
+        failureReason =
+          failureReason ??
+          (error instanceof Error ? error.message : String(error));
+        console.error("Error updating shift:", error);
       }
     }
 
@@ -388,9 +474,13 @@ const EditShiftDialog = ({
     setEvents(next.events);
     setSaving(false);
 
+    // An edit can move a shift onto a different position, which counts as using it.
+    if (created.length > 0) markPositionUsed(positionId);
+
     if (failures > 0) {
       toast.error(
-        `${failures} ${failures === 1 ? "change" : "changes"} could not be saved`
+        `${failures} ${failures === 1 ? "change" : "changes"} could not be saved`,
+        { description: failureReason }
       );
       // A partial batch is the one case worth a refetch — the local patch now describes
       // something the server may not agree with.
@@ -474,7 +564,13 @@ const EditShiftDialog = ({
                 <div className="text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
                   Time
                 </div>
-                <TimeRangeStepper range={range} onChange={setRange} compact />
+                <TimeRangeStepper
+                  range={range}
+                  onChange={setRange}
+                  compact
+                  maxEnd={maxEnd}
+                  anchorDate={anchorDate}
+                />
                 <div className="flex items-center gap-2 text-[11.5px]">
                   <span className="flex h-[22px] items-center rounded-md bg-muted px-2 font-semibold tabular-nums">
                     {formatDuration(duration)}
@@ -485,6 +581,33 @@ const EditShiftDialog = ({
                       : "unchanged"}
                   </span>
                 </div>
+
+                {/* Says which days the times cover, and — when opened from the day it
+                    spills into — why the dialog is showing the previous day's times. The
+                    grid shows a 00:00 block there, so without this the 21:00 start looks
+                    like the wrong shift. */}
+                {crossesMidnight && (
+                  <div className="text-[11.5px] text-muted-foreground">
+                    {viewingSpillDay ? "Starts " : "Crosses midnight — "}
+                    <span className="font-semibold text-foreground">
+                      {anchorDate.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    {" → "}
+                    <span className="font-semibold text-foreground">
+                      {new Date(
+                        anchorDate.getTime() + 24 * 60 * 60 * 1000
+                      ).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {series && meterContext ? (
@@ -678,21 +801,46 @@ const EditShiftDialog = ({
           </div>
 
           <div className="flex items-center gap-2.5 border-t border-border bg-band px-[18px] py-3">
+            {/* Full-strength destructive border and text: at 40% opacity this read as a
+                disabled control, which is the wrong signal for the one irreversible
+                action in the dialog. */}
             <Button
               variant="outline"
-              className="h-[34px] rounded-lg border-destructive/40 px-3 text-[13px] font-semibold text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="h-[34px] rounded-lg border-destructive bg-destructive/5 px-3 text-[13px] font-semibold text-destructive hover:bg-destructive hover:text-destructive-foreground"
               disabled={saving}
               onClick={() => setConfirmDelete(true)}
             >
               Delete
             </Button>
-            <div className="min-w-0 flex-1 truncate pr-1 text-right text-[11.5px] text-muted-foreground">
+            {/* The auto-drop message takes priority over "Unsaved changes": a toggle that
+                moved on its own has to say so, or unchecking looks like a glitch. */}
+            <div
+              className={cn(
+                "min-w-0 flex-1 truncate pr-1 text-right text-[11.5px]",
+                unpublishedByRetime ? "text-warn" : "text-muted-foreground"
+              )}
+            >
               {removedIds.length
                 ? `${removedIds.length} removed from this slot`
-                : dirty
-                  ? "Unsaved changes"
-                  : ""}
+                : unpublishedByRetime
+                  ? "Time changed — will save as draft. Re-check Published to send it."
+                  : dirty
+                    ? "Unsaved changes"
+                    : draft
+                      ? shift.notes || "Draft — not on any calendar yet"
+                      : ""}
             </div>
+            {/* The status as a control rather than a one-way "Publish" button, which is
+                what made un-publishing impossible. Unchecking it and saving takes the
+                shift back to draft and removes its calendar event. */}
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 pr-1 text-[12.5px] text-muted-foreground">
+              <Checkbox
+                id="edit-published"
+                checked={published}
+                onCheckedChange={(checked) => setPublished(checked as boolean)}
+              />
+              Published
+            </label>
             <Button
               variant="outline"
               className="h-[34px] rounded-lg px-3 text-[13px] font-medium"

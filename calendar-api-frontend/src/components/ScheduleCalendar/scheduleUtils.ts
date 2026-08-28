@@ -51,7 +51,10 @@ type GetCalEventsResponse =
 export const getShifts = async (date: Date): Promise<SortedCalendar> => {
   const { startOfDayISO, endOfDayISO } = utils.getLocalTimeframeISO(date);
 
-  const endpoint = `/api/shift/range?startTime=${startOfDayISO}&endTime=${endOfDayISO}&group=user`;
+  // Drafts are asked for explicitly, and the API only honours it for an admin — the
+  // schedule is where unpublished shifts get reviewed, so it is the one read that wants
+  // them. A non-admin simply gets the committed day back.
+  const endpoint = `/api/shift/range?startTime=${startOfDayISO}&endTime=${endOfDayISO}&group=user&includeDrafts=1`;
   const response = await fetch(endpoint, {
     method: "GET",
     credentials: "include",
@@ -199,11 +202,76 @@ export const prettyGCalTime = (start: string, end: string) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Draft vs published                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Is this shift still a proposal?
+ *
+ * The whole app asks through here rather than comparing `status` inline, because the
+ * interesting case is the one a direct comparison gets wrong: a shift written before the
+ * draft lifecycle existed has **no** `status` at all, and it is real, published history.
+ * Testing for `!== "published"` would turn every one of those into a draft — unsynced and
+ * uncounted. Mirrors the backend's `$ne: "draft"` filter for the same reason.
+ */
+export const isDraft = (shift: Shift) => shift.status === "draft";
+
+/** How many of a day's shifts are still unpublished. Drives the toolbar's commit prompt. */
+export const countDrafts = (shifts: SortedCalendar) =>
+  Object.values(shifts).reduce(
+    (total, userShifts) => total + userShifts.filter(isDraft).length,
+    0
+  );
+
+/** Every unpublished shift in a day, in no particular order. */
+export const collectDrafts = (shifts: SortedCalendar): Shift[] =>
+  Object.values(shifts).flatMap((userShifts) => userShifts.filter(isDraft));
+
+/* -------------------------------------------------------------------------- */
 /* Grid math                                                                  */
 /* -------------------------------------------------------------------------- */
 
 /** The timeline is 48 half-hour columns wide, one per slot. */
 export const SLOTS_PER_DAY = 48;
+
+/**
+ * The grid's geometry, in one place because four components have to agree on it exactly —
+ * the header ruler, the coverage rows, each agent row's label column and its lane grid.
+ * They were four copies of the same literal; a change to one that missed another would
+ * misalign every shift against the hour it sits under.
+ *
+ * Sized so the whole track fits a 1425px window without scrolling sideways. That window
+ * leaves 1368px for the track once the card's margins, its border and a 15px scrollbar
+ * are taken out — and 168 + 48 x 25 would spend exactly all of it, which a machine with
+ * classic 17px scrollbars would overflow by 2px.
+ *
+ * So the slot floor is 24, not 25. It costs nothing visually: the floor only binds on a
+ * narrower screen, and at 1425px `1fr` still stretches each column to the same 25px it
+ * would otherwise have been. What it buys is ~48px of headroom for whatever the browser
+ * takes that this arithmetic did not predict.
+ */
+export const LABEL_COLUMN_PX = 168;
+export const SLOT_MIN_PX = 24;
+export const TRACK_MIN_PX = LABEL_COLUMN_PX + SLOTS_PER_DAY * SLOT_MIN_PX;
+
+/**
+ * "Alexandre Back" -> "Alexandre B." for the grid's label column.
+ *
+ * Trimmed rather than truncated by CSS so the cut lands somewhere meaningful: an
+ * ellipsis eats whichever characters happen not to fit, which on a narrow column can
+ * leave two agents reading identically. A last initial always distinguishes them, and
+ * costs less width than the ellipsis it replaces. A one-word name is left alone.
+ */
+export const shortName = (firstName?: string, lastName?: string): string => {
+  const first = (firstName ?? "").trim();
+  const initial = (lastName ?? "").trim().charAt(0);
+  if (!first) return (lastName ?? "").trim();
+  return initial ? `${first} ${initial}.` : first;
+};
+/** Half-hour columns alone — for the lane grid inside a row, which has no label cell. */
+export const SLOT_COLUMNS = `repeat(${SLOTS_PER_DAY}, minmax(${SLOT_MIN_PX}px, 1fr))`;
+/** The full row: sticky label column, then the day. */
+export const GRID_COLUMNS = `${LABEL_COLUMN_PX}px ${SLOT_COLUMNS}`;
 
 /** A span in fractional local hours since the selected day's midnight, 0..24. */
 export type DaySpan = {
@@ -256,6 +324,50 @@ export const columnSpan = (span: DaySpan) => {
   const cells = Math.round((span.end - span.start) * 2);
   const start = columnStart(span.start);
   return Math.max(1, Math.min(cells, SLOTS_PER_DAY - start + 1));
+};
+
+export type SpanPlacement = {
+  /** 1-based grid column of the first half-hour cell the span touches. */
+  gridColumnStart: number;
+  /** How many half-hour cells the span touches. */
+  cells: number;
+  /** Percent of the spanned cells to leave empty on the left, 0..100. */
+  insetLeftPct: number;
+  /** Percent to leave empty on the right, 0..100. */
+  insetRightPct: number;
+};
+
+/**
+ * Place a span on the 48-column half-hour track *without* rounding it to that track.
+ *
+ * Shifts can start and end on quarter hours, which a half-hour grid cannot express:
+ * `columnStart`/`columnSpan` would draw 09:15–09:45 as 09:00–09:30 — wrong at both ends
+ * and wrong in length. Doubling the grid to 96 columns would fix the maths and halve the
+ * column width, changing how the whole schedule looks for the sake of the occasional
+ * short break.
+ *
+ * So the track stays exactly as it is, and the block is inset *within* the cells it
+ * touches: claim every cell the span overlaps, then give back the unused fraction at each
+ * end as a percentage. Cells are equal width, so the percentage lands the edge on the
+ * real minute. The hour ruler, the coverage rows and the click targets are untouched.
+ */
+export const spanPlacement = (span: DaySpan): SpanPlacement => {
+  const firstCell = Math.floor(span.start * 2);
+  const lastCell = Math.ceil(span.end * 2);
+  const cells = Math.max(1, Math.min(lastCell - firstCell, SLOTS_PER_DAY - firstCell));
+
+  const windowStart = firstCell / 2;
+  const windowHours = cells / 2;
+  const clampPct = (value: number) => Math.max(0, Math.min(100, value));
+
+  return {
+    gridColumnStart: firstCell + 1,
+    cells,
+    insetLeftPct: clampPct(((span.start - windowStart) / windowHours) * 100),
+    insetRightPct: clampPct(
+      ((windowStart + windowHours - span.end) / windowHours) * 100
+    ),
+  };
 };
 
 export type LanePlacement<T> = { item: T; lane: number };
@@ -316,7 +428,13 @@ const assignEventLanes = (events: GCalendarEventList, date: Date) => {
 /* -------------------------------------------------------------------------- */
 
 export type CoverageSeries = {
+  /** Head count per slot for the whole plan — drafts and published together. */
   counts: number[];
+  /**
+   * How much of `counts` only exists because of unpublished shifts, so the row can show
+   * the proposed share of a bar apart from the committed one.
+   */
+  draftCounts: number[];
   targets: number[];
   peak: number;
   summary: string;
@@ -393,24 +511,42 @@ export const buildCoverageSeries = (
   const meterPositions = new Set(meter.positionIds.map(String));
   const dayStart = startOfLocalDay(selectedDate).getTime();
 
-  const spansByUser = roster.map((user) =>
-    (shifts[user.id] ?? [])
-      .filter((shift) => meterPositions.has(String(shift.positionId)))
-      .map((shift) => dayBounds(shift.startTime, shift.endTime, selectedDate))
-  );
+  // Two span sets per agent: the whole plan, and only the part already committed. Drafts
+  // count toward coverage — with a new shift starting life as a draft, a day being built
+  // is entirely draft, and a published-only row would read zero exactly when it is most
+  // needed. The split is what keeps "covered" from being read as "committed".
+  const spansByUser = roster.map((user) => {
+    const onMeter = (shifts[user.id] ?? []).filter((shift) =>
+      meterPositions.has(String(shift.positionId))
+    );
+    const toSpan = (shift: Shift) =>
+      dayBounds(shift.startTime, shift.endTime, selectedDate);
+    return {
+      all: onMeter.map(toSpan),
+      published: onMeter.filter((shift) => !isDraft(shift)).map(toSpan),
+    };
+  });
 
   const counts: number[] = [];
+  const draftCounts: number[] = [];
   const targets: number[] = [];
 
   for (let slot = 0; slot < SLOTS_PER_DAY; slot++) {
     const slotStart = slot / 2;
     const slotEnd = slotStart + 0.5;
+    const covers = (spans: DaySpan[]) =>
+      spans.some((span) => span.start <= slotStart && span.end >= slotEnd);
 
-    counts.push(
-      spansByUser.filter((spans) =>
-        spans.some((span) => span.start <= slotStart && span.end >= slotEnd)
-      ).length
-    );
+    const planned = spansByUser.filter((agent) => covers(agent.all)).length;
+    const committed = spansByUser.filter((agent) =>
+      covers(agent.published)
+    ).length;
+
+    counts.push(planned);
+    // The *extra* head count the drafts buy. An agent already covering this slot with a
+    // published shift contributes nothing here, so replacing one draft with another never
+    // reads as added coverage.
+    draftCounts.push(planned - committed);
     targets.push(targetAt(meter, new Date(dayStart + slot * 30 * 60_000)));
   }
 
@@ -419,6 +555,7 @@ export const buildCoverageSeries = (
 
   return {
     counts,
+    draftCounts,
     targets,
     peak,
     hasTarget,
@@ -436,7 +573,14 @@ export type PositionTone = "loud" | "mid" | "quiet";
 export type PositionDisplay = {
   name: string;
   color: string;
-  /** Short form that fits a 1-2 hour block. */
+  /**
+   * Hard 10-character form, broken on a word boundary — for blocks too narrow for the
+   * name.
+   *
+   * Only for the narrow tiers. A wider block prints `name` and lets CSS ellipsise it,
+   * since CSS is the only thing that knows the real pixel width; using this everywhere put
+   * "Customer…" on a four-hour block with 200px to spare. See `Shift`'s `mode`.
+   */
   label: string;
   /** Two-letter form for a 30-minute block. */
   code: string;
@@ -542,3 +686,20 @@ export const scheduledHours = (
     const span = dayBounds(shift.startTime, shift.endTime, selectedDate);
     return total + Math.max(0, span.end - span.start);
   }, 0);
+
+/**
+ * Order positions for a picker: most recently used first, alphabetical within a day.
+ *
+ * `lastUsedAt` is truncated to a day by the backend, which is what makes this usable as an
+ * ordering. A precise timestamp would reshuffle the list after every shift and move the
+ * option you were reaching for; at day granularity the handful of positions in use today
+ * sit at the top and hold still, and the alphabetical tiebreak keeps the rest predictable.
+ *
+ * Never-used positions sort last, together, alphabetically.
+ */
+export const byRecentUse = (a: Position, b: Position) => {
+  const aDay = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+  const bDay = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+  if (aDay !== bDay) return bDay - aDay;
+  return a.name.localeCompare(b.name);
+};

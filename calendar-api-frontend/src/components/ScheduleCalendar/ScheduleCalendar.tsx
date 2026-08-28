@@ -2,19 +2,27 @@ import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getShifts, getGCalendarEvents, startOfLocalDay } from "./scheduleUtils.ts";
+import {
+  TRACK_MIN_PX,
+  getShifts,
+  getGCalendarEvents,
+  startOfLocalDay,
+} from "./scheduleUtils.ts";
 import { CalendarUser, GCalEventWithGrid } from "@/types/gCalendarTypes.ts";
 import { Skeleton } from "@/components/ui/skeleton";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import ScheduleToolbar from "./calendar-components/ScheduleToolbar.tsx";
 import AgentRow from "./calendar-components/AgentRow.tsx";
 import CoverageRow from "./calendar-components/CoverageRow.tsx";
+import PublishDraftsBar from "./calendar-components/PublishDraftsBar.tsx";
+import PendingChangePrompt from "./calendar-components/PendingChangePrompt.tsx";
 import NowLine from "./calendar-components/NowLine.tsx";
 import ScheduleLegend from "./calendar-components/ScheduleLegend.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { useSchedule } from "@/providers/useSchedule.tsx";
 import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
+import { FILTERABLE_LOCATIONS } from "./calendar-components/LocationFilter.tsx";
 
 /** Row height of a single-lane agent row — the skeleton matches it so nothing jumps. */
 const SKELETON_ROW_HEIGHT = 32;
@@ -27,10 +35,57 @@ const Schedule = () => {
     setShifts,
     setEvents,
     setScheduleIsLoading,
+    exitBulkSelect,
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
-  const { type, allUsers, allPositions, coverageMeters } = useUserSettings();
+  const { type, allUsers, allPositions, coverageMeters, locations } =
+    useUserSettings();
+
+  /**
+   * Which locations the grid is showing. Starts as every one of them, and the filter
+   * never lets it become empty, so "all" is a real state rather than a special case.
+   *
+   * Not persisted: a filter that survives a reload is one you forget is on, and the
+   * consequence here is an agent who looks unscheduled because they are hidden.
+   */
+  const [locationFilter, setLocationFilter] = useState<string[]>([
+    ...FILTERABLE_LOCATIONS,
+  ]);
+
+  /** clerkId -> location name, from the location documents' own assignment lists. */
+  const locationByUserId = useMemo(() => {
+    const map = new Map<string, string>();
+    locations.forEach((location) =>
+      location.assignedUsers.forEach((userId) =>
+        map.set(String(userId), location.name)
+      )
+    );
+    return map;
+  }, [locations]);
+
+  const agentsByLocation = useMemo(() => {
+    const tally = new Map<string, number>();
+    allUsers.forEach((user) => {
+      const name = locationByUserId.get(String(user.id));
+      if (name) tally.set(name, (tally.get(name) ?? 0) + 1);
+    });
+    return tally;
+  }, [allUsers, locationByUserId]);
+
+  /**
+   * The agents the grid draws. An agent with no location is only ever shown when nothing
+   * is filtered out — a new hire is invisible under a specific flag rather than appearing
+   * under one they do not belong to.
+   */
+  const visibleUsers = useMemo(() => {
+    const showing = new Set(locationFilter);
+    if (FILTERABLE_LOCATIONS.every((name) => showing.has(name))) return allUsers;
+    return allUsers.filter((user) => {
+      const name = locationByUserId.get(String(user.id));
+      return name ? showing.has(name) : false;
+    });
+  }, [allUsers, locationByUserId, locationFilter]);
   const { user } = useUser();
   const visitorId = user?.id;
 
@@ -115,6 +170,22 @@ const Schedule = () => {
     fetchData(selectedDate);
   }, [dateKey, type]);
 
+  /**
+   * Leave select-shifts mode entirely when the day changes.
+   *
+   * This is a data-loss fix, not tidiness. The selection lives on the provider and used to
+   * survive navigation, while only the visible day's blocks render — so shifts selected on
+   * one day stayed selected, invisibly, with no way to see or deselect them. Selecting a
+   * few more on the next day and hitting Delete then deleted both days' worth. It happened.
+   *
+   * Exiting the mode rather than only emptying the selection, so it matches every other way
+   * a bulk flow ends: navigating away is finishing with that day, and coming back into an
+   * armed mode with nothing selected is a state nobody asked for.
+   */
+  useEffect(() => {
+    exitBulkSelect();
+  }, [dateKey]);
+
   return (
     <div>
       <ScheduleToolbar
@@ -122,11 +193,24 @@ const Schedule = () => {
         onSelectDate={setDate}
         isToday={isToday}
         onReload={() => fetchData(selectedDate)}
+        locationFilter={locationFilter}
+        onLocationFilterChange={setLocationFilter}
+        agentsByLocation={agentsByLocation}
       />
 
-      {/* One card, one horizontal scroll container. The 252px agent column is sticky
+      {/* Creating a shift no longer syncs it, so the day needs somewhere that says
+          out loud what has not been committed yet. Renders nothing when the day is
+          fully published. */}
+      {isAdmin && (
+        <PublishDraftsBar
+          shifts={shifts}
+          onPublished={() => fetchData(selectedDate)}
+        />
+      )}
+
+      {/* One card, one horizontal scroll container. The agent column is sticky
           inside it, so the whole grid scrolls together instead of every row owning
-          its own scrollbar. `relative` sits on the inner 1500px track rather than on
+          its own scrollbar. `relative` sits on the inner track rather than on
           the scroll container, so NowLine measures the full track and scrolls with
           it instead of hanging off the viewport. */}
       <div className="mx-5 mb-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -148,10 +232,11 @@ const Schedule = () => {
               ))}
             </div>
           ) : (
-            <div className="relative min-w-[1500px]">
+            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
               <CalendarHeader
-                agentCount={allUsers.length}
+                agentCount={visibleUsers.length}
                 isToday={isToday}
+                selectedDate={selectedDate}
               />
 
               {/* Coverage rows are admin-only, on the client and on the API. */}
@@ -167,7 +252,7 @@ const Schedule = () => {
                   />
                 ))}
 
-              {allUsers.map((currUser) => (
+              {visibleUsers.map((currUser) => (
                 <AgentRow
                   key={currUser.id}
                   user={currUser}
@@ -186,6 +271,10 @@ const Schedule = () => {
         </div>
 
         <ScheduleLegend showCoverage={isAdmin} showEvents={isAdmin} />
+
+        {/* One prompt for every grid gesture — a resize or a drop — rendered here rather
+            than per shift, since any of the 384 EmptySlots can raise one. */}
+        {isAdmin && <PendingChangePrompt />}
       </div>
     </div>
   );

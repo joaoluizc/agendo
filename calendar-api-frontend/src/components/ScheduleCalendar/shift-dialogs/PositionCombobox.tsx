@@ -17,7 +17,7 @@ import {
 import { Position } from "@/types/positionTypes";
 import { CoverageMeter } from "@/types/coverageTypes";
 import { cn } from "@/lib/utils";
-import { positionDisplay } from "../scheduleUtils";
+import { byRecentUse, positionDisplay } from "../scheduleUtils";
 
 type PositionComboboxProps = {
   positions: Position[];
@@ -55,7 +55,18 @@ const PositionCombobox = ({
     return byPosition;
   }, [meters]);
 
-  const selected = positions.find((position) => String(position._id) === String(value));
+  /**
+   * Recently-used first, alphabetical within a day.
+   *
+   * `GET /position/all` returns Mongo's natural insertion order, which is meaningless to
+   * whoever is picking — the handful of positions a team actually schedules were scattered
+   * through a list of a dozen. Sorted here rather than in the provider on purpose: Settings
+   * › Manage Positions wants a list that never moves, and this ordering is only useful
+   * where you are choosing one.
+   */
+  const ordered = useMemo(() => [...positions].sort(byRecentUse), [positions]);
+
+  const selected = ordered.find((position) => String(position._id) === String(value));
   const display = positionDisplay(selected);
 
   return (
@@ -101,7 +112,7 @@ const PositionCombobox = ({
           <CommandList className="max-h-[216px]">
             <CommandEmpty>No position matches that search.</CommandEmpty>
             <CommandGroup className="p-1.5">
-              {positions.map((position) => {
+              {ordered.map((position) => {
                 const id = String(position._id);
                 const isSelected = id === String(value);
                 const option = positionDisplay(position);

@@ -62,7 +62,7 @@ const DuplicateDayDialog = ({
   onDuplicated,
 }: DuplicateDayDialogProps) => {
   const { allUsers, allPositions } = useUserSettings();
-  const { shifts } = useSchedule();
+  const { shifts, exitBulkSelect } = useSchedule();
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [month, setMonth] = useState<Date>(selectedDate);
@@ -243,6 +243,12 @@ const DuplicateDayDialog = ({
       // Copying onto the day on screen used to look like a no-op until you navigated
       // away and back.
       if (selectedDays.includes(formatDateParam(selectedDate))) onDuplicated();
+
+      // Leave select-shifts mode, like every other bulk action. This dialog does not read
+      // the selection at all — it copies a whole day — but finishing here while still in
+      // the mode leaves a selection standing that refers to the day *before* the copy, and
+      // that is the state a stale selection needs to do damage.
+      exitBulkSelect();
       onOpenChange(false);
     } catch (error) {
       toast.error(

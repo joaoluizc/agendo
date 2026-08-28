@@ -35,4 +35,11 @@ shiftRouter.post(
   shiftController.duplicateShiftsFromDay
 );
 
+// Commit drafts. Creating a shift no longer syncs it, so this is the only route that puts
+// a shift on an agent's real calendar — which is exactly why it is admin-only.
+shiftRouter.post("/publish", adminOnly, shiftController.publishShifts);
+
+// The reverse: back to draft, and the calendar event goes with it.
+shiftRouter.post("/unpublish", adminOnly, shiftController.unpublishShifts);
+
 export default shiftRouter;

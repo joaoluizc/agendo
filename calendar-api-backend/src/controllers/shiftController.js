@@ -7,9 +7,61 @@ import gCalendarService from "../services/gCalendarService.js";
 import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
 import isISODate from "../utils/isISODate.js";
+import { isAdminRequest } from "../services/authz.js";
 
-function validateShift(shift) {
-  const requiredFields = ["startTime", "endTime", "userIds", "positionId"];
+const SHIFT_STATUSES = ["draft", "published"];
+
+/**
+ * Put a published shift on its agent's calendar and record the event on it.
+ *
+ * Shared by the two paths that can publish — creating a shift already published, and
+ * publishing a draft — so the sync, the "no event because the agent switched this position
+ * off" case, and the failure handling exist once rather than twice.
+ *
+ * Never call this for a draft: `shouldSyncShift` would refuse it anyway, but the point is
+ * that a draft has no business here.
+ *
+ * @returns {Promise<string|null>} an error message, or null on success.
+ */
+async function syncPublishedShift(shift, requestId, enforcedObjectIds) {
+  try {
+    const addedEvent = await gCalendarService.addEventForShift(
+      shift.userId,
+      shift,
+      requestId,
+      enforcedObjectIds
+    );
+    // No event is the normal outcome when the agent has this position's sync switched
+    // off — the shift is still published, it just doesn't reach their calendar.
+    if (addedEvent) {
+      shift.isSynced = true;
+      shift.syncedEvent = addedEvent;
+      await shift.save();
+    }
+    return null;
+  } catch (err) {
+    console.error(
+      `[${requestId}] - Error syncing published shift ${shift._id}: ${err.message}`
+    );
+    return err.message;
+  }
+}
+
+/**
+ * Check a shift payload and strip anything not in the required set.
+ *
+ * `userField` differs by route and has to: `POST /shift/new` takes a `userIds` **array**
+ * (one slot, many agents), while `PUT /shift/` takes a single `userId`. Both used to share
+ * the `userIds` list, so every update was rejected with `Missing fields: userIds` — which
+ * meant editing a shift from the dialog, and dragging one to another agent or time, both
+ * failed with "1 change could not be saved" and no hint as to why.
+ *
+ * Note that `validateObjFields` MUTATES the object it is given, deleting every key outside
+ * the required set. Callers pass `req.body` directly, so read anything else off the body
+ * *before* calling this — see the comments in createShift and updateShift.
+ */
+function validateShift(shift, { userField = "userIds" } = {}) {
+  const requiredFields = ["startTime", "endTime", userField, "positionId"];
 
   const shiftValidated = validateObjFields(shift, requiredFields);
 
@@ -28,6 +80,27 @@ async function createShift(req, res) {
 
   console.log(`[${req.requestId}] - starting shift creation flow`);
 
+  // Read before validating. `validateShift` -> `validateObjFields` mutates the object it
+  // is given and *deletes* every key outside its required list, and it is handed
+  // `req.body` directly — so anything read from the body afterwards is already gone. That
+  // is what made "Publish now" silently create drafts: the status was stripped, and the
+  // `?? "draft"` fallback below then looked entirely reasonable.
+  //
+  // A new shift is a draft unless the caller explicitly asks for it published. The dialog
+  // offers that as a toggle for the case where someone knows the shift is final and does
+  // not want a second step; the default stays draft, so the safe outcome is the one you
+  // get by not choosing. Only an admin can reach this route at all (`adminOnly`).
+  //
+  // An unrecognised value is rejected rather than quietly treated as a draft: silently
+  // ignoring it would let a client believe it had published something it had not.
+  const status = req.body.status ?? "draft";
+  if (!SHIFT_STATUSES.includes(status)) {
+    return res.status(400).json({
+      message: `status must be one of ${SHIFT_STATUSES.join(", ")}`,
+    });
+  }
+  const publishing = status === "published";
+
   let shift;
   try {
     shift = validateShift(req.body);
@@ -45,27 +118,21 @@ async function createShift(req, res) {
   const createdShifts = [];
   const errors = [];
 
-  for (const shiftUserId of shiftUserIds) {
-    const shiftCopy = { ...shift, userId: shiftUserId };
+  // Only needed when publishing, and then once for the batch rather than per shift.
+  const enforcedObjectIds = publishing
+    ? (await positionService.getEnforcedPositionIds()).objectIds
+    : null;
 
-    try {
-      const addedEvent = await gCalendarService.addEventForShift(
-        shiftUserId,
-        shiftCopy,
-        req.requestId
-      );
-      if (addedEvent) {
-        shiftCopy.isSynced = true;
-        shiftCopy.syncedEvent = addedEvent;
-        console.log(`[${req.requestId}] - shift synced with google calendar`);
-      }
-    } catch (err) {
-      console.error(
-        `[${req.requestId}] Caught error adding created shift to google calendar: `,
-        err.message
-      );
-      shiftCopy.isSynced = false;
-    }
+  for (const shiftUserId of shiftUserIds) {
+    const shiftCopy = {
+      ...shift,
+      userId: shiftUserId,
+      status,
+      source: "ui",
+      ...(publishing
+        ? { publishedAt: new Date(), publishedBy: userId }
+        : {}),
+    };
 
     let createdShift;
     try {
@@ -80,10 +147,25 @@ async function createShift(req, res) {
       continue;
     }
 
+    // Written first, synced second — the same order publishShifts uses, and for the same
+    // reason: a shift that exists without its calendar event is recoverable, an event for
+    // a shift that failed to save is not.
+    if (publishing) {
+      const syncError = await syncPublishedShift(
+        createdShift,
+        req.requestId,
+        enforcedObjectIds
+      );
+      if (syncError) {
+        errors.push({
+          userId: shiftUserId,
+          message: `Shift published but calendar sync failed: ${syncError}`,
+        });
+      }
+    }
+
     console.log(
-      `[${
-        req.requestId
-      }] Shift created for user ${shiftUserId}: ${JSON.stringify(
+      `[${req.requestId}] ${status} shift created for user ${shiftUserId}: ${JSON.stringify(
         createdShift._id
       )}`
     );
@@ -98,9 +180,27 @@ async function createShift(req, res) {
   }
 
   return res.status(201).json({
-    message: "Shifts created successfully",
+    message: `${publishing ? "Published" : "Draft"} shifts created successfully`,
     data: createdShifts,
   });
+}
+
+/**
+ * Should this request see draft shifts?
+ *
+ * Drafts go only to someone who can act on them. The route itself stays open — the
+ * schedule shows the whole roster's day to everyone — so the gate is per-response rather
+ * than per-route, and a non-admin simply receives the committed schedule.
+ *
+ * Asking `authz.isAdminRequest` rather than re-deriving the answer keeps this in step with
+ * `adminOnly`, including the ADMIN_BYPASS opt-in: without that, a local admin could create
+ * drafts through a bypassed route and then not see them on the grid.
+ */
+async function shouldReturnDrafts(req) {
+  const requested =
+    req.query.includeDrafts === "1" || req.query.includeDrafts === "true";
+  if (!requested) return false;
+  return await isAdminRequest(req.auth?.userId);
 }
 
 async function findShiftsByRange(req, res) {
@@ -132,7 +232,9 @@ async function findShiftsByRange(req, res) {
 
   let shifts = [];
   try {
-    shifts = await shiftService.findShiftsByRange(startTime, endTime);
+    shifts = await shiftService.findShiftsByRange(startTime, endTime, {
+      includeDrafts: await shouldReturnDrafts(req),
+    });
   } catch (err) {
     console.error(err.message);
     return res
@@ -215,18 +317,46 @@ async function findShiftsByRangeWithSling(req, res) {
   return res.status(200).json(shifts);
 }
 
+/**
+ * Edit one shift, including moving it between draft and published.
+ *
+ * The status is the caller's to set here, which is a reversal: creating a shift used to be
+ * the only way to publish and an edit could not. It turned out an edit is exactly where
+ * you want the choice — there was otherwise no way to un-publish anything short of
+ * deleting it, and re-timing a published shift silently pushed the new time to the agent's
+ * calendar. The dialog now shows the state as a toggle and turns it off when the time
+ * changes, so the quiet outcome is "back to draft" rather than "already sent".
+ *
+ * Omitting `status` keeps whatever the shift had, so callers that don't care are unaffected.
+ */
 async function updateShift(req, res) {
   const { shiftId } = req.query;
 
+  // Read before validating — `validateObjFields` deletes every key outside its required
+  // list from `req.body` itself. See the same trap in createShift.
+  const requestedStatus = req.body.status;
+  if (requestedStatus !== undefined && !SHIFT_STATUSES.includes(requestedStatus)) {
+    return res.status(400).json({
+      message: `status must be one of ${SHIFT_STATUSES.join(", ")}`,
+    });
+  }
+
+  const { userId } = req.auth;
+
   let shift;
   try {
-    shift = validateShift(req.body);
+    // One agent per update, so `userId` — not the `userIds` array the create route takes.
+    shift = validateShift(req.body, { userField: "userId" });
     console.log(
       `[${
         req.requestId
       }] - updating shift. shift after validation: ${JSON.stringify(shift)}`
     );
   } catch (err) {
+    console.error(
+      `[${req.requestId}] - error validating shift update: `,
+      err.message
+    );
     return res.status(400).json({ message: err.message });
   }
 
@@ -240,6 +370,37 @@ async function updateShift(req, res) {
     );
     return res.status(404).json({ message: "Shift not found" });
   }
+
+  // A stored shift with no status at all predates the lifecycle and is published.
+  const statusBefore =
+    shiftBeforeUpdate.status === "draft" ? "draft" : "published";
+  const statusAfter = requestedStatus ?? statusBefore;
+
+  // The status has to be on the object before the sync attempt: `shouldSyncShift` decides
+  // on that field, and `shift` came from the request body which no longer carries it.
+  shift.status = statusAfter;
+
+  if (statusAfter === "published") {
+    // Re-publishing something already published keeps its original stamps; only an actual
+    // draft -> published transition records a new one.
+    shift.publishedAt =
+      statusBefore === "published"
+        ? shiftBeforeUpdate.publishedAt
+        : new Date();
+    shift.publishedBy =
+      statusBefore === "published" ? shiftBeforeUpdate.publishedBy : userId;
+  } else {
+    // Back to a plan: it is no longer committed by anyone. The calendar event it had is
+    // removed by the block below, which fires on the *previous* isSynced.
+    shift.publishedAt = null;
+    shift.publishedBy = null;
+  }
+
+  // Start from unsynced and let the sync below prove otherwise. Without this the value
+  // carried over from the request body — which is to say `undefined` — and a shift going
+  // draft would keep claiming a calendar event that had just been deleted.
+  shift.isSynced = false;
+  shift.syncedEvent = null;
 
   if (shiftBeforeUpdate.isSynced) {
     try {
@@ -423,6 +584,12 @@ async function removeShiftAndEvent(shift, requestId) {
  *
  * A failure on one day no longer aborts the rest — the response reports what each day
  * did, so a partial run is legible instead of silent.
+ *
+ * Drafts take part on both sides: the source day is copied draft and published alike
+ * (it is usually a day that was just built, so all draft), and a target day holding
+ * drafts counts as non-empty for `skip`/`replace`. Every copy lands as a **draft**
+ * whatever its source was — copying a week ahead proposes those days, it does not commit
+ * them. Nothing here touches a calendar; that waits for POST /shift/publish.
  */
 async function duplicateShiftsFromDay(req, res) {
   const {
@@ -481,9 +648,13 @@ async function duplicateShiftsFromDay(req, res) {
   const source = localDayWindow(sourceDate);
   let sourceShifts;
   try {
+    // Drafts included: the day being copied is usually one that was just built, so it is
+    // entirely draft. Excluding them would make "copy Monday onto the rest of the week"
+    // silently copy nothing — the single most common reason to use this at all.
     sourceShifts = await shiftService.findShiftsByRange(
       source.begin,
-      source.end
+      source.end,
+      { includeDrafts: true }
     );
   } catch (err) {
     console.error(`[${req.requestId}] - Error finding shifts: ${err.message}`);
@@ -507,10 +678,6 @@ async function duplicateShiftsFromDay(req, res) {
     });
   }
 
-  // Fetch enforced position ids once (not per shift) for this bulk duplicate.
-  const { objectIds: enforcedObjectIds } =
-    await positionService.getEnforcedPositionIds();
-
   const results = [];
   const errors = [];
   let createdTotal = 0;
@@ -525,8 +692,14 @@ async function duplicateShiftsFromDay(req, res) {
         // findShiftsByRange returns anything *overlapping* the window, which would let
         // "replace the day" delete a shift that started the night before and merely
         // spills past midnight. Only shifts that begin inside the day belong to it.
+        //
+        // Drafts count as existing shifts here. A target day holding drafts is not empty,
+        // so `skip` must skip it, and `replace` must clear them — otherwise replacing a
+        // day would stack a second set of drafts on top of the first.
         existing = (
-          await shiftService.findShiftsByRange(window.begin, window.end)
+          await shiftService.findShiftsByRange(window.begin, window.end, {
+            includeDrafts: true,
+          })
         ).filter(
           (shift) =>
             users.includes(shift.userId) &&
@@ -603,24 +776,16 @@ async function duplicateShiftsFromDay(req, res) {
       shift.isSynced = false;
       shift.syncedEvent = null;
       shift.createdBy = userId;
-
-      try {
-        const addedEvent = await gCalendarService.addEventForShift(
-          shift.userId,
-          shift,
-          req.requestId,
-          enforcedObjectIds
-        );
-        if (addedEvent) {
-          shift.isSynced = true;
-          shift.syncedEvent = addedEvent;
-        }
-      } catch (err) {
-        console.error(
-          `[${req.requestId}] - Error adding duplicated shift to Google Calendar: ${err.message}`
-        );
-        shift.isSynced = false;
-      }
+      // A copy is a new shift, so it lands as a draft like any other: the day is a
+      // proposal until someone publishes it. Nothing syncs here, which is also why the
+      // calendar-event rollback this loop used to need has gone with it.
+      shift.status = "draft";
+      shift.source = "ui";
+      // None of the original's commit or batch history carries over to a copy.
+      shift.publishedAt = undefined;
+      shift.publishedBy = undefined;
+      shift.runId = undefined;
+      shift.notes = undefined;
 
       try {
         await shiftService.createShift(shift);
@@ -630,23 +795,6 @@ async function duplicateShiftsFromDay(req, res) {
           `[${req.requestId}] - Error creating duplicated shift: ${err.message}`
         );
         errors.push({ date: target, message: err.message });
-
-        // Roll the calendar event back, or the agent keeps a meeting for a shift that
-        // does not exist.
-        if (shift.isSynced) {
-          try {
-            const user = await userService.getClerkUserById(shift.userId);
-            await gCalendarService.deleteEvents_cl(
-              user,
-              [shift.syncedEvent],
-              req.requestId
-            );
-          } catch (e) {
-            console.error(
-              `[${req.requestId}] - Error rolling back calendar event: ${e.message}`
-            );
-          }
-        }
       }
     }
 
@@ -676,6 +824,160 @@ async function duplicateShiftsFromDay(req, res) {
   return res.status(201).json(payload);
 }
 
+/**
+ * Commit drafts: mark them published and put them on agents' calendars.
+ *
+ * Takes a list of ids rather than a single one so the toolbar can commit a whole day in
+ * one request, and so a posted schedule can later be approved the same way.
+ *
+ * Order matters. The status write happens first and the sync second, because
+ * `shouldSyncShift` refuses a draft — sync a shift that hasn't flipped yet and it is
+ * silently skipped. The cost is a moment where a published shift has no calendar event
+ * yet, which is the same state a sync failure leaves behind and is reported the same way.
+ *
+ * A shift that was already published is counted and left alone rather than treated as an
+ * error, so a double-click or a retry after a partial failure is harmless. It is
+ * deliberately *not* re-synced: repairing a published shift whose event is missing is what
+ * the day-resync flow (`addDaysShiftsToGcal_cl`) is for, and retrying it here would race
+ * a concurrent publish into creating the event twice.
+ */
+async function publishShifts(req, res) {
+  const { userId } = req.auth;
+  const { shiftIds } = req.body;
+
+  if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "shiftIds must be a non-empty array" });
+  }
+
+  console.log(
+    `[${req.requestId}] - Publishing ${shiftIds.length} shift(s) for ${userId}`
+  );
+
+  let result;
+  try {
+    result = await shiftService.publishShifts(shiftIds, userId);
+  } catch (err) {
+    console.error(
+      `[${req.requestId}] - Error publishing shifts: ${err.message}`
+    );
+    return res.status(500).json({
+      message: `caught error when publishing shifts: ${err.message}`,
+    });
+  }
+
+  const { published, alreadyPublished, notFound } = result;
+
+  // Once for the batch, not once per shift — same reason duplicateShiftsFromDay does it.
+  const { objectIds: enforcedObjectIds } =
+    await positionService.getEnforcedPositionIds();
+
+  const errors = [];
+
+  for (const shift of published) {
+    const syncError = await syncPublishedShift(
+      shift,
+      req.requestId,
+      enforcedObjectIds
+    );
+    if (syncError) {
+      errors.push({ shiftId: String(shift._id), message: syncError });
+    }
+  }
+
+  const payload = {
+    message: published.length
+      ? `${published.length} shift${published.length === 1 ? "" : "s"} published`
+      : "No shifts needed publishing",
+    published: published.length,
+    alreadyPublished: alreadyPublished.length,
+    data: published,
+  };
+
+  if (notFound.length) {
+    payload.notFound = notFound;
+  }
+
+  if (errors.length) {
+    return res.status(207).json({ ...payload, errors });
+  }
+
+  return res.status(200).json(payload);
+}
+
+/**
+ * Take published shifts back to draft and remove their calendar events.
+ *
+ * The counterpart to publishShifts, and the bulk form of unchecking Published in the edit
+ * dialog. A shift already in draft is counted, not treated as an error, so a mixed
+ * selection can be sent as-is.
+ *
+ * A calendar event that fails to delete leaves the agent with a meeting for a shift that is
+ * no longer committed — reported per shift rather than swallowed, because nothing else will
+ * notice it.
+ */
+async function unpublishShifts(req, res) {
+  const { shiftIds } = req.body;
+
+  if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "shiftIds must be a non-empty array" });
+  }
+
+  console.log(
+    `[${req.requestId}] - Unpublishing ${shiftIds.length} shift(s) for ${req.auth.userId}`
+  );
+
+  let result;
+  try {
+    result = await shiftService.unpublishShifts(shiftIds);
+  } catch (err) {
+    console.error(
+      `[${req.requestId}] - Error unpublishing shifts: ${err.message}`
+    );
+    return res.status(500).json({
+      message: `caught error when unpublishing shifts: ${err.message}`,
+    });
+  }
+
+  const { unpublished, alreadyDraft, notFound } = result;
+  const errors = [];
+
+  for (const { shift, priorEvent } of unpublished) {
+    if (!priorEvent) continue;
+    try {
+      const user = await userService.getClerkUserById(shift.userId);
+      await gCalendarService.deleteEvents_cl(user, [priorEvent], req.requestId);
+    } catch (err) {
+      console.error(
+        `[${req.requestId}] - Error removing calendar event for unpublished shift ${shift._id}: ${err.message}`
+      );
+      errors.push({ shiftId: String(shift._id), message: err.message });
+    }
+  }
+
+  const payload = {
+    message: unpublished.length
+      ? `${unpublished.length} shift${unpublished.length === 1 ? "" : "s"} moved back to draft`
+      : "No shifts needed unpublishing",
+    unpublished: unpublished.length,
+    alreadyDraft: alreadyDraft.length,
+    data: unpublished.map(({ shift }) => shift),
+  };
+
+  if (notFound.length) {
+    payload.notFound = notFound;
+  }
+
+  if (errors.length) {
+    return res.status(207).json({ ...payload, errors });
+  }
+
+  return res.status(200).json(payload);
+}
+
 export default {
   createShift,
   findShiftsByRange,
@@ -684,4 +986,6 @@ export default {
   deleteShift,
   getShift,
   duplicateShiftsFromDay,
+  publishShifts,
+  unpublishShifts,
 };

@@ -1,6 +1,5 @@
 // services/positionService.js
 import Position from "../models/PositionModel.js";
-import { User } from "../models/UserModel.js";
 import userService from "./userService.js";
 import redisClient from "../database/redisClient.js";
 
@@ -49,6 +48,41 @@ const updatePosition = async (id, data) => {
 const deletePosition = async (id) => {
   const position = await Position.findByIdAndDelete(id);
   return position;
+};
+
+/** Start of the UTC day for an instant. */
+const startOfUtcDay = (instant) => {
+  const day = new Date(instant);
+  day.setUTCHours(0, 0, 0, 0);
+  return day;
+};
+
+/**
+ * Record that a position was used today, for ordering the position pickers.
+ *
+ * Truncated to the start of the UTC day, which is the whole point: a full timestamp would
+ * reorder the dropdown after every shift, moving the option you were about to click. At day
+ * granularity the order holds still for the day, and ties break alphabetically, so the
+ * handful of positions actually in use sit at the top and stay put.
+ *
+ * UTC rather than a local day to match the other date-keyed data (see CoverageMeterModel).
+ * A shift created late evening in UTC-3 therefore stamps the next UTC day — which changes
+ * nothing about the ordering, since it is still the most recent.
+ *
+ * One conditional write, no read: the filter only matches when the stored day is older, so
+ * this is a no-op after the first shift of the day however many follow, and two concurrent
+ * calls cannot race each other.
+ */
+const touchPositionUsage = async (positionId) => {
+  if (!positionId) return;
+  const today = startOfUtcDay(new Date());
+  await Position.updateOne(
+    {
+      _id: positionId,
+      $or: [{ lastUsedAt: { $exists: false } }, { lastUsedAt: { $lt: today } }],
+    },
+    { $set: { lastUsedAt: today } }
+  );
 };
 
 const getUserPositionsToSync = async (userId) => {
@@ -216,6 +250,7 @@ export default {
   getUserPositionsToSync,
   getPositionsToSyncForUsers,
   getEnforcedPositionIds,
+  touchPositionUsage,
   prefersSync,
   getSyncRulesForUser,
   setUserPositionsToSync,

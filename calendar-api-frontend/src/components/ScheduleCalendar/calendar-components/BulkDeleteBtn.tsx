@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import deleteShiftRequest from "@/utils/deleteShiftRequest";
 import useRemoveShiftFromSchedule from "@/hooks/useRemoveShiftFromSchedule";
 import { Shift } from "@/types/shiftTypes";
@@ -25,9 +25,23 @@ import {
 } from "@/components/ui/tooltip";
 
 function BulkDeleteBtn() {
-  const { isBulkSelectorActive, bulkSelectedShifts, setBulkSelectedShifts } =
+  const { isBulkSelectorActive, bulkSelectedShifts, exitBulkSelect } =
     useSchedule();
   const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
+
+  /** The distinct calendar days the selection touches, for the confirmation. */
+  const selectedDays = useMemo(() => {
+    const days = new Set(
+      bulkSelectedShifts.map((shift) =>
+        new Date(shift.startTime).toLocaleDateString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })
+      )
+    );
+    return [...days];
+  }, [bulkSelectedShifts]);
   const removeShiftsFromSchedule = useRemoveShiftFromSchedule("bulk") as (
     shifts: Shift[]
   ) => void;
@@ -42,33 +56,28 @@ function BulkDeleteBtn() {
       successfullyDeletedShifts: Shift[];
       failedToDeleteShifts: Shift[];
     };
-    const deletePromise: Promise<DeletionPromiseReturn> = new Promise(
-      async (resolve, reject) => {
-        let successfullyDeletedShifts: Shift[] = [];
-        let failedToDeleteShifts: Shift[] = [];
+    // An async IIFE rather than `new Promise(async …)`: an async executor swallows a throw
+    // from inside it, so the rejection path was one stray exception away from a toast that
+    // spun forever. The partial-result payload on both paths is what `toast.promise`'s
+    // handlers below read.
+    const deletePromise: Promise<DeletionPromiseReturn> = (async () => {
+      const successfullyDeletedShifts: Shift[] = [];
+      const failedToDeleteShifts: Shift[] = [];
 
-        for (const shift of bulkSelectedShifts) {
-          const deleteSuccess = await deleteShiftRequest(shift._id);
-          if (deleteSuccess) {
-            successfullyDeletedShifts.push(shift);
-          } else {
-            failedToDeleteShifts.push(shift);
-          }
-        }
-
-        if (failedToDeleteShifts.length > 0) {
-          reject({
-            successfullyDeletedShifts,
-            failedToDeleteShifts,
-          });
+      for (const shift of bulkSelectedShifts) {
+        const deleteSuccess = await deleteShiftRequest(shift._id);
+        if (deleteSuccess) {
+          successfullyDeletedShifts.push(shift);
         } else {
-          resolve({
-            successfullyDeletedShifts,
-            failedToDeleteShifts,
-          });
+          failedToDeleteShifts.push(shift);
         }
       }
-    );
+
+      if (failedToDeleteShifts.length > 0) {
+        throw { successfullyDeletedShifts, failedToDeleteShifts };
+      }
+      return { successfullyDeletedShifts, failedToDeleteShifts };
+    })();
 
     toast.promise(deletePromise, {
       loading: "Deleting shifts...",
@@ -84,7 +93,9 @@ function BulkDeleteBtn() {
         return `Failed to delete ${result.failedToDeleteShifts.length} shift(s). ${result.successfullyDeletedShifts.length} shift(s) deleted successfully.`;
       },
     });
-    setBulkSelectedShifts([]);
+    // Acting on a selection ends the mode: staying in select mode holding shifts that have
+    // just been deleted is how a stale selection survives to bite the next action.
+    exitBulkSelect();
   };
 
   const handleTriggerClick = (state: boolean) => {
@@ -123,7 +134,13 @@ function BulkDeleteBtn() {
         <TooltipProvider delayDuration={100}>
           <Tooltip>
             <TooltipTrigger>
-              <Button variant="ghost" className="h-5 w-fit">
+              {/* Disabled with an empty selection, like the other bulk buttons. Without it
+                  the trigger opened a confirmation dialog for deleting nothing. */}
+              <Button
+                variant="ghost"
+                className="h-5 w-fit"
+                disabled={bulkSelectedShifts.length === 0}
+              >
                 <Trash2 style={{ height: "0.9rem", width: "0.9rem" }} />
               </Button>
             </TooltipTrigger>
@@ -140,12 +157,35 @@ function BulkDeleteBtn() {
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+          <AlertDialogTitle>
+            {`Delete ${bulkSelectedShifts.length} shift${
+              bulkSelectedShifts.length === 1 ? "" : "s"
+            }?`}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the
-            selected shifts.
+            This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
+
+        {/* The count and the days are the backstop.
+            The selection is cleared when the day changes (ScheduleCalendar), so it should
+            never span days — but this dialog previously said only "the selected shifts",
+            which is precisely why a stale cross-day selection deleted two days' worth
+            without anyone being able to tell. If more than one day ever shows up here
+            again, it is visible before the button is pressed rather than after. */}
+        <div className="rounded-lg border border-border bg-band px-3.5 py-2.5 text-[12.5px]">
+          {selectedDays.length > 1 ? (
+            <span className="font-semibold text-warn">
+              {`Across ${selectedDays.length} different days: ${selectedDays.join(
+                ", "
+              )}`}
+            </span>
+          ) : (
+            <span className="font-semibold tabular-nums">
+              {selectedDays[0] ?? "No shifts selected"}
+            </span>
+          )}
+        </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
