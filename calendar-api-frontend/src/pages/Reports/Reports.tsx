@@ -133,12 +133,26 @@ export default function Reports() {
     { mode: "copy"; column: ColumnKey } | { mode: "adjust" } | null
   >(null);
 
+  /**
+   * `?refresh=true` on this page's own URL makes every fetch recompute server-side
+   * rather than read the backend's 10-minute cache.
+   *
+   * That cache is not invalidated when a shift is published, so a day you just published
+   * can read as unchanged — the flag is how you confirm what actually landed. Read once
+   * at mount: it stays on for the whole visit, so changing the range keeps recomputing,
+   * and it costs a full recompute each time. Drop the parameter to go back to cached
+   * reads.
+   */
+  const [forceRefresh] = useState(
+    () => new URLSearchParams(window.location.search).get("refresh") === "true",
+  );
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     reportsApi
-      .getHours(range.start, range.end, false)
+      .getHours(range.start, range.end, false, forceRefresh)
       .then((data) => {
         if (!cancelled) setRows(data);
       })
@@ -151,7 +165,8 @@ export default function Reports() {
     return () => {
       cancelled = true;
     };
-  }, [range]);
+    // `forceRefresh` is read once at mount and never changes, so it adds no refetches.
+  }, [range, forceRefresh]);
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;

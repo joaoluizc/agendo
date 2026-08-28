@@ -288,14 +288,23 @@ const CURRENT_RANGE_TTL_SECONDS = 10 * 60; // still accumulating shifts — refr
  * colon-delimited key, JSON string value, EX for TTL. A Redis outage (get or set) just
  * degrades to computing fresh every time — never fails the report.
  */
-async function getHoursReport({ start, end, groupByLocation }) {
+async function getHoursReport({ start, end, groupByLocation, refresh = false }) {
   const cacheKey = `reports:hours:${start}:${end}:${groupByLocation}`;
 
-  try {
-    const cached = await redisClient.get(cacheKey);
-    if (cached) return JSON.parse(cached);
-  } catch (err) {
-    console.warn(`[reports] cache read failed for ${cacheKey}: ${err.message}`);
+  // `refresh` skips the read and lets the write below overwrite the entry. It is a
+  // bypass rather than a delete, and shared rather than per-caller, because nothing
+  // invalidates this cache on a shift mutation: publishing a day leaves the entry stale
+  // for up to CURRENT_RANGE_TTL_SECONDS. Recomputing into the same key means the next
+  // admin to ask gets the corrected numbers too — deleting the key, or writing to a
+  // per-session one, would leave everyone else on the stale value while the person who
+  // asked sees the truth, which is the more confusing of the two failures.
+  if (!refresh) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (err) {
+      console.warn(`[reports] cache read failed for ${cacheKey}: ${err.message}`);
+    }
   }
 
   const rows = await computeHoursReport({ start, end, groupByLocation });

@@ -54,8 +54,13 @@ export const reportsApi = {
   getGroups: () => request<ReportGroup[]>("/groups"),
   saveGroups: (groups: { name: string; positionNames: string[] }[]) =>
     request<ReportGroup[]>("/groups", { method: "PUT", body: { groups } }),
-  getHours: (start: Date, end: Date, groupByLocation: boolean) =>
+  /**
+   * `refresh` recomputes server-side instead of reading the cached result, which the
+   * backend holds for 10 minutes on a range that hasn't closed yet. Needed because
+   * nothing invalidates that cache when a shift is published, created, or deleted.
+   */
+  getHours: (start: Date, end: Date, groupByLocation: boolean, refresh = false) =>
     request<HoursReportRow[]>(
-      `/hours?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&groupByLocation=${groupByLocation}`,
+      `/hours?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&groupByLocation=${groupByLocation}${refresh ? "&refresh=true" : ""}`,
     ),
 };
