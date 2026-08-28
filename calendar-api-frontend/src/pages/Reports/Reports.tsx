@@ -1,6 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy, Info, Rows3 } from "lucide-react";
-import { endOfDay, format } from "date-fns";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy, Info, RefreshCw, Rows3 } from "lucide-react";
+import { endOfDay, format, formatDistanceToNow } from "date-fns";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -133,40 +139,58 @@ export default function Reports() {
     { mode: "copy"; column: ColumnKey } | { mode: "adjust" } | null
   >(null);
 
+  /** When the figures on screen were computed, per the server. Null if it couldn't say. */
+  const [computedAt, setComputedAt] = useState<string | null>(null);
+
   /**
-   * `?refresh=true` on this page's own URL makes every fetch recompute server-side
-   * rather than read the backend's 10-minute cache.
-   *
-   * That cache is not invalidated when a shift is published, so a day you just published
-   * can read as unchanged — the flag is how you confirm what actually landed. Read once
-   * at mount: it stays on for the whole visit, so changing the range keeps recomputing,
-   * and it costs a full recompute each time. Drop the parameter to go back to cached
-   * reads.
+   * `?refresh=true` on this page's own URL makes every fetch recompute server-side rather
+   * than read the backend's 10-minute cache. Read once at mount, so it stays on for the
+   * whole visit and every range change pays for a recompute — the blunt lever, for when
+   * you are actively changing shifts. The Refresh button is the per-press one.
    */
   const [forceRefresh] = useState(
     () => new URLSearchParams(window.location.search).get("refresh") === "true",
   );
 
+  /**
+   * Last-request-wins, so a Refresh landing after a range change can't overwrite the
+   * newer range's figures. A ref rather than the effect's `cancelled` flag because the
+   * button fetches outside the effect and the two have to agree on which is current.
+   */
+  const latestRequest = useRef(0);
+
+  /**
+   * `refresh` is per-call rather than state: one press recomputes once, and the range
+   * navigation that follows goes back to cached reads. Sticky refreshing is what the URL
+   * parameter is for.
+   */
+  const load = useCallback(
+    (refresh: boolean) => {
+      const requestId = ++latestRequest.current;
+      setLoading(true);
+      setError(null);
+      reportsApi
+        .getHours(range.start, range.end, false, refresh)
+        .then((data) => {
+          if (requestId !== latestRequest.current) return;
+          setRows(data.rows);
+          setComputedAt(data.computedAt);
+        })
+        .catch((err: unknown) => {
+          if (requestId !== latestRequest.current) return;
+          setError(err instanceof Error ? err.message : "Failed to load report");
+        })
+        .finally(() => {
+          if (requestId === latestRequest.current) setLoading(false);
+        });
+    },
+    [range],
+  );
+
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    reportsApi
-      .getHours(range.start, range.end, false, forceRefresh)
-      .then((data) => {
-        if (!cancelled) setRows(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load report");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    load(forceRefresh);
     // `forceRefresh` is read once at mount and never changes, so it adds no refetches.
-  }, [range, forceRefresh]);
+  }, [load, forceRefresh]);
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
@@ -298,6 +322,39 @@ export default function Reports() {
                     <ChevronRight />
                   </Button>
                 </div>
+
+                {/* The figures can be up to 10 minutes behind the shifts, because the
+                    backend caches them and nothing clears that cache when a shift is
+                    published. Rather than hide that, the tooltip states when they were
+                    computed and the button recomputes on demand. */}
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Recalculate the report"
+                        disabled={loading}
+                        onClick={() => load(true)}
+                      >
+                        <RefreshCw className={cn(loading && "animate-spin")} />
+                      </Button>
+                    </TooltipTrigger>
+                    {/* Rendered on open, so the relative age is current each time rather
+                        than frozen at the last fetch. */}
+                    <TooltipContent className="max-w-[240px]">
+                      <p>
+                        {computedAt
+                          ? `Figures calculated at ${format(new Date(computedAt), "HH:mm")} — ${formatDistanceToNow(new Date(computedAt))} ago.`
+                          : "Age of these figures is unknown."}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Shifts published since then may be missing. Click to recalculate.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </CardHeader>
             <CardContent>

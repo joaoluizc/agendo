@@ -76,13 +76,15 @@ const getHoursReport = async (req, res) => {
     // `?refresh=true` recomputes instead of reading the Redis entry — the escape hatch
     // for a range whose shifts changed inside the cache's TTL. Admin-only along with the
     // rest of this router, and it is the expensive path, so it stays opt-in.
-    const rows = await reportsService.getHoursReport({
+    const report = await reportsService.getHoursReport({
       start,
       end,
       groupByLocation: groupByLocation === "true",
       refresh: refresh === "true",
     });
-    res.status(200).json(rows);
+    // `{ rows, computedAt, fromCache }` rather than a bare array: the client shows how old
+    // the figures are, which it cannot infer from its own fetch time on a cache hit.
+    res.status(200).json(report);
   } catch (error) {
     console.error(`[reports] getHoursReport failed: ${error.message}`);
     res.status(500).json({ message: `caught error: ${error.message}` });

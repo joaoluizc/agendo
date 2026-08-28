@@ -50,6 +50,14 @@ export interface HoursReportRow {
   totalHours: number;
 }
 
+export interface HoursReport {
+  rows: HoursReportRow[];
+  /** When the figures were computed, not when they were served. Null for an entry the
+   *  backend cached before it recorded this — those expire on their own. */
+  computedAt: string | null;
+  fromCache: boolean;
+}
+
 export const reportsApi = {
   getGroups: () => request<ReportGroup[]>("/groups"),
   saveGroups: (groups: { name: string; positionNames: string[] }[]) =>
@@ -60,7 +68,7 @@ export const reportsApi = {
    * nothing invalidates that cache when a shift is published, created, or deleted.
    */
   getHours: (start: Date, end: Date, groupByLocation: boolean, refresh = false) =>
-    request<HoursReportRow[]>(
+    request<HoursReport>(
       `/hours?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&groupByLocation=${groupByLocation}${refresh ? "&refresh=true" : ""}`,
     ),
 };

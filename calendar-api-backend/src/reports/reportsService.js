@@ -301,23 +301,35 @@ async function getHoursReport({ start, end, groupByLocation, refresh = false }) 
   if (!refresh) {
     try {
       const cached = await redisClient.get(cacheKey);
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Entries written before `computedAt` existed are a bare array. They stay in
+        // Redis for up to PAST_RANGE_TTL_SECONDS after this ships, so read both shapes
+        // rather than crashing on the old one; a null timestamp just means the UI shows
+        // "unknown" until that entry expires.
+        return Array.isArray(parsed)
+          ? { rows: parsed, computedAt: null, fromCache: true }
+          : { ...parsed, fromCache: true };
+      }
     } catch (err) {
       console.warn(`[reports] cache read failed for ${cacheKey}: ${err.message}`);
     }
   }
 
   const rows = await computeHoursReport({ start, end, groupByLocation });
+  // Stored alongside the rows so a cache hit reports when the figures were *computed*,
+  // not when they were served — the whole point of showing it is to reveal staleness.
+  const computedAt = new Date().toISOString();
 
   try {
     const isPast = new Date(end).getTime() < Date.now();
     const ttl = isPast ? PAST_RANGE_TTL_SECONDS : CURRENT_RANGE_TTL_SECONDS;
-    await redisClient.set(cacheKey, JSON.stringify(rows), { EX: ttl });
+    await redisClient.set(cacheKey, JSON.stringify({ rows, computedAt }), { EX: ttl });
   } catch (err) {
     console.warn(`[reports] cache write failed for ${cacheKey}: ${err.message}`);
   }
 
-  return rows;
+  return { rows, computedAt, fromCache: false };
 }
 
 export default {
