@@ -67,8 +67,21 @@ export const reportsApi = {
    * backend holds for 10 minutes on a range that hasn't closed yet. Needed because
    * nothing invalidates that cache when a shift is published, created, or deleted.
    */
-  getHours: (start: Date, end: Date, groupByLocation: boolean, refresh = false) =>
-    request<HoursReport>(
+  getHours: async (start: Date, end: Date, groupByLocation: boolean, refresh = false) => {
+    const payload = await request<HoursReport | HoursReportRow[]>(
       `/hours?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&groupByLocation=${groupByLocation}${refresh ? "&refresh=true" : ""}`,
-    ),
+    );
+    // This endpoint returned a bare array before it reported `computedAt`. Normalise both
+    // shapes here: the two services deploy separately, so a frontend that lands ahead of
+    // the backend has to degrade to "age unknown" rather than read `rows` off an array
+    // and render undefined. Same reason the backend reads both cache shapes.
+    if (Array.isArray(payload)) {
+      return { rows: payload, computedAt: null, fromCache: false } satisfies HoursReport;
+    }
+    return {
+      rows: payload.rows ?? [],
+      computedAt: payload.computedAt ?? null,
+      fromCache: payload.fromCache ?? false,
+    } satisfies HoursReport;
+  },
 };
