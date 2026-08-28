@@ -50,12 +50,38 @@ export interface HoursReportRow {
   totalHours: number;
 }
 
+export interface HoursReport {
+  rows: HoursReportRow[];
+  /** When the figures were computed, not when they were served. Null for an entry the
+   *  backend cached before it recorded this — those expire on their own. */
+  computedAt: string | null;
+  fromCache: boolean;
+}
+
 export const reportsApi = {
   getGroups: () => request<ReportGroup[]>("/groups"),
   saveGroups: (groups: { name: string; positionNames: string[] }[]) =>
     request<ReportGroup[]>("/groups", { method: "PUT", body: { groups } }),
-  getHours: (start: Date, end: Date, groupByLocation: boolean) =>
-    request<HoursReportRow[]>(
-      `/hours?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&groupByLocation=${groupByLocation}`,
-    ),
+  /**
+   * `refresh` recomputes server-side instead of reading the cached result, which the
+   * backend holds for 10 minutes on a range that hasn't closed yet. Needed because
+   * nothing invalidates that cache when a shift is published, created, or deleted.
+   */
+  getHours: async (start: Date, end: Date, groupByLocation: boolean, refresh = false) => {
+    const payload = await request<HoursReport | HoursReportRow[]>(
+      `/hours?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&groupByLocation=${groupByLocation}${refresh ? "&refresh=true" : ""}`,
+    );
+    // This endpoint returned a bare array before it reported `computedAt`. Normalise both
+    // shapes here: the two services deploy separately, so a frontend that lands ahead of
+    // the backend has to degrade to "age unknown" rather than read `rows` off an array
+    // and render undefined. Same reason the backend reads both cache shapes.
+    if (Array.isArray(payload)) {
+      return { rows: payload, computedAt: null, fromCache: false } satisfies HoursReport;
+    }
+    return {
+      rows: payload.rows ?? [],
+      computedAt: payload.computedAt ?? null,
+      fromCache: payload.fromCache ?? false,
+    } satisfies HoursReport;
+  },
 };

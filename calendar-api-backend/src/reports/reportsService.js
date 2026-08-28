@@ -130,6 +130,20 @@ function emptyMinutes() {
 }
 
 /**
+ * Midnight tonight, in the server's local time (same convention as utils.todayISO). The
+ * report only ever covers time up to today: a range reaching past this is clamped to it,
+ * so shifts booked for tomorrow and beyond can't inflate anyone's hours just because the
+ * selected preset runs to the end of the quarter. Today stays whole — every preset the
+ * frontend picker produces is day-aligned, so cutting off mid-day would make the numbers
+ * shift hour by hour within a single day.
+ */
+function endOfToday() {
+  const end = new Date();
+  end.setHours(24, 0, 0, 0);
+  return end;
+}
+
+/**
  * Hours worked per agent, per report group, over [start, end]. Merges agendo-native
  * shifts with Sling-sourced ones (best-effort — a Sling failure or empty response still
  * returns native-only results, since Sling is expected to go away eventually). Hours are
@@ -142,7 +156,11 @@ function emptyMinutes() {
  */
 async function computeHoursReport({ start, end, groupByLocation }) {
   const rangeStart = new Date(start);
-  const rangeEnd = new Date(end);
+  const rangeEnd = new Date(Math.min(new Date(end).getTime(), endOfToday().getTime()));
+  // The whole range sits in the future — nothing has been worked yet, so there is no
+  // report to build (and no reason to hit Mongo or Sling for it).
+  if (!(rangeEnd > rangeStart)) return [];
+  const effectiveEnd = rangeEnd.toISOString();
   const classify = await buildClassifier();
 
   const positions = await Position.find().select("name").lean();
@@ -186,13 +204,13 @@ async function computeHoursReport({ start, end, groupByLocation }) {
   }
   if (skippedUnmatched > 0) {
     console.log(
-      `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${end}`,
+      `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${effectiveEnd}`,
     );
   }
 
   // Sling shifts — never let a Sling outage (or its eventual removal) fail the report.
   try {
-    const slingBlocks = await slingController.getCalendar(`${start}/${end}`);
+    const slingBlocks = await slingController.getCalendar(`${start}/${effectiveEnd}`);
     for (const block of slingBlocks || []) {
       const email = block?.email ? String(block.email).toLowerCase() : "";
       const user = email ? userByEmail.get(email) : null;
@@ -270,27 +288,48 @@ const CURRENT_RANGE_TTL_SECONDS = 10 * 60; // still accumulating shifts — refr
  * colon-delimited key, JSON string value, EX for TTL. A Redis outage (get or set) just
  * degrades to computing fresh every time — never fails the report.
  */
-async function getHoursReport({ start, end, groupByLocation }) {
+async function getHoursReport({ start, end, groupByLocation, refresh = false }) {
   const cacheKey = `reports:hours:${start}:${end}:${groupByLocation}`;
 
-  try {
-    const cached = await redisClient.get(cacheKey);
-    if (cached) return JSON.parse(cached);
-  } catch (err) {
-    console.warn(`[reports] cache read failed for ${cacheKey}: ${err.message}`);
+  // `refresh` skips the read and lets the write below overwrite the entry. It is a
+  // bypass rather than a delete, and shared rather than per-caller, because nothing
+  // invalidates this cache on a shift mutation: publishing a day leaves the entry stale
+  // for up to CURRENT_RANGE_TTL_SECONDS. Recomputing into the same key means the next
+  // admin to ask gets the corrected numbers too — deleting the key, or writing to a
+  // per-session one, would leave everyone else on the stale value while the person who
+  // asked sees the truth, which is the more confusing of the two failures.
+  if (!refresh) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Entries written before `computedAt` existed are a bare array. They stay in
+        // Redis for up to PAST_RANGE_TTL_SECONDS after this ships, so read both shapes
+        // rather than crashing on the old one; a null timestamp just means the UI shows
+        // "unknown" until that entry expires.
+        return Array.isArray(parsed)
+          ? { rows: parsed, computedAt: null, fromCache: true }
+          : { ...parsed, fromCache: true };
+      }
+    } catch (err) {
+      console.warn(`[reports] cache read failed for ${cacheKey}: ${err.message}`);
+    }
   }
 
   const rows = await computeHoursReport({ start, end, groupByLocation });
+  // Stored alongside the rows so a cache hit reports when the figures were *computed*,
+  // not when they were served — the whole point of showing it is to reveal staleness.
+  const computedAt = new Date().toISOString();
 
   try {
     const isPast = new Date(end).getTime() < Date.now();
     const ttl = isPast ? PAST_RANGE_TTL_SECONDS : CURRENT_RANGE_TTL_SECONDS;
-    await redisClient.set(cacheKey, JSON.stringify(rows), { EX: ttl });
+    await redisClient.set(cacheKey, JSON.stringify({ rows, computedAt }), { EX: ttl });
   } catch (err) {
     console.warn(`[reports] cache write failed for ${cacheKey}: ${err.message}`);
   }
 
-  return rows;
+  return { rows, computedAt, fromCache: false };
 }
 
 export default {

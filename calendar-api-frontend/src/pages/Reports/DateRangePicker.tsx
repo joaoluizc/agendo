@@ -106,10 +106,23 @@ type DateRangePickerProps = {
 export default function DateRangePicker({ value, preset, onChange }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | undefined>({ from: value.start, to: value.end });
+  /** The next click starts a fresh range rather than editing the one on screen. */
+  const [awaitingStart, setAwaitingStart] = useState(true);
+
+  /** Show the range currently in effect, with the next click starting over. */
+  const resetDraft = () => {
+    setDraft({ from: value.start, to: value.end });
+    setAwaitingStart(true);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) resetDraft();
+  };
 
   const handlePreset = (key: PresetKey) => {
     if (key === "custom") {
-      setDraft({ from: value.start, to: value.end });
+      resetDraft();
       onChange(value, "custom");
       return;
     }
@@ -120,18 +133,39 @@ export default function DateRangePicker({ value, preset, onChange }: DateRangePi
     }
   };
 
-  const handleCustomSelect = (range: DateRange | undefined) => {
-    setDraft(range);
-    if (range?.from && range?.to) {
-      onChange({ start: startOfDay(range.from), end: endOfDay(range.to) }, "custom");
-      setOpen(false);
+  /**
+   * Click a start, then click an end.
+   *
+   * The first click has to be forced to start over, because react-day-picker *edits* a
+   * complete range instead of replacing it: with `from` and `to` both set, a click after
+   * `from` moves only `to`, so the start could not be changed at all without first
+   * clicking a day earlier than the old start. And with both ends already set, the
+   * commit-and-close below fired on that same first click — one click, popover shut,
+   * start unchanged. `awaitingStart` fixes both halves.
+   */
+  const handleCustomSelect = (range: DateRange | undefined, triggerDate: Date) => {
+    if (awaitingStart) {
+      setDraft({ from: triggerDate, to: undefined });
+      setAwaitingStart(false);
+      return;
     }
+
+    // Clicking the start day again clears the range outright in react-day-picker. Read
+    // that as a single-day range instead — a legitimate thing to ask a report for, and
+    // otherwise unreachable.
+    const from = range?.from ?? triggerDate;
+    const to = range?.to ?? from;
+
+    setDraft({ from, to });
+    setAwaitingStart(true);
+    onChange({ start: startOfDay(from), end: endOfDay(to) }, "custom");
+    setOpen(false);
   };
 
   const label = `${format(value.start, "MMM d, yyyy")} – ${format(value.end, "MMM d, yyyy")}`;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button variant="outline" className="flex items-center gap-2 font-normal">
           <CalendarIcon className="h-4 w-4 shrink-0 opacity-60" />
@@ -154,6 +188,9 @@ export default function DateRangePicker({ value, preset, onChange }: DateRangePi
             </button>
           ))}
         </div>
+        {/* `defaultMonth` opens the calendar where the range in effect actually is, rather
+            than always on the current month — a past custom range used to need blind
+            back-navigation to find. */}
         {preset === "custom" && (
           <Calendar
             mode="range"
@@ -161,6 +198,7 @@ export default function DateRangePicker({ value, preset, onChange }: DateRangePi
             selected={draft}
             onSelect={handleCustomSelect}
             numberOfMonths={2}
+            defaultMonth={value.start}
             classNames={{
               range_start:
                 "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:rounded-l-md [&>button]:rounded-r-none rounded-l-md bg-primary/10",

@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Copy, Info, RefreshCw, Rows3 } from "lucide-react";
+import { endOfDay, format, formatDistanceToNow } from "date-fns";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +22,15 @@ import { cn } from "@/lib/utils";
 import DateRangePicker, { DateRangeValue, PresetKey, presetRange, shiftRange } from "./DateRangePicker";
 import { reportsApi, HoursReportRow } from "./api";
 import { usePageTitle } from "./use-page-title";
+import CopyLayoutDialog from "./CopyLayoutDialog";
+import {
+  CopyLayout,
+  EMPTY_LAYOUT,
+  buildCopyEntries,
+  copyText,
+  isEmptyLayout,
+  viewKey,
+} from "./copyLayout";
 
 type ColumnKey = "name" | "Tickets" | "Chats" | "Other" | "totalHours";
 type SortState = { key: ColumnKey; direction: "asc" | "desc" } | null;
@@ -111,26 +127,70 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>(null);
+  // Clipboard padding for the sheet these numbers get pasted into. Scoped to one view:
+  // `layoutView` records the period+sort the layout was built against, so changing either
+  // drops it and the next copy starts from a clean list — blanks placed against one order
+  // mean nothing in another.
+  const [layout, setLayout] = useState<CopyLayout>(EMPTY_LAYOUT);
+  const [layoutView, setLayoutView] = useState<string | null>(null);
+  // Opened either to set up a copy (and then run it) or, from "Adjust", to edit the
+  // layout on its own — the second must not put anything on the clipboard.
+  const [dialog, setDialog] = useState<
+    { mode: "copy"; column: ColumnKey } | { mode: "adjust" } | null
+  >(null);
+
+  /** When the figures on screen were computed, per the server. Null if it couldn't say. */
+  const [computedAt, setComputedAt] = useState<string | null>(null);
+
+  /**
+   * `?refresh=true` on this page's own URL makes every fetch recompute server-side rather
+   * than read the backend's 10-minute cache. Read once at mount, so it stays on for the
+   * whole visit and every range change pays for a recompute — the blunt lever, for when
+   * you are actively changing shifts. The Refresh button is the per-press one.
+   */
+  const [forceRefresh] = useState(
+    () => new URLSearchParams(window.location.search).get("refresh") === "true",
+  );
+
+  /**
+   * Last-request-wins, so a Refresh landing after a range change can't overwrite the
+   * newer range's figures. A ref rather than the effect's `cancelled` flag because the
+   * button fetches outside the effect and the two have to agree on which is current.
+   */
+  const latestRequest = useRef(0);
+
+  /**
+   * `refresh` is per-call rather than state: one press recomputes once, and the range
+   * navigation that follows goes back to cached reads. Sticky refreshing is what the URL
+   * parameter is for.
+   */
+  const load = useCallback(
+    (refresh: boolean) => {
+      const requestId = ++latestRequest.current;
+      setLoading(true);
+      setError(null);
+      reportsApi
+        .getHours(range.start, range.end, false, refresh)
+        .then((data) => {
+          if (requestId !== latestRequest.current) return;
+          setRows(data.rows);
+          setComputedAt(data.computedAt);
+        })
+        .catch((err: unknown) => {
+          if (requestId !== latestRequest.current) return;
+          setError(err instanceof Error ? err.message : "Failed to load report");
+        })
+        .finally(() => {
+          if (requestId === latestRequest.current) setLoading(false);
+        });
+    },
+    [range],
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    reportsApi
-      .getHours(range.start, range.end, false)
-      .then((data) => {
-        if (!cancelled) setRows(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load report");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [range]);
+    load(forceRefresh);
+    // `forceRefresh` is read once at mount and never changes, so it adds no refetches.
+  }, [load, forceRefresh]);
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
@@ -144,20 +204,55 @@ export default function Reports() {
     });
   }, [rows, sort]);
 
-  const copyColumn = async (key: ColumnKey) => {
-    if (sortedRows.length === 0) {
-      toast.error("Nothing to copy — the report is empty.");
+  const currentView = viewKey(
+    range.start,
+    range.end,
+    sort ? `${sort.key}:${sort.direction}` : "default",
+  );
+  const layoutIsCurrent = layoutView === currentView;
+
+  const writeColumn = async (key: ColumnKey, withLayout: CopyLayout) => {
+    const entries = buildCopyEntries(sortedRows, withLayout);
+    if (entries.length === 0) {
+      toast.error("Nothing to copy — every row is left out.");
       return;
     }
-    const text = sortedRows.map((row) => columnValue(row, key)).join("\n");
+    const blanks = entries.filter((entry) => entry.kind === "blank").length;
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`Copied ${sortedRows.length} ${COLUMN_LABELS[key]} value${sortedRows.length === 1 ? "" : "s"}.`);
+      await navigator.clipboard.writeText(copyText(entries, key));
+      toast.success(
+        `Copied ${entries.length} ${COLUMN_LABELS[key]} line${entries.length === 1 ? "" : "s"}` +
+          (blanks > 0 ? ` (${blanks} blank).` : "."),
+      );
     } catch (err) {
       console.error("Failed to copy column to clipboard:", err);
       toast.error("Failed to copy to clipboard.");
     }
   };
+
+  /**
+   * The first copy of a view opens the dialog so the padding can be set against the sheet;
+   * every copy after that reuses it silently, which is what keeps "paste each column in
+   * turn" at one click per column. "Adjust" in the header reopens it.
+   */
+  const copyColumn = (key: ColumnKey) => {
+    if (sortedRows.length === 0) {
+      toast.error("Nothing to copy — the report is empty.");
+      return;
+    }
+    if (!layoutIsCurrent) {
+      setLayout(EMPTY_LAYOUT);
+      setDialog({ mode: "copy", column: key });
+      return;
+    }
+    void writeColumn(key, layout);
+  };
+
+  // The backend never counts time past the end of today, so any range running into the
+  // future (every "current" preset does, most of the way through the period) covers less
+  // than its label implies. Say so inline rather than leaving the numbers looking short.
+  const cutoff = endOfDay(new Date());
+  const rangeRunsPastToday = range.end > cutoff;
 
   const canNavigate = preset !== "custom";
 
@@ -170,7 +265,30 @@ export default function Reports() {
         <div className="mx-auto w-full max-w-5xl">
           <Card>
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Agent hours</CardTitle>
+              <div className="grid gap-1.5">
+                <CardTitle>Agent hours</CardTitle>
+                {rangeRunsPastToday && (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 shrink-0" />
+                    Counted through today, {format(cutoff, "MMM d")} — shifts scheduled after
+                    today aren’t included.
+                  </p>
+                )}
+                {layoutIsCurrent && (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Rows3 className="h-3.5 w-3.5 shrink-0" />
+                    Copy layout: {buildCopyEntries(sortedRows, layout).length} lines
+                    {!isEmptyLayout(layout) && " (padded)"}
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ mode: "adjust" })}
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      Adjust
+                    </button>
+                  </p>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <DateRangePicker
                   value={range}
@@ -204,6 +322,36 @@ export default function Reports() {
                     <ChevronRight />
                   </Button>
                 </div>
+
+                {/* The figures can be up to 10 minutes behind the shifts, because the
+                    backend caches them and nothing clears that cache when a shift is
+                    published. Rather than hide that, the tooltip states when they were
+                    computed and the button recomputes on demand. */}
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Recalculate the report"
+                        disabled={loading}
+                        onClick={() => load(true)}
+                      >
+                        <RefreshCw className={cn(loading && "animate-spin")} />
+                      </Button>
+                    </TooltipTrigger>
+                    {/* Rendered on open, so the relative age is current each time rather
+                        than frozen at the last fetch. */}
+                    <TooltipContent className="max-w-[240px]">
+                      <p>
+                        {computedAt
+                          ? `Calculated at ${format(new Date(computedAt), "HH:mm")} — ${formatDistanceToNow(new Date(computedAt))} ago. Click to recalculate.`
+                          : "Age of these figures is unknown. Click to recalculate."}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </CardHeader>
             <CardContent>
@@ -298,6 +446,23 @@ export default function Reports() {
           </Card>
         </div>
       </main>
+
+      <CopyLayoutDialog
+        open={dialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setDialog(null);
+        }}
+        rows={sortedRows}
+        layout={layout}
+        onLayoutChange={setLayout}
+        columnLabel={dialog?.mode === "copy" ? COLUMN_LABELS[dialog.column] : null}
+        onConfirm={() => {
+          const current = dialog;
+          setDialog(null);
+          setLayoutView(currentView);
+          if (current?.mode === "copy") void writeColumn(current.column, layout);
+        }}
+      />
     </div>
   );
 }
