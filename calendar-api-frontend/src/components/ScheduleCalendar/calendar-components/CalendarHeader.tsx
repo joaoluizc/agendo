@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { GRID_COLUMNS } from "../scheduleUtils";
 
 type CalendarHeaderProps = {
   /** Shown in the sticky left cell, e.g. `16 agents`. */
@@ -27,7 +28,7 @@ const CalendarHeader = ({ agentCount, isToday }: CalendarHeaderProps) => {
   return (
     <div
       className="grid border-b border-border"
-      style={{ gridTemplateColumns: "252px repeat(48, minmax(26px, 1fr))" }}
+      style={{ gridTemplateColumns: GRID_COLUMNS }}
     >
       <div className="sticky left-0 z-[3] flex items-center border-r border-border bg-card px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
         {agentCount} {agentCount === 1 ? "agent" : "agents"}

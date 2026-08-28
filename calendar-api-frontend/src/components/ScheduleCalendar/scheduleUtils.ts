@@ -234,6 +234,45 @@ export const collectDrafts = (shifts: SortedCalendar): Shift[] =>
 /** The timeline is 48 half-hour columns wide, one per slot. */
 export const SLOTS_PER_DAY = 48;
 
+/**
+ * The grid's geometry, in one place because four components have to agree on it exactly —
+ * the header ruler, the coverage rows, each agent row's label column and its lane grid.
+ * They were four copies of the same literal; a change to one that missed another would
+ * misalign every shift against the hour it sits under.
+ *
+ * Sized so the whole track fits a 1425px window without scrolling sideways. That window
+ * leaves 1368px for the track once the card's margins, its border and a 15px scrollbar
+ * are taken out — and 168 + 48 x 25 would spend exactly all of it, which a machine with
+ * classic 17px scrollbars would overflow by 2px.
+ *
+ * So the slot floor is 24, not 25. It costs nothing visually: the floor only binds on a
+ * narrower screen, and at 1425px `1fr` still stretches each column to the same 25px it
+ * would otherwise have been. What it buys is ~48px of headroom for whatever the browser
+ * takes that this arithmetic did not predict.
+ */
+export const LABEL_COLUMN_PX = 168;
+export const SLOT_MIN_PX = 24;
+export const TRACK_MIN_PX = LABEL_COLUMN_PX + SLOTS_PER_DAY * SLOT_MIN_PX;
+
+/**
+ * "Alexandre Back" -> "Alexandre B." for the grid's label column.
+ *
+ * Trimmed rather than truncated by CSS so the cut lands somewhere meaningful: an
+ * ellipsis eats whichever characters happen not to fit, which on a narrow column can
+ * leave two agents reading identically. A last initial always distinguishes them, and
+ * costs less width than the ellipsis it replaces. A one-word name is left alone.
+ */
+export const shortName = (firstName?: string, lastName?: string): string => {
+  const first = (firstName ?? "").trim();
+  const initial = (lastName ?? "").trim().charAt(0);
+  if (!first) return (lastName ?? "").trim();
+  return initial ? `${first} ${initial}.` : first;
+};
+/** Half-hour columns alone — for the lane grid inside a row, which has no label cell. */
+export const SLOT_COLUMNS = `repeat(${SLOTS_PER_DAY}, minmax(${SLOT_MIN_PX}px, 1fr))`;
+/** The full row: sticky label column, then the day. */
+export const GRID_COLUMNS = `${LABEL_COLUMN_PX}px ${SLOT_COLUMNS}`;
+
 /** A span in fractional local hours since the selected day's midnight, 0..24. */
 export type DaySpan = {
   start: number;

@@ -15,6 +15,9 @@ import { Position } from "@/types/positionTypes";
 import { Shift } from "../Shift";
 import EmptySlot from "./EmptySlot";
 import {
+  GRID_COLUMNS,
+  SLOT_COLUMNS,
+  shortName,
   columnSpan,
   columnStart,
   dayBounds,
@@ -55,7 +58,7 @@ const LANE_PADDING = 5;
 /**
  * Hour-line pitch for the lane background, as a fraction of the lane's own width.
  *
- * It has to be relative: the 48 half-hour columns are `minmax(26px, 1fr)`, so an hour
+ * It has to be relative: the 48 half-hour columns are `minmax(SLOT_MIN_PX, 1fr)`, so an hour
  * is only 52px when the track sits at its 1500px minimum and stretches past that on
  * any wider window. A fixed pixel pitch drifts further out of step with the hour ruler
  * every hour across the day.
@@ -202,7 +205,7 @@ const AgentRow = ({
         "grid border-b border-border-subtle",
         isVisitor ? "bg-me-tint" : "bg-card"
       )}
-      style={{ gridTemplateColumns: "252px repeat(48, minmax(26px, 1fr))" }}
+      style={{ gridTemplateColumns: GRID_COLUMNS }}
     >
       <div
         className={cn(
@@ -221,8 +224,15 @@ const AgentRow = ({
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <div className="truncate text-[12.5px] font-semibold leading-tight">
-            {`${user.firstName} ${user.lastName}`}
+          {/* First name plus a last initial. The label column gave up 84px so the day
+              could fit a 1425px screen without scrolling sideways, and the name is what
+              can afford it — "Alexandre B." identifies an agent on a team of 19 as well as
+              the full name does. The title carries the whole name for the ambiguous case. */}
+          <div
+            className="truncate text-[11.5px] font-semibold leading-tight"
+            title={`${user.firstName} ${user.lastName}`}
+          >
+            {shortName(user.firstName, user.lastName)}
           </div>
           <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
             {totalHours > 0
@@ -311,7 +321,7 @@ const AgentRow = ({
         <div
           className="pointer-events-none absolute inset-0 grid"
           style={{
-            gridTemplateColumns: "repeat(48, minmax(26px, 1fr))",
+            gridTemplateColumns: SLOT_COLUMNS,
             gridTemplateRows: `repeat(${shiftLaneCount}, ${SHIFT_LANE}px) repeat(${eventLaneCount}, ${EVENT_LANE}px)`,
             gap: `${LANE_GAP}px 0`,
             padding: `${LANE_PADDING}px 0`,

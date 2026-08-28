@@ -256,6 +256,35 @@ export const buildRoster = (
  */
 export type ConflictKind = "clear" | "overlap" | "same" | "unavailable";
 
+/**
+ * Where each kind sits in the agent list: whoever can simply take the shift first, then
+ * whoever is already covering this very position, then everyone whose day would have to
+ * be argued with.
+ *
+ * `same` sits second rather than with the other conflicts because it is not really one —
+ * the agent is already doing this job over this slot, so they are the obvious person to
+ * extend, and burying them among genuine clashes hides that. `unavailable` sits last
+ * because it is the only kind that needs the day itself changed, not just a shift moved.
+ */
+const PICK_ORDER: Record<ConflictKind, number> = {
+  clear: 0,
+  same: 1,
+  overlap: 2,
+  unavailable: 3,
+};
+
+/** Free agents first, then agents already on this position, then everyone conflicting. */
+export const byAvailability =
+  (statuses: Map<string, AgentStatus>) =>
+  (a: AgentDay, b: AgentDay): number => {
+    const rank =
+      PICK_ORDER[statuses.get(a.id)?.kind ?? "clear"] -
+      PICK_ORDER[statuses.get(b.id)?.kind ?? "clear"];
+    // Ties keep the roster's own order, which is alphabetical — so the list stays
+    // scannable within a group and doesn't reshuffle as the time range changes.
+    return rank !== 0 ? rank : a.name.localeCompare(b.name);
+  };
+
 /** What to do about a conflict. `replace` deletes the overlapping shifts first. */
 export type Resolution = "add" | "replace" | "skip";
 

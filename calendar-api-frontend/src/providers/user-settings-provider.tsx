@@ -2,6 +2,7 @@ import { createContext, useState, useEffect } from "react";
 import { Position } from "@/types/positionTypes.ts";
 import { UserSafeInfo } from "@/types/userTypes";
 import { CoverageMeter } from "@/types/coverageTypes";
+import { Location } from "@/types/locationTypes";
 import { getCoverageMeters } from "@/pages/Settings/CoverageTargets/coverageUtils";
 import { useAuth } from "@clerk/clerk-react"; // Assuming you are using Clerk's useAuth hook
 
@@ -19,6 +20,8 @@ type UserSettingsProviderState = {
   timeZone: number;
   allPositions: Position[];
   allUsers: UserSafeInfo[];
+  /** Office locations and who is assigned to each. Drives the schedule's location filter. */
+  locations: Location[];
   positionsToSync: Position[];
   originalPositionsToSync: Position[];
   coverageMeters: CoverageMeter[];
@@ -88,6 +91,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     );
   };
   const [allUsers, setAllUsers] = useState<UserSafeInfo[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [positionsToSync, setPositionsToSync] = useState<Position[]>([]);
   const [originalPositionsToSync, setOriginalPositionsToSync] = useState<
     Position[]
@@ -166,10 +170,27 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
         console.error("Failed to get users");
       }
     };
+    // Locations are not admin-gated — everyone filtering the schedule needs them.
+    const getLocations = async () => {
+      const response = await fetch("/api/location/all", {
+        method: "GET",
+        mode: "cors",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        setLocations(await response.json());
+      } else {
+        console.error("Failed to get locations");
+      }
+    };
     if (isSignedIn) {
       getUserSettings();
       getPositions();
       getUsers();
+      getLocations();
     }
   }, [isSignedIn]);
 
@@ -202,6 +223,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     timeZone,
     allPositions,
     allUsers,
+    locations,
     positionsToSync,
     originalPositionsToSync,
     coverageMeters,

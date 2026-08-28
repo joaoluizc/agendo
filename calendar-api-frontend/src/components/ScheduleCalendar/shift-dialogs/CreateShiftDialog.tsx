@@ -28,6 +28,7 @@ import {
   Resolution,
   agentStatus,
   buildRoster,
+  byAvailability,
   buildStripSeries,
   clampRange,
   defaultResolution,
@@ -263,16 +264,26 @@ const CreateShiftDialog = ({
     return tally;
   }, [roster, statuses]);
 
+  /**
+   * Ordered by who can actually take the shift, not alphabetically: free agents, then
+   * anyone already on this position over this slot, then everyone with a conflict. The
+   * list is long enough that the person you want is otherwise found by reading badges.
+   *
+   * Sorted after filtering rather than in `buildRoster`, because the order depends on the
+   * time range and the position — both of which change while the dialog is open.
+   */
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return roster.filter((agent) => {
-      if (needle && !agent.name.toLowerCase().includes(needle)) return false;
-      const kind = statuses.get(agent.id)?.kind;
-      if (filter === "free") return kind === "clear";
-      if (filter === "busy") return kind === "overlap" || kind === "same";
-      if (filter === "off") return kind === "unavailable";
-      return true;
-    });
+    return roster
+      .filter((agent) => {
+        if (needle && !agent.name.toLowerCase().includes(needle)) return false;
+        const kind = statuses.get(agent.id)?.kind;
+        if (filter === "free") return kind === "clear";
+        if (filter === "busy") return kind === "overlap" || kind === "same";
+        if (filter === "off") return kind === "unavailable";
+        return true;
+      })
+      .sort(byAvailability(statuses));
   }, [roster, statuses, query, filter]);
 
   const toggleAgent = (agentId: string) =>

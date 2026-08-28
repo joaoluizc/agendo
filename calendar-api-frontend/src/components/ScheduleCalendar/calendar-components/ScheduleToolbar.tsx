@@ -5,6 +5,7 @@ import CreateShiftForm from "../CreateShiftBtn";
 import DuplicateShifts from "../DuplicateShifts";
 import ToggleBulkSelector from "./ToggleBulkSelector";
 import { cn } from "@/lib/utils";
+import LocationFilter from "./LocationFilter";
 
 type ScheduleToolbarProps = {
   selectedDate: Date;
@@ -12,6 +13,11 @@ type ScheduleToolbarProps = {
   isToday: boolean;
   /** Refetch the day on screen — used when a duplicate lands on it. */
   onReload: () => void;
+  /** Location names whose agents are shown in the grid below. */
+  locationFilter: string[];
+  onLocationFilterChange: (next: string[]) => void;
+  /** Agents per location, for the filter's tooltips. */
+  agentsByLocation: Map<string, number>;
 };
 
 /** A given Date, shifted by `delta` days and normalised to local midnight. */
@@ -51,6 +57,9 @@ const ScheduleToolbar = ({
   onSelectDate,
   isToday,
   onReload,
+  locationFilter,
+  onLocationFilterChange,
+  agentsByLocation,
 }: ScheduleToolbarProps) => (
   <div className="px-5 pb-3.5 pt-5">
     {/* The label keeps its own line, with every control on the line below — the layout it
@@ -121,6 +130,15 @@ const ScheduleToolbar = ({
         />
         <CalendarSearch className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       </Label>
+
+      {/* Beside the picker rather than with the actions on the right: this narrows what
+          you are looking at, the same way the date does, and neither creates nor changes
+          anything. */}
+      <LocationFilter
+        selected={locationFilter}
+        onChange={onLocationFilterChange}
+        countsByLocation={agentsByLocation}
+      />
 
       <div className="ml-auto flex flex-wrap items-center gap-2.5">
         <DuplicateShifts selectedDate={selectedDate} onDuplicated={onReload} />

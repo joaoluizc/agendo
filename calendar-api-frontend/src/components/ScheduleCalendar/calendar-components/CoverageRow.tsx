@@ -3,6 +3,7 @@ import { CoverageMeter } from "@/types/coverageTypes";
 import { SortedCalendar } from "@/types/shiftTypes";
 import { UserSafeInfo } from "@/types/userTypes";
 import {
+  GRID_COLUMNS,
   SLOTS_PER_DAY,
   buildCoverageSeries,
   formatSlotTime,
@@ -53,7 +54,7 @@ const CoverageRow = ({
   return (
     <div
       className="grid border-b border-border-subtle bg-band"
-      style={{ gridTemplateColumns: "252px repeat(48, minmax(26px, 1fr))" }}
+      style={{ gridTemplateColumns: GRID_COLUMNS }}
     >
       <div
         className="sticky left-0 z-[3] flex flex-col justify-center border-r border-border bg-band px-3.5"
