@@ -346,11 +346,8 @@ export default function Reports() {
                     <TooltipContent className="max-w-[240px]">
                       <p>
                         {computedAt
-                          ? `Figures calculated at ${format(new Date(computedAt), "HH:mm")} — ${formatDistanceToNow(new Date(computedAt))} ago.`
-                          : "Age of these figures is unknown."}
-                      </p>
-                      <p className="text-muted-foreground">
-                        Shifts published since then may be missing. Click to recalculate.
+                          ? `Calculated at ${format(new Date(computedAt), "HH:mm")} — ${formatDistanceToNow(new Date(computedAt))} ago. Click to recalculate.`
+                          : "Age of these figures is unknown. Click to recalculate."}
                       </p>
                     </TooltipContent>
                   </Tooltip>
