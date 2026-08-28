@@ -432,6 +432,7 @@ const CreateShiftDialog = ({
                 range={range}
                 onChange={setRange}
                 presets={DURATION_PRESETS}
+                anchorDate={selectedDate}
               />
             </div>
 

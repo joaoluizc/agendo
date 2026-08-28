@@ -569,6 +569,7 @@ const EditShiftDialog = ({
                   onChange={setRange}
                   compact
                   maxEnd={maxEnd}
+                  anchorDate={anchorDate}
                 />
                 <div className="flex items-center gap-2 text-[11.5px]">
                   <span className="flex h-[22px] items-center rounded-md bg-muted px-2 font-semibold tabular-nums">

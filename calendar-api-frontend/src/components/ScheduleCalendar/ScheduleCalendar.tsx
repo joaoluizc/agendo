@@ -236,6 +236,7 @@ const Schedule = () => {
               <CalendarHeader
                 agentCount={visibleUsers.length}
                 isToday={isToday}
+                selectedDate={selectedDate}
               />
 
               {/* Coverage rows are admin-only, on the client and on the API. */}

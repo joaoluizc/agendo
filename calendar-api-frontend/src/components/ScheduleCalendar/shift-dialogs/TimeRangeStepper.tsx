@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ZoneStrip from "../calendar-components/ZoneStrip";
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -128,6 +129,14 @@ type TimeRangeStepperProps = {
    * range inside a single day.
    */
   maxEnd?: number;
+  /**
+   * Midnight of the day the range is measured from. Given, the start time is also shown
+   * in each region's local time underneath.
+   *
+   * Optional so the stepper stays usable anywhere; the strip is only meaningful where the
+   * range belongs to a real calendar day.
+   */
+  anchorDate?: Date;
 };
 
 /**
@@ -140,12 +149,21 @@ type TimeRangeStepperProps = {
  * the fastest way to move a long shift, so it stays; what goes is accepting input the
  * shift model can't represent.
  */
+/** The moment a range starting at `hours` past `anchor`'s midnight actually is. */
+const startInstant = (anchor: Date, hours: number): Date => {
+  const instant = new Date(anchor);
+  instant.setHours(0, 0, 0, 0);
+  instant.setMinutes(Math.round(hours * 60));
+  return instant;
+};
+
 const TimeRangeStepper = ({
   range,
   onChange,
   presets,
   compact,
   maxEnd = DAY_HOURS,
+  anchorDate,
 }: TimeRangeStepperProps) => {
   const duration = range.end - range.start;
   /** The end may run past midnight, so a typed time can mean the next day. */
@@ -223,6 +241,14 @@ const TimeRangeStepper = ({
           }
         />
       </div>
+
+      {/* Under the start rather than between the two fields: the start is what you pick
+          against someone else's working day — whether 15:00 is a reasonable hour for
+          Manila — and the end follows from the duration. Always visible rather than on
+          hover, because you want it while deciding, not after. */}
+      {anchorDate && (
+        <ZoneStrip instant={startInstant(anchorDate, range.start)} className="mt-0.5" />
+      )}
 
       {presets && (
         <div className="flex gap-1.5">
