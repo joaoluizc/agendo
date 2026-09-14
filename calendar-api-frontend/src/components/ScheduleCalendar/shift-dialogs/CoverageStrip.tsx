@@ -86,9 +86,17 @@ const CoverageStrip = ({
    * `clampRange` a start plus the duration instead silently shortens a slot pushed against
    * the end of the day — a 4-hour slot moved to 23:00 came back as 23:00–24:00 rather than
    * stopping at 20:00–24:00, which is what clicking the last hours used to do.
+   *
+   * `clampRange`'s own start ceiling is part of that clamp rather than left to it: a shift
+   * is anchored to the day it begins, so above `maxEnd` of 24 the start stops at 23:45 while
+   * the end does not — capping there and letting the end follow would stretch the slot
+   * instead of stopping it.
    */
   const moveTo = (start: number): HourRange => {
-    const anchored = Math.max(0, Math.min(maxEnd - duration, start));
+    const anchored = Math.max(
+      0,
+      Math.min(DAY_HOURS - HOUR_STEP, maxEnd - duration, start)
+    );
     return clampRange(anchored, anchored + duration, maxEnd);
   };
 
