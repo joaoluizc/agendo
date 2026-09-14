@@ -191,9 +191,9 @@ function EmptySlot(props: EmptySlotProps) {
         "group flex h-full cursor-pointer items-center justify-center",
         "hover:bg-foreground/[0.04]"
       )}
-      // A press that turns into a drag belongs to the row, which swallows the click this
-      // would otherwise still fire afterwards. A press that stays put lands here and opens
-      // the same one-hour slot it always did.
+      // The touch path. A mouse press — drag or not — is resolved by the row, which
+      // swallows the click that follows it: the row's pointer capture retargets that click
+      // away from this cell anyway, so handling it here would never have run for a mouse.
       onClick={() =>
         onRequestCreate({ start: currentHour, end: currentHour + 1 })
       }

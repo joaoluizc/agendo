@@ -238,6 +238,9 @@ const AgentRow = ({
    * in the one place the dialog's steppers already use.
    */
   const beginCreate = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Anything left armed by a gesture whose click never arrived dies here, so it can never
+    // swallow the press that follows.
+    suppressClick.current = false;
     if (userType !== "admin" || isBulkSelectorActive) return;
     // Mouse only: a touch press here has to stay a tap-to-create, and claiming the gesture
     // would fight the grid's own horizontal scroll.
@@ -308,18 +311,23 @@ const AgentRow = ({
       window.removeEventListener("keydown", onKeyDown);
     };
 
+    /**
+     * The mouse path opens the dialog itself, drag or no drag.
+     *
+     * Leaving a press that never moved to the cell's own `onClick` did not work: the
+     * pointer capture retargets the compatibility click to *this* track, so the click never
+     * reached the cell and a plain click created nothing at all. Both outcomes therefore
+     * resolve here — the drawn range, or the pressed hour — which also removes the last way
+     * a click and a drag could disagree. The click that does arrive is swallowed either way.
+     */
     const onUp = () => {
       teardown();
-      // Never crossed the threshold, so this was a click: leave it to the cell's own
-      // handler, which opens the hour it has always opened.
-      if (!moved || !latest) return;
-      // `preventDefault` on pointerdown does not stop the compatibility click, and the
-      // capture retargets it here — unswallowed it would reopen the dialog on the cell's
-      // default hour and reset the selection underneath the one that is opening.
       suppressClick.current = true;
       // Batched with the open so no frame shows the preview behind the dialog overlay.
       setCreateDrag(null);
-      setCreateRange(latest);
+      setCreateRange(
+        moved && latest ? latest : { start: anchor, end: anchor + 1 }
+      );
     };
 
     /** Escape and a cancelled pointer throw the gesture away; neither opens anything. */
