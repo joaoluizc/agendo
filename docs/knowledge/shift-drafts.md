@@ -2,7 +2,7 @@
 
 _The draft/published lifecycle: what a draft is excluded from, and the one filter rule that matters._
 
-_Last updated: 2026-08-28_
+_Last updated: 2026-09-14_
 
 An agendo shift is a **draft** until an admin publishes it. Creating one no longer syncs
 it to anybody's calendar — publishing does. This is the first real step toward agendo
@@ -41,6 +41,15 @@ open, so the new time cannot reach an agent's calendar unless someone re-checks 
 footer says why; a toggle that moves on its own and stays silent reads as a glitch. It is
 one-shot on purpose: re-check the box deliberately, nudge the time again, and it stays
 checked.
+
+**Putting the time back where it started puts the toggle back too**, and re-arms the
+one-shot. The latch used to be permanent, which was survivable while the only way to move
+the time was the steppers. It stopped being survivable once the coverage strip's outline
+became draggable: a drag crosses the drop threshold on its first quarter hour, so grabbing
+the bar and letting go where you found it left a published shift marked draft, `dirty` for
+no other reason — and saving would have unpublished a shift that never moved. The unlatch
+cannot fight a deliberate re-check, because re-checking only happens while the time *has*
+changed.
 
 Omitting `status` leaves it untouched, so callers that don't care are unaffected.
 
@@ -102,6 +111,45 @@ Dropping a shift back where it already is writes nothing and raises no prompt. B
 check, picking a shift up and putting it down asked whether to publish a change that did not
 exist — and answering would have re-timed it to identical values and, if published, deleted
 and recreated its calendar event for no reason.
+
+### Drag on empty space to draw a new shift
+
+Press and drag across empty grid space to set a shift's length before the dialog opens,
+instead of taking the hour the `+` offers and correcting it afterwards. Releasing opens the
+create dialog on the drawn range; the shift is still created by the dialog, so this gesture
+is the only one that asks nothing on release.
+
+- **Anchored on the pressed cell's whole hour**, with the moving edge snapped to the quarter
+  under the pointer — the same rounding rule as `pointerHour`, on the absolute hour rather
+  than on the fraction. Dragging backwards is allowed and produces a shift *ending* at the
+  anchor. `clampRange` normalises last, so the day's edges and the 15-minute floor are
+  enforced in the one place the dialog's steppers already use, and the two cannot disagree.
+- **The click/drag threshold is in pixels, not in snapped hours.** With a whole-hour anchor
+  and a quarter-hour edge, a 2px tremor inside the 09:00 cell already reads as 09:00–09:15 —
+  so a hour-based comparison turns every slightly shaky click into a 15-minute shift. Below
+  `DRAG_THRESHOLD_PX` nothing is drawn and the cell's own click opens the hour it always did.
+- **The trailing click has to be swallowed**, in the capture phase, on the cell layer.
+  `preventDefault()` on `pointerdown` does not stop the compatibility `click`, and the
+  pointer capture retargets it to the anchor — unswallowed it reopens the dialog on the
+  cell's default hour, and `CreateShiftDialog`'s reset effect (keyed on `initialRange`) fires
+  *while open* and wipes the agent selection underneath.
+- **This state is not on the provider, though `dropTarget` is.** A move's source row and
+  target row differ, which is why that one lives there; a create never leaves the row it
+  started in. The preview, the gesture and one `CreateShiftDialog` per row therefore live in
+  `AgentRow` — a per-quarter-hour write to the provider would re-render all 384 cells and
+  every block, and the provider's value object is rebuilt unmemoised on every render.
+  `EmptySlot` no longer mounts a dialog at all: it asks the row, so a click and a drag reach
+  the same dialog by the same path.
+- **Escape and `pointercancel` abort** — they clear the preview and open nothing. This is the
+  opposite of a resize, where `pointercancel` routes to the commit path.
+- Limits, all deliberate: no auto-scroll past the viewport edge (the range clamps at 24
+  instead), mouse only (a touch press stays a tap-to-create, so the grid keeps its horizontal
+  scroll), nothing in select mode, and a drag cannot *start* on top of an existing shift or
+  event chip — both are `pointer-events-auto` above the cell layer, same as a click today.
+
+**Trap:** `releasePointerCapture` throws `InvalidStateError` when the pointer was cancelled,
+which already released it. The create gesture guards with `hasPointerCapture`;
+`Shift.beginResize` still releases unconditionally.
 
 ## Overnight shifts: anchored on the day they start
 
@@ -254,6 +302,33 @@ version shipped first and failed review: when a slot is below target the bar's f
 the cell's background are both the warn colour, so a 45%-opacity draft segment disappeared
 into it — washing out in precisely the case that matters. Full-opacity strokes with gaps
 read on any backdrop, in either theme.
+
+### The dialog strip is a control, not a picture
+
+`CoverageStrip`'s outline is draggable: its body moves the slot, either edge resizes it, and
+clicking an hour still jumps it there. Delta-based like the grid resize — the outline follows
+the pointer's *travel* rather than putting its start under the cursor — in the same
+`HOUR_STEP` increments, with the same 15-minute floor. `maxEnd` is the strip's, exactly as
+the steppers take it.
+
+- **A move clamps the start to `[0, maxEnd − duration]`; it never clamps the range.** Handing
+  `clampRange` a start plus the duration shortens a slot pushed against the end of the day
+  instead of stopping it — a 4-hour slot moved to 23:00 came back as 23:00–24:00. That was
+  live on the click path before the bar became draggable.
+- **Both dialogs share one callback.** Clicking an hour and dragging the body are the same
+  operation, so there is one `onRangeChange` rather than a picker prop and a drag prop that
+  could drift on what a click means.
+- **The edit dialog's strip is read-only for a shift that crosses midnight.** The strip draws
+  24 cells, so an overnight slot's outline already runs past the end of it and there is
+  nothing coherent for a drag to grab — the same reason a two-day block on the grid gets no
+  resize handles. The steppers still edit it, and only that case clips the strip.
+- The handles **straddle** the outline's edges rather than sitting inside them: at the
+  15-minute minimum the outline is a few pixels wide, and handles tucked inside would be
+  unhittable. The two then cover a short slot completely, so it resizes but does not
+  body-drag — the hour cells and the steppers remain the way to move it.
+- Writes are guarded on the range actually changing. The dialogs rebuild every agent's
+  status, the coverage series and the agent order from it, so an unguarded write would do all
+  of that per pixel rather than per quarter hour.
 
 **Coverage counts agents, not shifts** — and this surprises people. An agent already
 covering a slot with a published shift contributes nothing more by also having a draft

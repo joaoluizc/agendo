@@ -193,8 +193,21 @@ const EditShiftDialog = ({
 
   // Moving a published shift drops it back to draft, once, so the new time cannot reach a
   // calendar without someone saying so. Re-check the toggle to publish it at the new time.
+  //
+  // Putting the time back where it started puts the toggle back too, and re-arms the
+  // one-shot. A drag crosses the drop threshold on its very first quarter hour, so
+  // without this, grabbing the bar and letting go where you found it left a published
+  // shift marked draft — and saving would then have unpublished a shift that never moved.
+  // This cannot fight a deliberate re-check, which only happens while the time *has*
+  // changed.
   useEffect(() => {
-    if (!timeChanged || autoDropped.current) return;
+    if (!timeChanged) {
+      if (!autoDropped.current) return;
+      autoDropped.current = false;
+      if (original.published) setPublished(true);
+      return;
+    }
+    if (autoDropped.current) return;
     autoDropped.current = true;
     if (original.published) setPublished(false);
   }, [timeChanged, original.published]);
@@ -618,7 +631,17 @@ const EditShiftDialog = ({
                     meterName={meterContext.meter.name}
                     meterColor={meterContext.meter.color}
                     counted={meterContext.counted}
-                    hint="this shift's effect"
+                    {...(crossesMidnight
+                      ? // The strip draws 24 cells, so an overnight slot's outline already
+                        // runs off the end of it — there is nothing coherent for a drag to
+                        // grab. Same reason a two-day block on the grid gets no resize
+                        // handles; the steppers still edit it.
+                        { hint: "this shift's effect" }
+                      : {
+                          hint: "drag to move or resize",
+                          onRangeChange: setRange,
+                          maxEnd,
+                        })}
                     height={40}
                   />
                   <div

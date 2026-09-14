@@ -443,11 +443,9 @@ const CreateShiftDialog = ({
                 meterName={meterContext.meter.name}
                 meterColor={meterContext.meter.color}
                 counted={meterContext.counted}
-                hint="click to move"
+                hint="drag to move or resize"
                 showKey
-                onPickHour={(hour) =>
-                  setRange(clampRange(hour, hour + duration))
-                }
+                onRangeChange={setRange}
               />
             )}
 
