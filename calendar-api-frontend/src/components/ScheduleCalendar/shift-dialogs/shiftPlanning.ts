@@ -323,12 +323,23 @@ export const agentStatus = (
 };
 
 /**
- * Nothing-to-do and marked-unavailable default to skipping, so selecting the whole
- * roster does the safe thing; a plain overlap defaults to stacking, which is what the
- * grid's lane packing is for.
+ * Nothing-to-do defaults to skipping, so selecting the whole roster does the safe thing;
+ * a plain overlap defaults to stacking, which is what the grid's lane packing is for.
+ *
+ * **Marked-unavailable skips only when publishing.** A draft is a plan nobody has committed
+ * to, so proposing a shift over someone's unavailability is a reasonable thing to draw and
+ * look at; pushing it to their calendar is not, and that is the click worth making
+ * deliberate. Skipping in both modes left the create button dead with no way to create
+ * anything, and the way out — *Schedule anyway* on that agent's row — was easy to miss.
+ *
+ * `same` skips whatever the intent: the agent already has this exact shift, there is
+ * nothing to add, and the row offers no options to say otherwise.
  */
-export const defaultResolution = (kind: ConflictKind): Resolution =>
-  kind === "same" || kind === "unavailable" ? "skip" : "add";
+export const defaultResolution = (
+  kind: ConflictKind,
+  publishing: boolean
+): Resolution =>
+  kind === "same" || (kind === "unavailable" && publishing) ? "skip" : "add";
 
 export const resolutionOptions = (
   kind: ConflictKind
