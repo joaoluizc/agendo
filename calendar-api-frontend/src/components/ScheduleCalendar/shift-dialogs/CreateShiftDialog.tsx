@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { cn } from "@/lib/utils";
@@ -67,6 +73,21 @@ const BADGE_TONE: Record<ConflictKind, string> = {
   overlap: "bg-warn-bg text-warn",
   same: "bg-muted text-muted-foreground",
   unavailable: "bg-muted text-muted-foreground",
+};
+
+/**
+ * `Ana` · `Ana and Bruno` · `Ana, Bruno and Carla` · `Ana, Bruno, Carla and 2 more`.
+ *
+ * Capped at three because this reads on one hover: naming nineteen agents would be a
+ * paragraph, and past three the count is the useful part anyway.
+ */
+const joinNames = (names: string[]): string => {
+  if (names.length <= 1) return names[0] ?? "";
+  const head = names.slice(0, 3);
+  if (names.length > 3) {
+    return `${head.join(", ")} and ${names.length - 3} more`;
+  }
+  return `${head.slice(0, -1).join(", ")} and ${head[head.length - 1]}`;
 };
 
 const badgeText = (status: AgentStatus, positionLabel: string) => {
@@ -221,14 +242,62 @@ const CreateShiftDialog = ({
    */
   const resolutionFor = (agentId: string): Resolution => {
     const kind = statuses.get(agentId)?.kind ?? "clear";
-    if (kind === "clear" || kind === "same") return defaultResolution(kind);
-    return resolutions[agentId] ?? defaultResolution(kind);
+    if (kind === "clear" || kind === "same")
+      return defaultResolution(kind, publishNow);
+    return resolutions[agentId] ?? defaultResolution(kind, publishNow);
   };
 
   const selected = selectedIds.filter((id) => statuses.has(id));
   const creating = selected.filter((id) => resolutionFor(id) !== "skip");
   const replacing = selected.filter((id) => resolutionFor(id) === "replace");
   const skipped = selected.length - creating.length;
+
+  /**
+   * Why the create button is doing nothing, in the dialog's own words — or null when it is
+   * not.
+   *
+   * A disabled button that does not say what is holding it is the whole problem here: the
+   * agents in the way are somewhere in a scrolling list, and the way out is a toggle on
+   * their row that is easy to miss. Split by kind, because the two have different answers —
+   * an unavailable agent can be scheduled anyway or left as a draft, while an agent who
+   * already has this shift has nothing to resolve.
+   */
+  const blockedBy = (): { reason: string; fix?: string } | null => {
+    if (selected.length === 0) return { reason: "Select at least one agent." };
+    if (creating.length > 0) return null;
+
+    const namesFor = (kind: ConflictKind) =>
+      selected
+        .filter(
+          (id) =>
+            statuses.get(id)?.kind === kind && resolutionFor(id) === "skip"
+        )
+        .map((id) => roster.find((agent) => agent.id === id)?.firstName ?? "")
+        .filter(Boolean);
+
+    const unavailable = namesFor("unavailable");
+    if (unavailable.length) {
+      return {
+        reason: `${joinNames(unavailable)} ${
+          unavailable.length === 1 ? "is" : "are"
+        } marked unavailable`,
+        fix: "Pick Schedule anyway, or uncheck Publish now to save it as a draft.",
+      };
+    }
+
+    const already = namesFor("same");
+    if (already.length) {
+      return {
+        reason: `${joinNames(already)} already ${
+          already.length === 1 ? "has" : "have"
+        } this shift.`,
+      };
+    }
+
+    return { reason: "Nothing to create for the agents selected." };
+  };
+
+  const blocked = blockedBy();
 
   /** Shifts that saving would delete — also excluded from the coverage baseline. */
   const shiftsToRemove = useMemo(() => {
@@ -312,16 +381,22 @@ const CreateShiftDialog = ({
     } of ${series.targets[hour]} target, met`;
   };
 
-  const summaryNote = [
-    coverageLine(),
-    replacing.length &&
-      `${replacing.length} existing ${
-        replacing.length === 1 ? "shift" : "shifts"
-      } replaced`,
-    skipped && `${skipped} skipped`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // With nothing to create, the reason replaces the rest of the line: a disabled button
+  // cannot be focused, so the tooltip explaining it is unreachable by keyboard and this is
+  // the only place that says it out loud. "3 skipped" was true and told you nothing.
+  const summaryNote =
+    selected.length > 0 && creating.length === 0 && blocked
+      ? [blocked.reason, blocked.fix].filter(Boolean).join(" ")
+      : [
+          coverageLine(),
+          replacing.length &&
+            `${replacing.length} existing ${
+              replacing.length === 1 ? "shift" : "shifts"
+            } replaced`,
+          skipped && `${skipped} skipped`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   const handleSubmit = async () => {
     if (!positionId) return toast.error("Pick a position first");
@@ -393,6 +468,59 @@ const CreateShiftDialog = ({
     { key: "off", label: `Off ${counts.off}` },
   ];
 
+  const createDisabled = submitting || creating.length === 0;
+
+  const createButtonBase = (
+    <Button
+      className={cn(
+        "h-[34px] rounded-lg px-[15px] text-[13px] font-semibold",
+        // Hover has to reach the tooltip's wrapper span below, and a disabled button is
+        // already inert — saying so lets the span take the pointer.
+        createDisabled && "pointer-events-none"
+      )}
+      disabled={createDisabled}
+      onClick={handleSubmit}
+    >
+      {submitting
+        ? publishNow
+          ? "Publishing…"
+          : "Creating…"
+        : creating.length === 0
+          ? publishNow
+            ? "Create & publish"
+            : "Create draft"
+          : `${publishNow ? "Create & publish" : "Create"} ${creating.length} ${
+              creating.length === 1 ? "shift" : "shifts"
+            }`}
+    </Button>
+  );
+
+  /**
+   * The button, wrapped in its explanation when it is refusing to do anything.
+   *
+   * The wrapper span is load-bearing: a disabled button fires no pointer events, so a
+   * tooltip trigger placed on it never opens — hovering has to land on something enabled.
+   * The button inside it is inert either way, which is what `pointer-events-none` says.
+   */
+  const createButton =
+    createDisabled && blocked ? (
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">{createButtonBase}</span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-[260px]">
+            <p>{blocked.reason}</p>
+            {blocked.fix && (
+              <p className="mt-1 text-primary-foreground/70">{blocked.fix}</p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    ) : (
+      createButtonBase
+    );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[720px] max-h-[92vh] w-[calc(100vw-32px)] max-w-[980px] flex-col gap-0 overflow-hidden rounded-[14px] p-0">
@@ -443,11 +571,9 @@ const CreateShiftDialog = ({
                 meterName={meterContext.meter.name}
                 meterColor={meterContext.meter.color}
                 counted={meterContext.counted}
-                hint="click to move"
+                hint="drag to move or resize"
                 showKey
-                onPickHour={(hour) =>
-                  setRange(clampRange(hour, hour + duration))
-                }
+                onRangeChange={setRange}
               />
             )}
 
@@ -655,23 +781,7 @@ const CreateShiftDialog = ({
           >
             Cancel
           </Button>
-          <Button
-            className="h-[34px] rounded-lg px-[15px] text-[13px] font-semibold"
-            disabled={submitting || creating.length === 0}
-            onClick={handleSubmit}
-          >
-            {submitting
-              ? publishNow
-                ? "Publishing…"
-                : "Creating…"
-              : creating.length === 0
-                ? publishNow
-                  ? "Create & publish"
-                  : "Create draft"
-                : `${publishNow ? "Create & publish" : "Create"} ${creating.length} ${
-                    creating.length === 1 ? "shift" : "shifts"
-                  }`}
-          </Button>
+          {createButton}
         </div>
       </DialogContent>
     </Dialog>

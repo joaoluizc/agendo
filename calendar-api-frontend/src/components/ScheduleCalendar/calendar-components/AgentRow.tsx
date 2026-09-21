@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { CalendarIcon, Check, Minus, RepeatIcon } from "lucide-react";
 import { Markup } from "interweave";
@@ -27,7 +27,17 @@ import {
 } from "../scheduleUtils";
 import { cn } from "@/lib/utils";
 import { useSchedule } from "@/providers/useSchedule";
-import { formatHour } from "../shift-dialogs/shiftPlanning";
+import { useUserSettings } from "@/providers/useUserSettings";
+import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
+import {
+  DAY_HOURS,
+  HOUR_STEP,
+  HourRange,
+  clampRange,
+  formatDuration,
+  formatHour,
+  formatRange,
+} from "../shift-dialogs/shiftPlanning";
 
 type AgentRowProps = {
   user: UserSafeInfo;
@@ -65,6 +75,16 @@ const LANE_PADDING = 5;
  */
 const HOUR_LINE_PITCH = "calc(100% / 24)";
 
+/**
+ * How far the pointer must travel before a press on empty space counts as drawing a shift.
+ *
+ * In pixels, deliberately, rather than in snapped hours: the anchor is the pressed cell's
+ * whole hour and the moving edge snaps to the quarter, so a 2px tremor inside the 09:00
+ * cell already reads as 09:00–09:15. Every slightly shaky click would create a 15-minute
+ * shift instead of opening the hour you clicked.
+ */
+const DRAG_THRESHOLD_PX = 3;
+
 const formatHours = (hours: number) => {
   const rounded = Math.round(hours * 2) / 2;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -93,6 +113,14 @@ const AgentRow = ({
     bulkSelectedShifts,
     setBulkSelectedShifts,
   } = useSchedule();
+  const { type: userType } = useUserSettings();
+
+  /** The range being drawn by a press-and-drag on empty space, while the pointer is down. */
+  const [createDrag, setCreateDrag] = useState<HourRange | null>(null);
+  /** The range the create dialog is open on, or null when it is closed. */
+  const [createRange, setCreateRange] = useState<HourRange | null>(null);
+  /** Set when a drag ends, so the click that follows it is swallowed. */
+  const suppressClick = useRef(false);
 
   const shiftLanes = useMemo(() => {
     const spans = shifts.map((shift) => ({
@@ -192,6 +220,132 @@ const AgentRow = ({
           start,
     };
   }, [shiftInDrag?.data, dropTarget, user.id, positionsById, selectedDate]);
+
+  /**
+   * Draw a shift's length by pressing on empty space and dragging, instead of taking the
+   * hour the `+` offers and fixing it in the dialog afterwards.
+   *
+   * The gesture lives on the row rather than on `EmptySlot` for the same reason the drop
+   * preview does: a drag from 06:00 to 10:00 crosses four cells, and no cell can draw
+   * outside itself. It is *not* on the schedule provider, though — unlike a move, whose
+   * source and target rows differ, a create never leaves the row it started in, and a
+   * per-quarter-hour write to the provider would re-render all 384 cells and every block.
+   *
+   * Anchored on the pressed cell's whole hour, with the moving edge snapped to the quarter
+   * under the pointer — the same rounding rule as `EmptySlot.pointerHour`, on the absolute
+   * hour rather than on the fraction. Dragging backwards is a shift ending at the anchor.
+   * `clampRange` normalises last, so the day's edges and the 15-minute floor are enforced
+   * in the one place the dialog's steppers already use.
+   */
+  const beginCreate = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Anything left armed by a gesture whose click never arrived dies here, so it can never
+    // swallow the press that follows.
+    suppressClick.current = false;
+    if (userType !== "admin" || isBulkSelectorActive) return;
+    // Mouse only: a touch press here has to stay a tap-to-create, and claiming the gesture
+    // would fight the grid's own horizontal scroll.
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    // Stops the drag selecting the "+" glyphs and shift labels it passes over.
+    event.preventDefault();
+
+    const track = event.currentTarget;
+    const originX = event.clientX;
+    const originRect = track.getBoundingClientRect();
+    if (!originRect.width) return;
+
+    const anchor = Math.max(
+      0,
+      Math.min(
+        DAY_HOURS - 1,
+        Math.floor(((originX - originRect.left) / originRect.width) * DAY_HOURS)
+      )
+    );
+
+    // Both closed over rather than held in state, for the reason `Shift.beginResize` gives:
+    // a window listener installed once reads whatever the render that installed it captured.
+    let latest: HourRange | null = null;
+    let moved = false;
+
+    track.setPointerCapture(event.pointerId);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (!moved && Math.abs(moveEvent.clientX - originX) <= DRAG_THRESHOLD_PX) {
+        return;
+      }
+      moved = true;
+
+      // Re-measured on every move: the track sits inside the schedule's horizontal
+      // scroller, so a scroll mid-drag would leave an offset cached at pointerdown
+      // pointing at the wrong hour.
+      const rect = track.getBoundingClientRect();
+      const pxPerHour = rect.width / DAY_HOURS;
+      if (!pxPerHour) return;
+      const pointer =
+        Math.round((moveEvent.clientX - rect.left) / pxPerHour / HOUR_STEP) *
+        HOUR_STEP;
+
+      const drawn =
+        pointer < anchor
+          ? { start: Math.min(pointer, anchor - HOUR_STEP), end: anchor }
+          : { start: anchor, end: Math.max(pointer, anchor + HOUR_STEP) };
+      const next = clampRange(drawn.start, drawn.end);
+
+      // Guarded on the value actually changing, like the drop target: without it every
+      // mouse move re-renders the row rather than every quarter hour crossed.
+      if (latest && latest.start === next.start && latest.end === next.end) {
+        return;
+      }
+      latest = next;
+      setCreateDrag(next);
+    };
+
+    const teardown = () => {
+      // `Shift.beginResize` releases unconditionally and throws `InvalidStateError` when the
+      // pointer was cancelled, which already released it.
+      if (track.hasPointerCapture(event.pointerId)) {
+        track.releasePointerCapture(event.pointerId);
+      }
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+
+    /**
+     * The mouse path opens the dialog itself, drag or no drag.
+     *
+     * Leaving a press that never moved to the cell's own `onClick` did not work: the
+     * pointer capture retargets the compatibility click to *this* track, so the click never
+     * reached the cell and a plain click created nothing at all. Both outcomes therefore
+     * resolve here — the drawn range, or the pressed hour — which also removes the last way
+     * a click and a drag could disagree. The click that does arrive is swallowed either way.
+     */
+    const onUp = () => {
+      teardown();
+      suppressClick.current = true;
+      // Batched with the open so no frame shows the preview behind the dialog overlay.
+      setCreateDrag(null);
+      setCreateRange(
+        moved && latest ? latest : { start: anchor, end: anchor + 1 }
+      );
+    };
+
+    /** Escape and a cancelled pointer throw the gesture away; neither opens anything. */
+    const onCancel = () => {
+      teardown();
+      if (moved) suppressClick.current = true;
+      setCreateDrag(null);
+    };
+
+    const onKeyDown = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key === "Escape") onCancel();
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("keydown", onKeyDown);
+  };
 
   const rowHeight =
     shiftLaneCount * SHIFT_LANE +
@@ -304,9 +458,34 @@ const AgentRow = ({
           </div>
         )}
 
+        {/* What a press-and-drag is drawing. Solid rather than the drop ghost's dashed
+            outline: the two gestures produce different things and should never be read as
+            the same one mid-flight. */}
+        {createDrag && (
+          <div
+            className="pointer-events-none absolute inset-y-[3px] z-[2] flex items-center overflow-hidden rounded-[6px] border-[1.5px] border-primary bg-primary/15 px-1.5"
+            style={{
+              left: `${(createDrag.start / 24) * 100}%`,
+              width: `${((createDrag.end - createDrag.start) / 24) * 100}%`,
+            }}
+          >
+            <span className="truncate text-[10px] font-semibold tabular-nums">
+              {formatRange(createDrag)} ·{" "}
+              {formatDuration(createDrag.end - createDrag.start)}
+            </span>
+          </div>
+        )}
+
         <div
           className="absolute inset-0 grid"
           style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}
+          onPointerDown={beginCreate}
+          // Capture phase, so the cell's own onClick never runs after a drag.
+          onClickCapture={(event) => {
+            if (!suppressClick.current) return;
+            suppressClick.current = false;
+            event.stopPropagation();
+          }}
         >
           {Array.from({ length: 24 }, (_, hour) => (
             <EmptySlot
@@ -314,6 +493,7 @@ const AgentRow = ({
               userId={String(user.id)}
               currentHour={hour}
               selectedDate={selectedDate}
+              onRequestCreate={(range) => setCreateRange(range)}
             />
           ))}
         </div>
@@ -407,6 +587,21 @@ const AgentRow = ({
           })}
         </div>
       </div>
+
+      {/* One per row, mounted only once something has asked for it — the dialog derives the
+          whole roster's conflicts and coverage on render, and there are 19 rows and 384
+          cells. A click and a drag both arrive here, so they cannot open different things. */}
+      {createRange && (
+        <CreateShiftDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setCreateRange(null);
+          }}
+          selectedDate={selectedDate}
+          initialUserId={String(user.id)}
+          initialRange={createRange}
+        />
+      )}
     </div>
   );
 };

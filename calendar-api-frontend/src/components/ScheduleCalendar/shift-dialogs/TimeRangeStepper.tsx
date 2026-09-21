@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ZoneStrip from "../calendar-components/ZoneStrip";
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,23 @@ const HourField = ({
 }: HourFieldProps) => {
   const [draft, setDraft] = useState<string | null>(null);
   const cell = compact ? "w-7" : "w-[30px]";
+
+  /**
+   * A change from anywhere else wins over what is half-typed here.
+   *
+   * The draft exists so a half-typed `1` isn't parsed mid-keystroke, but it also means the
+   * field shows its own text rather than the range for as long as it is focused — and the
+   * dialog opens with **Start** focused, because it is the first tabbable thing in it. So
+   * moving the slot by any route that does not blur this input left the number frozen at
+   * the old time while the flags underneath it, the strip and the shift itself all moved.
+   * That was every strip drag: the gesture cancels the pointer's default action, which is
+   * what would otherwise have taken focus away. Clicking an hour cell looked fine only
+   * because the click moved focus to that button.
+   *
+   * `value` only changes on a committed change, never while typing here, so this drops the
+   * draft exactly when it has gone stale.
+   */
+  useEffect(() => setDraft(null), [value]);
 
   const commit = () => {
     if (draft !== null) {

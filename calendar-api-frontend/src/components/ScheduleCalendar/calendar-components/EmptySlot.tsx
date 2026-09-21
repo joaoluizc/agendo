@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
@@ -6,18 +5,26 @@ import { prettyTimeRange, startOfLocalDay } from "../scheduleUtils";
 import {
   DAY_HOURS,
   HOUR_STEP,
+  HourRange,
   hourToDate,
 } from "../shift-dialogs/shiftPlanning";
-import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
 
 type EmptySlotProps = {
   userId: string;
   currentHour: number;
   selectedDate: Date;
+  /**
+   * Open the create dialog on this range.
+   *
+   * The dialog is mounted by the row rather than here: a drag across empty space spans
+   * several cells, so the row owns that gesture — and a click and a drag then reach the
+   * dialog by the same path and cannot disagree about the range it opens on.
+   */
+  onRequestCreate: (range: HourRange) => void;
 };
 
 function EmptySlot(props: EmptySlotProps) {
-  const { userId, currentHour, selectedDate } = props;
+  const { userId, currentHour, selectedDate, onRequestCreate } = props;
   const { type: userType, allUsers, allPositions } = useUserSettings();
   const {
     shiftInDrag,
@@ -26,10 +33,6 @@ function EmptySlot(props: EmptySlotProps) {
     dropTarget,
     setDropTarget,
   } = useSchedule();
-  const [createOpen, setCreateOpen] = useState(false);
-  const date = new Date(selectedDate);
-  date.setHours(currentHour);
-  date.setMinutes(0);
 
   /**
    * The quarter-hour the pointer is actually over, as a fractional hour.
@@ -179,38 +182,28 @@ function EmptySlot(props: EmptySlotProps) {
   if (userType !== "admin") return <div key={`key-${currentHour}`} />;
 
   return (
-    <>
-      <div
-        key={`key-${currentHour}`}
-        role="button"
-        tabIndex={-1}
-        aria-label={`Create a shift at ${currentHour}:00`}
-        className={cn(
-          "group flex h-full cursor-pointer items-center justify-center",
-          "hover:bg-foreground/[0.04]"
-        )}
-        onClick={() => setCreateOpen(true)}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-      >
-        <span className="hidden text-[11px] leading-none text-muted-foreground group-hover:block">
-          +
-        </span>
-      </div>
-
-      {/* Mounted only once opened. There is one of these per hour per agent — 384 on a
-          full roster — and the dialog derives the whole roster's conflicts and coverage
-          on render, so keeping them all mounted would do that work 384 times over. */}
-      {createOpen && (
-        <CreateShiftDialog
-          open
-          onOpenChange={setCreateOpen}
-          selectedDate={selectedDate}
-          initialUserId={userId}
-          initialRange={{ start: currentHour, end: currentHour + 1 }}
-        />
+    <div
+      key={`key-${currentHour}`}
+      role="button"
+      tabIndex={-1}
+      aria-label={`Create a shift at ${currentHour}:00`}
+      className={cn(
+        "group flex h-full cursor-pointer items-center justify-center",
+        "hover:bg-foreground/[0.04]"
       )}
-    </>
+      // The touch path. A mouse press — drag or not — is resolved by the row, which
+      // swallows the click that follows it: the row's pointer capture retargets that click
+      // away from this cell anyway, so handling it here would never have run for a mouse.
+      onClick={() =>
+        onRequestCreate({ start: currentHour, end: currentHour + 1 })
+      }
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      <span className="hidden text-[11px] leading-none text-muted-foreground group-hover:block">
+        +
+      </span>
+    </div>
   );
 }
 
