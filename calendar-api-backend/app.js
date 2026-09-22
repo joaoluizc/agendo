@@ -37,6 +37,9 @@ process.on("uncaughtException", (error) => {
 
 const port = process.env.PORT || 3001;
 
+// Stamped once at boot so /version can report how long this build has been serving.
+const startedAt = new Date();
+
 const corsOrigin =
   process.env.NODE_ENV === "production"
     ? "https://agendo-navy.vercel.app"
@@ -95,6 +98,27 @@ app.get("/auth-check", requireAuth(), (req, res) =>
 
 app.get("/", (req, res) =>
   res.status(200).json({ message: "hey there :-))))" }),
+);
+
+/**
+ * Which build is actually serving — the question "is my change live yet?" had no answer
+ * short of the Render dashboard, because nothing the API returns distinguishes one
+ * deploy from the next. Render sets RENDER_GIT_COMMIT itself; running anywhere else
+ * reports "unknown", which is the honest answer and a useful signal on its own.
+ *
+ * Behind requireAuth like everything but `/`. The sha is not a secret — the repo is
+ * public — but pinning a live deployment to an exact tree tells anyone probing which
+ * known advisories still apply to it and which are already patched out, and that is
+ * worth nothing to an anonymous caller. Short sha and boot time only: no env names, no
+ * dependency versions, nothing that grows into a recon aid.
+ *
+ * From a signed-in browser, the frontend's /api rewrite reaches it at /api/version.
+ */
+app.get("/version", requireAuth(), (req, res) =>
+  res.status(200).json({
+    commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? "unknown",
+    startedAt: startedAt.toISOString(),
+  }),
 );
 
 app.listen(port, "0.0.0.0", () => {
