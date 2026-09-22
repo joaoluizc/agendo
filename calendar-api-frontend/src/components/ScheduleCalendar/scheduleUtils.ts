@@ -360,6 +360,22 @@ export const spanPlacement = (span: DaySpan): SpanPlacement => {
   const windowHours = cells / 2;
   const clampPct = (value: number) => Math.max(0, Math.min(100, value));
 
+  // A span that ends at or before it starts cannot be inset: the right inset alone works
+  // out well past 100%, and a block given away entirely from one side has no width. It
+  // stays in the DOM and in every count while painting nothing — so the day reports
+  // shifts that cannot be seen, clicked, or deleted from the grid.
+  //
+  // ShiftModel rejects such a shift now, so this is about the ones already written. They
+  // claim their whole cell instead, which is enough to find and remove one.
+  if (span.end <= span.start) {
+    return {
+      gridColumnStart: Math.min(firstCell, SLOTS_PER_DAY - 1) + 1,
+      cells: 1,
+      insetLeftPct: 0,
+      insetRightPct: 0,
+    };
+  }
+
   return {
     gridColumnStart: firstCell + 1,
     cells,

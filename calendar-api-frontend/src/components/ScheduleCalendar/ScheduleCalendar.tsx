@@ -9,6 +9,7 @@ import {
   startOfLocalDay,
 } from "./scheduleUtils.ts";
 import { CalendarUser, GCalEventWithGrid } from "@/types/gCalendarTypes.ts";
+import { SortedCalendar } from "@/types/shiftTypes.ts";
 import { Skeleton } from "@/components/ui/skeleton";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import ScheduleToolbar from "./calendar-components/ScheduleToolbar.tsx";
@@ -86,6 +87,29 @@ const Schedule = () => {
       return name ? showing.has(name) : false;
     });
   }, [allUsers, locationByUserId, locationFilter]);
+  /**
+   * The day's shifts, narrowed to the agents the grid actually draws.
+   *
+   * The grid renders a row per `visibleUsers`, but the draft bar used to count — and
+   * publish — every shift in the day. Two ways that diverges, both seen in production:
+   * a location filter hides an agent who still has drafts, and a shift keyed to a clerk
+   * id that is on no roster at all has nowhere to render. Either way the bar announced
+   * unpublished shifts nobody could point at, and its publish button committed them to
+   * those agents' calendars sight unseen.
+   *
+   * Off-roster shifts are dropped rather than surfaced: the schedule is the roster's
+   * view of its own day, and `reportsService` already ignores the same rows for the same
+   * reason (a dev-environment login writes into the shared `shifts` collection under an
+   * id only `dev-users` knows). Clearing those is `purgeOrphanShifts.js`'s job, not the
+   * schedule's.
+   */
+  const visibleShifts = useMemo(() => {
+    const drawn = new Set(visibleUsers.map((currUser) => String(currUser.id)));
+    return Object.fromEntries(
+      Object.entries(shifts).filter(([userId]) => drawn.has(String(userId)))
+    ) as SortedCalendar;
+  }, [shifts, visibleUsers]);
+
   const { user } = useUser();
   const visitorId = user?.id;
 
@@ -203,7 +227,7 @@ const Schedule = () => {
           fully published. */}
       {isAdmin && (
         <PublishDraftsBar
-          shifts={shifts}
+          shifts={visibleShifts}
           onPublished={() => fetchData(selectedDate)}
         />
       )}
