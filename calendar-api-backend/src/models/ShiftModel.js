@@ -62,6 +62,19 @@ const ShiftSchema = new Schema({
   endTime: {
     type: Date,
     required: true,
+    // A shift that ends before it starts is not a shift. Nothing enforced this until a
+    // duplicate-day copy wrote a batch of them and the grid drew blocks running to a
+    // negative hour; the copy itself is fixed, but the guard belongs here so no other
+    // writer can reintroduce one. Document validation only — on a findOneAndUpdate
+    // `this` is the query, `startTime` is not in scope, and the check stands down.
+    validate: {
+      validator: function (value) {
+        return !(this instanceof mongoose.Document) || !this.startTime
+          ? true
+          : value > this.startTime;
+      },
+      message: "endTime must be after startTime",
+    },
   },
   positionId: {
     type: Schema.Types.ObjectId,

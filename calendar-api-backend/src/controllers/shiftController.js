@@ -745,32 +745,30 @@ async function duplicateShiftsFromDay(req, res) {
       replacedTotal += replaced;
     }
 
-    const targetDateObj = new Date(target);
-    const targetDayNum = targetDateObj.getDate();
-    const targetMonthNum = targetDateObj.getMonth();
-    const targetYearNum = targetDateObj.getFullYear();
+    // Both dates arrived as the caller's local midnight, so the gap between them is the
+    // whole of the move — the same flat-24h model `localDayWindow` already works in.
+    // Translating each shift by it keeps the shift's length and its place in the day
+    // exactly as they were.
+    //
+    // Rebuilding the times from `getHours()` is what this replaced, and it was wrong
+    // twice over: it read the clock in the *API server's* zone rather than the caller's,
+    // and it pinned both ends to the target day, silently dropping the date when an end
+    // fell on the following one. With the server on UTC and the schedule worked at
+    // UTC-3, every shift ending 21:00 or later ends the next day in UTC — so a
+    // 12:00–21:00 block came back ending 21:00 the *previous* evening: an end before its
+    // own start, which the grid drew as a shift running to -3.
+    const dayDelta = new Date(target).getTime() - new Date(sourceDate).getTime();
 
     let created = 0;
     for (const sourceShift of shiftsToDuplicate) {
       const shift = { ...sourceShift.toObject() };
       delete shift._id;
 
-      const shiftStartTime = new Date(sourceShift.startTime);
-      const shiftEndTime = new Date(sourceShift.endTime);
-
       shift.startTime = new Date(
-        targetYearNum,
-        targetMonthNum,
-        targetDayNum,
-        shiftStartTime.getHours(),
-        shiftStartTime.getMinutes()
+        new Date(sourceShift.startTime).getTime() + dayDelta
       ).toISOString();
       shift.endTime = new Date(
-        targetYearNum,
-        targetMonthNum,
-        targetDayNum,
-        shiftEndTime.getHours(),
-        shiftEndTime.getMinutes()
+        new Date(sourceShift.endTime).getTime() + dayDelta
       ).toISOString();
 
       shift.isSynced = false;
