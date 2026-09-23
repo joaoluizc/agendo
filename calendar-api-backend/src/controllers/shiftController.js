@@ -8,6 +8,38 @@ import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
 import isISODate from "../utils/isISODate.js";
 import { isAdminRequest } from "../services/authz.js";
+import { mapWithConcurrency } from "../utils/mapWithConcurrency.js";
+
+/**
+ * Agents synced at once by the bulk paths. Each agent's own shifts stay serial — one
+ * calendar, one token, and no reason to race Google's per-calendar limits — but different
+ * agents are independent, and a full day done strictly one shift at a time took minutes.
+ */
+const SYNC_AGENT_CONCURRENCY = 4;
+
+/** Group documents by their `userId`, preserving order within each agent. */
+const groupByUserId = (items, getShift = (item) => item) => {
+  const groups = new Map();
+  for (const item of items) {
+    const userId = String(getShift(item).userId);
+    if (!groups.has(userId)) groups.set(userId, []);
+    groups.get(userId).push(item);
+  }
+  return [...groups.entries()];
+};
+
+/**
+ * Everything one agent's sync needs, fetched once for their whole batch instead of two or
+ * three times per shift. See gCalendarService.addEventForShift's `context`.
+ */
+async function loadSyncContext(clerkUserId, positionsById) {
+  const [clerkUser, mongoUser, tokens] = await Promise.all([
+    userService.getClerkUserById(clerkUserId),
+    userService.findUserByClerkId(clerkUserId),
+    userService.getGoogleOAuthTokenByClerkId(clerkUserId),
+  ]);
+  return { clerkUser, mongoUser, tokens, positionsById };
+}
 
 const SHIFT_STATUSES = ["draft", "published"];
 
@@ -23,13 +55,21 @@ const SHIFT_STATUSES = ["draft", "published"];
  *
  * @returns {Promise<string|null>} an error message, or null on success.
  */
-async function syncPublishedShift(shift, requestId, enforcedObjectIds) {
+async function syncPublishedShift(
+  shift,
+  requestId,
+  enforcedObjectIds,
+  context = null
+) {
   try {
+    // `throwOnError`, so a refused insert comes back as an error instead of looking
+    // exactly like "this agent has the position's sync switched off".
     const addedEvent = await gCalendarService.addEventForShift(
       shift.userId,
       shift,
       requestId,
-      enforcedObjectIds
+      enforcedObjectIds,
+      { context, throwOnError: true }
     );
     // No event is the normal outcome when the agent has this position's sync switched
     // off — the shift is still published, it just doesn't reach their calendar.
@@ -547,25 +587,6 @@ function localDayWindow(isoInstant) {
   return { begin, end };
 }
 
-/** Delete a shift and, if it reached Google Calendar, the event with it. */
-async function removeShiftAndEvent(shift, requestId) {
-  if (shift.isSynced && shift.syncedEvent) {
-    try {
-      const user = await userService.getClerkUserById(shift.userId);
-      await gCalendarService.deleteEvents_cl(
-        user,
-        [shift.syncedEvent],
-        requestId
-      );
-    } catch (err) {
-      console.error(
-        `[${requestId}] - Error removing calendar event for replaced shift: ${err.message}`
-      );
-    }
-  }
-  await shiftService.deleteShift(shift._id);
-}
-
 /**
  * Copy one day's shifts onto one or more other days.
  *
@@ -730,17 +751,36 @@ async function duplicateShiftsFromDay(req, res) {
     }
 
     let replaced = 0;
-    if (mode === "replace") {
-      for (const shift of existing) {
-        try {
-          await removeShiftAndEvent(shift, req.requestId);
-          replaced++;
-        } catch (err) {
-          console.error(
-            `[${req.requestId}] - Error replacing shift ${shift._id}: ${err.message}`
-          );
-          errors.push({ date: target, message: err.message });
+    if (mode === "replace" && existing.length) {
+      // Calendar events first, one Clerk lookup and one batched delete per agent, then the
+      // shifts in a single write. A failed event delete is logged and does not keep the
+      // shift: replacing the day is what was asked for, and a stale event is recoverable
+      // where a half-replaced day is not.
+      await mapWithConcurrency(
+        groupByUserId(existing.filter((shift) => shift.isSynced && shift.syncedEvent)),
+        SYNC_AGENT_CONCURRENCY,
+        async ([agentId, agentShifts]) => {
+          try {
+            const user = await userService.getClerkUserById(agentId);
+            await gCalendarService.deleteEvents_cl(
+              user,
+              agentShifts.map((shift) => shift.syncedEvent),
+              req.requestId
+            );
+          } catch (err) {
+            console.error(
+              `[${req.requestId}] - Error removing calendar events for replaced shifts of ${agentId}: ${err.message}`
+            );
+          }
         }
+      );
+      try {
+        replaced = await shiftService.deleteShifts(existing.map((shift) => shift._id));
+      } catch (err) {
+        console.error(
+          `[${req.requestId}] - Error replacing shifts on ${target}: ${err.message}`
+        );
+        errors.push({ date: target, message: err.message });
       }
       replacedTotal += replaced;
     }
@@ -759,8 +799,7 @@ async function duplicateShiftsFromDay(req, res) {
     // own start, which the grid drew as a shift running to -3.
     const dayDelta = new Date(target).getTime() - new Date(sourceDate).getTime();
 
-    let created = 0;
-    for (const sourceShift of shiftsToDuplicate) {
+    const copies = shiftsToDuplicate.map((sourceShift) => {
       const shift = { ...sourceShift.toObject() };
       delete shift._id;
 
@@ -784,16 +823,25 @@ async function duplicateShiftsFromDay(req, res) {
       shift.publishedBy = undefined;
       shift.runId = undefined;
       shift.notes = undefined;
+      return shift;
+    });
 
-      try {
-        await shiftService.createShift(shift);
-        created++;
-      } catch (err) {
+    // One insert for the day rather than a save (and a position-usage write) per copy.
+    let created = 0;
+    try {
+      const outcome = await shiftService.createShifts(copies);
+      created = outcome.created.length;
+      outcome.errors.forEach((message) => {
         console.error(
-          `[${req.requestId}] - Error creating duplicated shift: ${err.message}`
+          `[${req.requestId}] - Error creating duplicated shift: ${message}`
         );
-        errors.push({ date: target, message: err.message });
-      }
+        errors.push({ date: target, message });
+      });
+    } catch (err) {
+      console.error(
+        `[${req.requestId}] - Error creating duplicated shifts on ${target}: ${err.message}`
+      );
+      errors.push({ date: target, message: err.message });
     }
 
     createdTotal += created;
@@ -866,22 +914,68 @@ async function publishShifts(req, res) {
   }
 
   const { published, alreadyPublished, notFound } = result;
-
-  // Once for the batch, not once per shift — same reason duplicateShiftsFromDay does it.
-  const { objectIds: enforcedObjectIds } =
-    await positionService.getEnforcedPositionIds();
-
   const errors = [];
 
-  for (const shift of published) {
-    const syncError = await syncPublishedShift(
-      shift,
-      req.requestId,
-      enforcedObjectIds
+  // Loaded once for the batch, not once per shift. Inside a try: this used to sit bare,
+  // and on Express 4 a rejection here never became a response — the request just hung
+  // until the proxy in front of it gave up, with the shifts already flipped to published.
+  let enforcedObjectIds = [];
+  let positionsById = new Map();
+  let lookupsFailed = null;
+  try {
+    ({ objectIds: enforcedObjectIds } =
+      await positionService.getEnforcedPositionIds());
+    const positions = await positionService.getPositionsByIds([
+      ...new Set(published.map((shift) => String(shift.positionId))),
+    ]);
+    positionsById = new Map(
+      positions.map((position) => [String(position._id), position])
     );
-    if (syncError) {
-      errors.push({ shiftId: String(shift._id), message: syncError });
-    }
+  } catch (err) {
+    console.error(
+      `[${req.requestId}] - Error loading positions for sync: ${err.message}`
+    );
+    lookupsFailed = err.message;
+  }
+
+  if (lookupsFailed) {
+    // The shifts are published either way; say plainly that none of them was synced.
+    published.forEach((shift) =>
+      errors.push({
+        shiftId: String(shift._id),
+        message: `Published, but calendar sync was not attempted: ${lookupsFailed}`,
+      })
+    );
+  } else {
+    await mapWithConcurrency(
+      groupByUserId(published),
+      SYNC_AGENT_CONCURRENCY,
+      async ([agentId, agentShifts]) => {
+        let context;
+        try {
+          context = await loadSyncContext(agentId, positionsById);
+        } catch (err) {
+          console.error(
+            `[${req.requestId}] - Error loading sync context for ${agentId}: ${err.message}`
+          );
+          agentShifts.forEach((shift) =>
+            errors.push({ shiftId: String(shift._id), message: err.message })
+          );
+          return;
+        }
+        for (const shift of agentShifts) {
+          const syncError = await syncPublishedShift(
+            shift,
+            req.requestId,
+            enforcedObjectIds,
+            context
+          );
+          if (syncError) {
+            errors.push({ shiftId: String(shift._id), message: syncError });
+          }
+        }
+      }
+    );
   }
 
   const payload = {
@@ -943,18 +1037,43 @@ async function unpublishShifts(req, res) {
   const { unpublished, alreadyDraft, notFound } = result;
   const errors = [];
 
-  for (const { shift, priorEvent } of unpublished) {
-    if (!priorEvent) continue;
-    try {
-      const user = await userService.getClerkUserById(shift.userId);
-      await gCalendarService.deleteEvents_cl(user, [priorEvent], req.requestId);
-    } catch (err) {
-      console.error(
-        `[${req.requestId}] - Error removing calendar event for unpublished shift ${shift._id}: ${err.message}`
-      );
-      errors.push({ shiftId: String(shift._id), message: err.message });
+  // One Clerk lookup and one batched delete per agent, a few agents at a time, instead of
+  // a lookup and a delete per shift in series.
+  await mapWithConcurrency(
+    groupByUserId(
+      unpublished.filter(({ priorEvent }) => priorEvent),
+      ({ shift }) => shift
+    ),
+    SYNC_AGENT_CONCURRENCY,
+    async ([agentId, entries]) => {
+      try {
+        const user = await userService.getClerkUserById(agentId);
+        const { failedIds } = await gCalendarService.deleteEvents_cl(
+          user,
+          entries.map(({ priorEvent }) => priorEvent),
+          req.requestId
+        );
+        // A delete Google refused is reported, not swallowed: an agent left holding a
+        // meeting for an uncommitted shift is the failure nothing else would notice.
+        const failed = new Set(failedIds);
+        entries
+          .filter(({ priorEvent }) => failed.has(priorEvent.id))
+          .forEach(({ shift }) =>
+            errors.push({
+              shiftId: String(shift._id),
+              message: "Calendar event could not be removed",
+            })
+          );
+      } catch (err) {
+        console.error(
+          `[${req.requestId}] - Error removing calendar events for ${agentId}: ${err.message}`
+        );
+        entries.forEach(({ shift }) =>
+          errors.push({ shiftId: String(shift._id), message: err.message })
+        );
+      }
     }
-  }
+  );
 
   const payload = {
     message: unpublished.length

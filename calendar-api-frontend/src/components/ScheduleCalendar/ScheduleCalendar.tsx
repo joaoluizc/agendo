@@ -8,6 +8,7 @@ import {
   getGCalendarEvents,
   startOfLocalDay,
 } from "./scheduleUtils.ts";
+import { formatDateParam } from "@/utils/utils.ts";
 import { CalendarUser, GCalEventWithGrid } from "@/types/gCalendarTypes.ts";
 import { SortedCalendar } from "@/types/shiftTypes.ts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +39,8 @@ const Schedule = () => {
     setEvents,
     setScheduleIsLoading,
     exitBulkSelect,
+    registerReload,
+    reloadSchedule,
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
@@ -112,22 +115,55 @@ const Schedule = () => {
     return byUser;
   }, [events]);
 
-  const fetchData = async (date: Date) => {
-    setScheduleIsLoading(true);
+  /**
+   * The day the latest fetch was for. A response for any other day is dropped: a slow
+   * refetch started before the user navigated would otherwise write yesterday's shifts
+   * into the grid under today's date.
+   */
+  const latestFetchKey = useRef<string | null>(null);
+
+  /**
+   * Load the day's shifts and, for admins, its Google Calendar events.
+   *
+   * `quiet` refreshes in place instead of swapping the grid for a skeleton — for a
+   * refetch after an action, where blanking a full roster just to redraw it is the
+   * hiccup, not the feedback.
+   *
+   * The two requests settle independently. They used to share a `Promise.all`, so a
+   * failing events call (the heavy one — every agent's Google Calendar) also discarded
+   * perfectly good shifts: after a publish the grid kept showing drafts that the server
+   * had already published.
+   */
+  const fetchData = async (date: Date, { quiet = false } = {}) => {
+    const key = formatDateParam(date);
+    latestFetchKey.current = key;
+    if (!quiet) setScheduleIsLoading(true);
     try {
-      const [shifts, events] = await Promise.all([
+      const [shiftsResult, eventsResult] = await Promise.allSettled([
         getShifts(date),
         isAdmin ? getGCalendarEvents(date) : Promise.resolve([]),
       ]);
+      if (latestFetchKey.current !== key) return;
 
-      setShifts(shifts);
-      setEvents(events);
-    } catch (error) {
-      console.error("Error fetching calendar data:", error);
+      if (shiftsResult.status === "fulfilled") setShifts(shiftsResult.value);
+      else console.error("Error fetching shifts:", shiftsResult.reason);
+
+      if (eventsResult.status === "fulfilled") setEvents(eventsResult.value);
+      else console.error("Error fetching calendar events:", eventsResult.reason);
     } finally {
-      setScheduleIsLoading(false);
+      if (!quiet && latestFetchKey.current === key) setScheduleIsLoading(false);
     }
   };
+
+  /** Refetch whatever day is on screen *now*, not the one a callback closed over. */
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
+  const reloadCurrentDay = () =>
+    fetchData(selectedDateRef.current, { quiet: true });
+
+  useEffect(() => {
+    registerReload(reloadCurrentDay);
+  });
 
   const todayButton = {
     content: "Today",
@@ -191,7 +227,7 @@ const Schedule = () => {
         selectedDate={selectedDate}
         onSelectDate={setDate}
         isToday={isToday}
-        onReload={() => fetchData(selectedDate)}
+        onReload={reloadSchedule}
         locationFilter={locationFilter}
         onLocationFilterChange={setLocationFilter}
         agentsByLocation={agentsByLocation}
@@ -203,7 +239,7 @@ const Schedule = () => {
       {isAdmin && (
         <PublishDraftsBar
           shifts={visibleShifts}
-          onPublished={() => fetchData(selectedDate)}
+          onPublished={reloadCurrentDay}
         />
       )}
 
@@ -260,7 +296,7 @@ const Schedule = () => {
                   positionsById={positionsById}
                   selectedDate={selectedDate}
                   isVisitor={String(currUser.id) === String(visitorId)}
-                  reloadScheduleCalendar={() => fetchData(selectedDate)}
+                  reloadScheduleCalendar={reloadSchedule}
                 />
               ))}
 

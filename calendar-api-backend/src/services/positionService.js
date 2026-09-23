@@ -27,6 +27,12 @@ const getPositionById = async (id) => {
   return position;
 };
 
+/** Several positions in one query, for the bulk paths that would otherwise ask per shift. */
+const getPositionsByIds = async (ids) => {
+  if (!ids?.length) return [];
+  return Position.find({ _id: { $in: ids } });
+};
+
 const updatePosition = async (id, data) => {
   const position = await Position.findById(id);
   if (!position) {
@@ -245,6 +251,7 @@ export default {
   createPosition,
   getPositions,
   getPositionById,
+  getPositionsByIds,
   updatePosition,
   deletePosition,
   getUserPositionsToSync,

@@ -4,11 +4,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SortedCalendar } from "@/types/shiftTypes";
 import { collectDrafts, countDrafts } from "../scheduleUtils";
-import { publishShifts } from "../shift-dialogs/shiftRequests";
+import {
+  BatchProgress,
+  publishShiftsInBatches,
+} from "../shift-dialogs/shiftRequests";
 
 type PublishDraftsBarProps = {
   shifts: SortedCalendar;
-  /** Refetch the day, so the published shifts come back with their calendar events. */
+  /**
+   * Refetch the day, so the published shifts come back with their calendar events. Called
+   * whatever the outcome — see `handlePublish`.
+   */
   onPublished: () => void;
 };
 
@@ -25,34 +31,50 @@ type PublishDraftsBarProps = {
  * render it.
  */
 const PublishDraftsBar = ({ shifts, onPublished }: PublishDraftsBarProps) => {
-  const [publishing, setPublishing] = useState(false);
+  const [progress, setProgress] = useState<BatchProgress | null>(null);
+  const publishing = progress !== null;
   const draftCount = countDrafts(shifts);
 
-  if (draftCount === 0) return null;
+  if (draftCount === 0 && !publishing) return null;
 
+  /**
+   * Publish the day in small batches, then refetch — always.
+   *
+   * This once published 92 drafts in one request. The server synced every one of them,
+   * but the request outlived the proxy in front of it, so the browser got a 504, reported
+   * a failure, and — refetching only on success — left the bar saying "92 unpublished"
+   * over a day that was fully published. Batches keep each request short, and the refetch
+   * in `finally` means that whatever the network says, the grid ends up showing what the
+   * server actually holds.
+   */
   const handlePublish = async () => {
-    setPublishing(true);
+    const ids = collectDrafts(shifts).map((shift) => shift._id);
+    setProgress({ done: 0, total: ids.length });
     try {
-      const result = await publishShifts(
-        collectDrafts(shifts).map((shift) => shift._id)
-      );
+      const result = await publishShiftsInBatches(ids, setProgress);
+      const failures = result.errors?.length ?? 0;
 
       // A shift can publish and still fail to reach a calendar. Saying so matters: the
       // shift is real either way, so silence would leave an agent without the event and
       // nobody aware of it.
-      if (result.errors?.length) {
+      if (failures && result.published === 0) {
+        toast.error("Failed to publish shifts", {
+          description: result.errors?.[0]?.message,
+        });
+      } else if (failures) {
         toast.warning(
-          `${result.published} published, ${result.errors.length} did not reach Google Calendar`
+          `${result.published} published, ${failures} had a problem`,
+          { description: result.errors?.[0]?.message }
         );
       } else {
-        toast.success(result.message || `${result.published} shifts published`);
+        toast.success(result.message);
       }
-      onPublished();
     } catch (error) {
       console.error("Error publishing shifts:", error);
       toast.error("Failed to publish shifts");
     } finally {
-      setPublishing(false);
+      setProgress(null);
+      onPublished();
     }
   };
 
@@ -61,7 +83,9 @@ const PublishDraftsBar = ({ shifts, onPublished }: PublishDraftsBarProps) => {
       <CloudUpload size={16} className="shrink-0 text-warn" />
       <div className="min-w-0 text-[12.5px] leading-tight">
         <span className="font-semibold">
-          {draftCount} unpublished {draftCount === 1 ? "shift" : "shifts"}
+          {publishing
+            ? `Publishing ${progress.done} of ${progress.total}…`
+            : `${draftCount} unpublished ${draftCount === 1 ? "shift" : "shifts"}`}
         </span>
         <span className="text-muted-foreground">
           {" "}
