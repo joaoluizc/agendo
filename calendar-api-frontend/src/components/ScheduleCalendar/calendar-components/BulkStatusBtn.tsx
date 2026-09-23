@@ -80,9 +80,13 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
       setEvents(next.events);
       // A failed batch may still have gone through server-side (the response is what got
       // lost), so ask the server rather than guess.
-      if (result.errors?.length) reloadSchedule();
+      if (result.unconfirmed?.length) reloadSchedule();
 
-      if (result.errors?.length) {
+      if (result.unconfirmed?.length) {
+        toast.warning(
+          `${result.unconfirmed.length} not confirmed — the day has been refreshed to show what was saved`
+        );
+      } else if (result.errors?.length) {
         toast.warning(
           publishing
             ? `Published, but ${result.errors.length} did not reach Google Calendar`

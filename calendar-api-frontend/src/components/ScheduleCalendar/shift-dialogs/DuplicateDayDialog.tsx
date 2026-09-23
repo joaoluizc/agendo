@@ -152,7 +152,8 @@ const SourceDayPicker = ({
           <CalendarDays size={14} className="shrink-0 text-muted-foreground" />
           <span className="truncate text-[13px] font-semibold">
             {value.toLocaleDateString("en-US", {
-              weekday: "long",
+              // Short weekday: the long form truncated beside the chevron.
+              weekday: "short",
               month: "long",
               day: "numeric",
             })}

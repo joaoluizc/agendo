@@ -25,6 +25,7 @@ import { useUser } from "@clerk/clerk-react";
 import { useSchedule } from "@/providers/useSchedule.tsx";
 import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
 import { useAgentLocations } from "@/hooks/useAgentLocations.ts";
+import { useSelectShortcuts } from "@/hooks/useSelectShortcuts.ts";
 import { FILTERABLE_LOCATIONS } from "./calendar-components/LocationFilter.tsx";
 
 /** Row height of a single-lane agent row — the skeleton matches it so nothing jumps. */
@@ -43,6 +44,7 @@ const Schedule = () => {
     reloadSchedule,
     isBulkSelectorActive,
     setFocusedPositionIds,
+    setVisibleShifts,
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
@@ -123,10 +125,17 @@ const Schedule = () => {
     ) as SortedCalendar;
   }, [shifts, visibleUsers]);
 
+  // The toolbar's Select all and Ctrl/Cmd+A select from this, so they pick exactly the
+  // shifts on screen.
+  useEffect(() => {
+    setVisibleShifts(visibleShifts);
+  }, [visibleShifts]);
+
   const { user } = useUser();
   const visitorId = user?.id;
 
   const isAdmin = type === "admin";
+  useSelectShortcuts(isAdmin);
   const isToday =
     startOfLocalDay(selectedDate).getTime() ===
     startOfLocalDay(new Date()).getTime();

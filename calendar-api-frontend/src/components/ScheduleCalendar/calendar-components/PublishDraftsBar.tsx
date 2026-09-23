@@ -52,18 +52,27 @@ const PublishDraftsBar = ({ shifts, onPublished }: PublishDraftsBarProps) => {
     setProgress({ done: 0, total: ids.length });
     try {
       const result = await publishShiftsInBatches(ids, setProgress);
-      const failures = result.errors?.length ?? 0;
+      const unconfirmed = result.unconfirmed?.length ?? 0;
+      const syncFailures = result.errors?.length ?? 0;
 
-      // A shift can publish and still fail to reach a calendar. Saying so matters: the
-      // shift is real either way, so silence would leave an agent without the event and
-      // nobody aware of it.
-      if (failures && result.published === 0) {
-        toast.error("Failed to publish shifts", {
-          description: result.errors?.[0]?.message,
+      if (unconfirmed && result.published === 0) {
+        toast.error("Could not confirm the publish", {
+          description:
+            "The server did not answer. The day has been refreshed to show what was saved.",
         });
-      } else if (failures) {
+      } else if (unconfirmed) {
+        // Not "failed": in the incident this fixes, every "failed" shift had in fact
+        // published. The refetch below settles which is which.
+        toast.warning(`${result.published} published, ${unconfirmed} not confirmed`, {
+          description:
+            "The server did not answer for some of them. The day has been refreshed to show what was saved.",
+        });
+      } else if (syncFailures) {
+        // A shift can publish and still fail to reach a calendar. Saying so matters: the
+        // shift is real either way, so silence would leave an agent without the event and
+        // nobody aware of it.
         toast.warning(
-          `${result.published} published, ${failures} had a problem`,
+          `${result.published} published, ${syncFailures} did not reach Google Calendar`,
           { description: result.errors?.[0]?.message }
         );
       } else {

@@ -105,6 +105,12 @@ export type PublishResult = {
   /** Shifts that published but whose calendar event failed. */
   errors?: { shiftId: string; message: string }[];
   notFound?: string[];
+  /**
+   * Shifts whose batch got no usable answer (a proxy timeout, a dropped connection). The
+   * server may well have published them — that is exactly what happened in production — so
+   * they are "unconfirmed", not failed, and the caller refetches to find out.
+   */
+  unconfirmed?: { shiftId: string; message: string }[];
 };
 
 /**
@@ -150,6 +156,8 @@ export type UnpublishResult = {
   /** Shifts moved back to draft whose calendar event could not be removed. */
   errors?: { shiftId: string; message: string }[];
   notFound?: string[];
+  /** As in `PublishResult`: no usable answer for these, so refetch to learn their state. */
+  unconfirmed?: { shiftId: string; message: string }[];
 };
 
 /**
@@ -227,8 +235,8 @@ export type BatchProgress = { done: number; total: number };
 /**
  * Run `send` over `ids` in chunks, a few at a time, and fold the results together.
  *
- * A chunk that fails outright does not stop the others: its ids are reported as failed
- * and the rest carry on, because the alternative — stopping halfway — leaves exactly the
+ * A chunk that fails outright does not stop the others: its ids are reported as
+ * unconfirmed and the rest carry on, because the alternative — stopping halfway — leaves exactly the
  * half-published day the batching exists to avoid. The caller refetches afterwards either
  * way, so the grid shows what the server actually holds.
  */
@@ -275,7 +283,7 @@ export const publishShiftsInBatches = async (
 ): Promise<PublishResult> => {
   const { results, failed } = await runInBatches(shiftIds, publishShifts, onProgress);
   const published = results.reduce((sum, result) => sum + result.published, 0);
-  const errors = [...results.flatMap((result) => result.errors ?? []), ...failed];
+  const errors = results.flatMap((result) => result.errors ?? []);
   return {
     message: `${published} shift${published === 1 ? "" : "s"} published`,
     published,
@@ -283,6 +291,7 @@ export const publishShiftsInBatches = async (
     data: results.flatMap((result) => result.data),
     errors: errors.length ? errors : undefined,
     notFound: results.flatMap((result) => result.notFound ?? []),
+    unconfirmed: failed.length ? failed : undefined,
   };
 };
 
@@ -293,7 +302,7 @@ export const unpublishShiftsInBatches = async (
 ): Promise<UnpublishResult> => {
   const { results, failed } = await runInBatches(shiftIds, unpublishShifts, onProgress);
   const unpublished = results.reduce((sum, result) => sum + result.unpublished, 0);
-  const errors = [...results.flatMap((result) => result.errors ?? []), ...failed];
+  const errors = results.flatMap((result) => result.errors ?? []);
   return {
     message: `${unpublished} shift${unpublished === 1 ? "" : "s"} moved back to draft`,
     unpublished,
@@ -301,6 +310,7 @@ export const unpublishShiftsInBatches = async (
     data: results.flatMap((result) => result.data),
     errors: errors.length ? errors : undefined,
     notFound: results.flatMap((result) => result.notFound ?? []),
+    unconfirmed: failed.length ? failed : undefined,
   };
 };
 

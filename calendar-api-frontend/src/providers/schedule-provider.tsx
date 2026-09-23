@@ -74,6 +74,13 @@ type ScheduleProviderState = {
    */
   exitBulkSelect: () => void;
   /**
+   * Select every shift the grid is drawing — drafts and published alike — and enter
+   * select mode so the selection is visible and each row's checkbox can take one agent
+   * back out. Shared by the toolbar button and Ctrl/Cmd+A so both mean the same thing.
+   * Returns how many shifts were selected.
+   */
+  selectAllVisible: () => number;
+  /**
    * Refetch the day on screen without blanking the grid. For anything that changed shifts
    * behind the grid's back — a batched publish where one chunk failed, say — and needs the
    * server's word on what actually happened.
@@ -120,6 +127,14 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
     setIsBulkSelectorActive(false);
   }, []);
 
+  const selectAllVisible = useCallback(() => {
+    const all = Object.values(visibleShifts).flat();
+    if (all.length === 0) return 0;
+    setBulkSelectedShifts(all);
+    setIsBulkSelectorActive(true);
+    return all.length;
+  }, [visibleShifts]);
+
   // A ref, not state: the function changes every render of `ScheduleCalendar`, and
   // storing it as state would re-render the whole schedule each time it was registered.
   const reloadRef = useRef<() => void>(() => {});
@@ -155,6 +170,7 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
       dropTarget,
       setDropTarget,
       exitBulkSelect,
+      selectAllVisible,
       reloadSchedule,
       registerReload,
     }),
@@ -171,6 +187,7 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
       pendingChange,
       dropTarget,
       exitBulkSelect,
+      selectAllVisible,
       reloadSchedule,
       registerReload,
     ]
