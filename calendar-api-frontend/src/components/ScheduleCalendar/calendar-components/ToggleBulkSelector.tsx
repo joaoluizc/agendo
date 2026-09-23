@@ -3,6 +3,7 @@ import { useSchedule } from "@/providers/useSchedule";
 // import BulkCopyBtn from "./BulkCopyBtn";
 import BulkDeleteBtn from "./BulkDeleteBtn";
 import BulkDeselectBtn from "./BulkDeselectBtn";
+import BulkSelectAllBtn from "./BulkSelectAllBtn";
 import BulkStatusBtn from "./BulkStatusBtn";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { ListChecks } from "lucide-react";
@@ -40,6 +41,7 @@ function ToggleBulkSelector() {
       {isBulkSelectorActive && (
         <div id="bulk-selector-active-buttons" className="flex items-center">
           {/* <BulkCopyBtn /> */}
+          <BulkSelectAllBtn />
           <BulkDeselectBtn />
           {/* Publish and unpublish sit before delete so the destructive action stays at the
               end of the row, away from the two that are routine. Each disables itself when

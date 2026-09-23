@@ -1,13 +1,15 @@
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   TRACK_MIN_PX,
+  firstShiftStart,
   getShifts,
   getGCalendarEvents,
   startOfLocalDay,
 } from "./scheduleUtils.ts";
+import { formatDateParam } from "@/utils/utils.ts";
 import { CalendarUser, GCalEventWithGrid } from "@/types/gCalendarTypes.ts";
 import { SortedCalendar } from "@/types/shiftTypes.ts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,10 +25,35 @@ import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { useSchedule } from "@/providers/useSchedule.tsx";
 import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
+import { useAgentLocations } from "@/hooks/useAgentLocations.ts";
+import { useSelectShortcuts } from "@/hooks/useSelectShortcuts.ts";
 import { FILTERABLE_LOCATIONS } from "./calendar-components/LocationFilter.tsx";
 
 /** Row height of a single-lane agent row — the skeleton matches it so nothing jumps. */
 const SKELETON_ROW_HEIGHT = 32;
+
+/** One empty list for every row while events are hidden, so no row's lane memo is busted. */
+const NO_EVENTS: GCalEventWithGrid[] = [];
+
+const SHOW_EVENTS_KEY = "agendo.showCalendarEvents";
+
+/** Stored only while hidden, so a browser that never chose gets the default: shown. */
+const readShowCalendarEvents = () => {
+  try {
+    return localStorage.getItem(SHOW_EVENTS_KEY) !== "hidden";
+  } catch {
+    return true;
+  }
+};
+
+const storeShowCalendarEvents = (show: boolean) => {
+  try {
+    if (show) localStorage.removeItem(SHOW_EVENTS_KEY);
+    else localStorage.setItem(SHOW_EVENTS_KEY, "hidden");
+  } catch {
+    // Private windows and blocked storage: the choice still holds until a reload.
+  }
+};
 
 const Schedule = () => {
   const {
@@ -37,10 +64,15 @@ const Schedule = () => {
     setEvents,
     setScheduleIsLoading,
     exitBulkSelect,
+    registerReload,
+    reloadSchedule,
+    isBulkSelectorActive,
+    setFocusedPositionIds,
+    setVisibleShifts,
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
-  const { type, allUsers, allPositions, coverageMeters, locations } =
+  const { type, allUsers, allPositions, coverageMeters } =
     useUserSettings();
 
   /**
@@ -54,39 +86,88 @@ const Schedule = () => {
     ...FILTERABLE_LOCATIONS,
   ]);
 
-  /** clerkId -> location name, from the location documents' own assignment lists. */
-  const locationByUserId = useMemo(() => {
-    const map = new Map<string, string>();
-    locations.forEach((location) =>
-      location.assignedUsers.forEach((userId) =>
-        map.set(String(userId), location.name)
-      )
-    );
-    return map;
-  }, [locations]);
+  /**
+   * Whether each row also draws that agent's Google Calendar events — the toolbar's Google
+   * Calendar switch.
+   *
+   * Turning them off is for reading the shifts on their own: someone unsure when their shift
+   * is can drop the day's meetings and see where it falls. Meeting clashes stop showing while
+   * they are off, which is accepted — the shift dialogs never checked Google events anyway.
+   *
+   * Hidden means *not fetched*, not just not drawn: the events call is the heavy one (every
+   * agent's calendar, through the proxy), so hiding them also makes switching days faster.
+   * Rows lose their event lanes and shrink back to shift height.
+   *
+   * Persisted, unlike the location filter, because it is a way of working rather than a
+   * question asked of one day. The switch shows its own state, so it is never forgotten on.
+   */
+  const [showCalendarEvents, setShowCalendarEvents] = useState(
+    readShowCalendarEvents
+  );
 
-  const agentsByLocation = useMemo(() => {
-    const tally = new Map<string, number>();
-    allUsers.forEach((user) => {
-      const name = locationByUserId.get(String(user.id));
-      if (name) tally.set(name, (tally.get(name) ?? 0) + 1);
-    });
-    return tally;
-  }, [allUsers, locationByUserId]);
+  const { agentsByLocation, filterByLocations } = useAgentLocations();
 
   /**
-   * The agents the grid draws. An agent with no location is only ever shown when nothing
-   * is filtered out — a new hire is invisible under a specific flag rather than appearing
-   * under one they do not belong to.
+   * The coverage meter the admin clicked, if any. Its shifts stay as they are and every
+   * other shift is dimmed — dimmed, not hidden, because the reason to focus a meter is
+   * usually to move someone onto it ("Ana is out, who can take Tickets?"), and a hidden
+   * meeting makes a busy agent look free. Every row stays, so a new shift can still be
+   * drawn anywhere. Not persisted, like the location filter.
+   */
+  const [focusedMeterId, setFocusedMeterId] = useState<string | null>(null);
+  const focusedMeter =
+    coverageMeters.find((meter) => meter._id === focusedMeterId) ?? null;
+
+  useEffect(() => {
+    setFocusedPositionIds(
+      focusedMeter ? new Set(focusedMeter.positionIds.map(String)) : null
+    );
+  }, [focusedMeter]);
+
+  // The provider outlives this page; leaving must not strand the grid dimmed.
+  useEffect(() => () => setFocusedPositionIds(null), []);
+
+  // Escape clears the focus — unless select mode is on (Escape clears the selection
+  // there) or a dialog is open (Escape is closing it).
+  useEffect(() => {
+    if (!focusedMeterId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || isBulkSelectorActive) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      setFocusedMeterId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focusedMeterId, isBulkSelectorActive]);
+
+  const positionsById = useMemo(
+    () => new Map(allPositions.map((position) => [String(position._id), position])),
+    [allPositions]
+  );
+
+  /**
+   * The agents the grid draws — see `useAgentLocations` for the no-location rule — in the
+   * order their day starts, then by name. Agents with nothing starting today come last.
+   *
+   * Re-sorted whenever the day's shifts change, so moving an agent's first shift earlier
+   * moves their row up once it is saved. See `firstShiftStart` for what counts as a start.
    */
   const visibleUsers = useMemo(() => {
-    const showing = new Set(locationFilter);
-    if (FILTERABLE_LOCATIONS.every((name) => showing.has(name))) return allUsers;
-    return allUsers.filter((user) => {
-      const name = locationByUserId.get(String(user.id));
-      return name ? showing.has(name) : false;
-    });
-  }, [allUsers, locationByUserId, locationFilter]);
+    const startOf = (userId: string) =>
+      firstShiftStart(shifts[userId], selectedDate) ?? Infinity;
+    const nameOf = (user: { firstName?: string; lastName?: string }) =>
+      `${user.firstName ?? ""} ${user.lastName ?? ""}`;
+    const starts = new Map(
+      allUsers.map((currUser) => [String(currUser.id), startOf(currUser.id)])
+    );
+    return [...filterByLocations(allUsers, locationFilter)].sort(
+      (a, b) =>
+        // Infinity - Infinity is NaN, which is falsy, so two agents with no start fall
+        // through to their names like any other tie.
+        starts.get(String(a.id))! - starts.get(String(b.id))! ||
+        nameOf(a).localeCompare(nameOf(b))
+    );
+  }, [allUsers, filterByLocations, locationFilter, shifts, selectedDate]);
   /**
    * The day's shifts, narrowed to the agents the grid actually draws.
    *
@@ -110,20 +191,22 @@ const Schedule = () => {
     ) as SortedCalendar;
   }, [shifts, visibleUsers]);
 
+  // The toolbar's Select all and Ctrl/Cmd+A select from this, so they pick exactly the
+  // shifts on screen.
+  useEffect(() => {
+    setVisibleShifts(visibleShifts);
+  }, [visibleShifts]);
+
   const { user } = useUser();
   const visitorId = user?.id;
 
   const isAdmin = type === "admin";
+  useSelectShortcuts(isAdmin);
   const isToday =
     startOfLocalDay(selectedDate).getTime() ===
     startOfLocalDay(new Date()).getTime();
 
   const [showTargets] = useState(true);
-
-  const positionsById = useMemo(
-    () => new Map(allPositions.map((position) => [String(position._id), position])),
-    [allPositions]
-  );
 
   /** Google Calendar events keyed by user, ready for the under-lane. */
   const eventsByUser = useMemo(() => {
@@ -137,21 +220,78 @@ const Schedule = () => {
     return byUser;
   }, [events]);
 
-  const fetchData = async (date: Date) => {
-    setScheduleIsLoading(true);
-    try {
-      const [shifts, events] = await Promise.all([
-        getShifts(date),
-        isAdmin ? getGCalendarEvents(date) : Promise.resolve([]),
-      ]);
+  /**
+   * The day the latest fetch was for. A response for any other day is dropped: a slow
+   * refetch started before the user navigated would otherwise write yesterday's shifts
+   * into the grid under today's date.
+   */
+  const latestFetchKey = useRef<string | null>(null);
 
-      setShifts(shifts);
-      setEvents(events);
-    } catch (error) {
-      console.error("Error fetching calendar data:", error);
+  /**
+   * Load the day's shifts and, for admins, its Google Calendar events.
+   *
+   * `quiet` refreshes in place instead of swapping the grid for a skeleton — for a
+   * refetch after an action, where blanking a full roster just to redraw it is the
+   * hiccup, not the feedback.
+   *
+   * The two requests settle independently. They used to share a `Promise.all`, so a
+   * failing events call (the heavy one — every agent's Google Calendar) also discarded
+   * perfectly good shifts: after a publish the grid kept showing drafts that the server
+   * had already published.
+   *
+   * `withEvents` defaults to the Google Calendar switch's setting. The switch passes it
+   * explicitly: it calls this before its own state change has rendered, when the closure
+   * still holds the old value.
+   */
+  const fetchData = async (
+    date: Date,
+    { quiet = false, withEvents = showCalendarEvents } = {}
+  ) => {
+    const key = formatDateParam(date);
+    latestFetchKey.current = key;
+    if (!quiet) setScheduleIsLoading(true);
+    try {
+      const [shiftsResult, eventsResult] = await Promise.allSettled([
+        getShifts(date),
+        isAdmin && withEvents ? getGCalendarEvents(date) : Promise.resolve(null),
+      ]);
+      if (latestFetchKey.current !== key) return;
+
+      if (shiftsResult.status === "fulfilled") setShifts(shiftsResult.value);
+      else console.error("Error fetching shifts:", shiftsResult.reason);
+
+      // `null` is a fetch that did not ask for events, and it leaves them alone rather than
+      // emptying them — hiding them is what clears them. Otherwise a fetch still in flight
+      // when they are switched back on could land last and blank what the new one loaded.
+      if (eventsResult.status === "rejected") {
+        console.error("Error fetching calendar events:", eventsResult.reason);
+      } else if (eventsResult.value) {
+        setEvents(eventsResult.value);
+      }
     } finally {
-      setScheduleIsLoading(false);
+      if (!quiet && latestFetchKey.current === key) setScheduleIsLoading(false);
     }
+  };
+
+  /** Refetch whatever day is on screen *now*, not the one a callback closed over. */
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
+  const reloadCurrentDay = () =>
+    fetchData(selectedDateRef.current, { quiet: true });
+
+  useEffect(() => {
+    registerReload(reloadCurrentDay);
+  });
+
+  const changeShowCalendarEvents = (next: boolean) => {
+    setShowCalendarEvents(next);
+    storeShowCalendarEvents(next);
+    // Days loaded while hidden came without their events. Quiet, so the grid stays put and
+    // the lanes appear when they arrive.
+    if (next) fetchData(selectedDateRef.current, { quiet: true, withEvents: true });
+    // Cleared rather than kept: while hidden nothing refreshes them, so by the time they
+    // are shown again they could belong to a day that is no longer on screen.
+    else setEvents([]);
   };
 
   const todayButton = {
@@ -210,16 +350,32 @@ const Schedule = () => {
     exitBulkSelect();
   }, [dateKey]);
 
+  /** The pinned hours and coverage rows, and the agent rows' scroller they follow sideways. */
+  const pinnedRef = useRef<HTMLDivElement>(null);
+  const rowsScrollerRef = useRef<HTMLDivElement>(null);
+
+  const syncPinnedScroll = () => {
+    if (pinnedRef.current && rowsScrollerRef.current) {
+      pinnedRef.current.scrollLeft = rowsScrollerRef.current.scrollLeft;
+    }
+  };
+
+  // The pinned block remounts after every loading skeleton; start it where the rows are.
+  useLayoutEffect(syncPinnedScroll, [scheduleIsLoading]);
+
   return (
     <div>
       <ScheduleToolbar
         selectedDate={selectedDate}
         onSelectDate={setDate}
         isToday={isToday}
-        onReload={() => fetchData(selectedDate)}
+        onReload={reloadSchedule}
         locationFilter={locationFilter}
         onLocationFilterChange={setLocationFilter}
         agentsByLocation={agentsByLocation}
+        canShowCalendarEvents={isAdmin}
+        showCalendarEvents={showCalendarEvents}
+        onShowCalendarEventsChange={changeShowCalendarEvents}
       />
 
       {/* Creating a shift no longer syncs it, so the day needs somewhere that says
@@ -228,17 +384,102 @@ const Schedule = () => {
       {isAdmin && (
         <PublishDraftsBar
           shifts={visibleShifts}
-          onPublished={() => fetchData(selectedDate)}
+          onPublished={reloadCurrentDay}
         />
       )}
 
-      {/* One card, one horizontal scroll container. The agent column is sticky
-          inside it, so the whole grid scrolls together instead of every row owning
-          its own scrollbar. `relative` sits on the inner track rather than on
-          the scroll container, so NowLine measures the full track and scrolls with
-          it instead of hanging off the viewport. */}
-      <div className="mx-5 mb-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
+      {/* Says out loud that the grid is dimmed on purpose, and how to undo it — a grid
+          that is mostly faded with no explanation reads as broken. */}
+      {focusedMeter && (
+        <div className="mx-5 mb-3 flex items-center gap-2.5 rounded-lg border border-border bg-band px-3.5 py-2 text-[12.5px]">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+            style={{ backgroundColor: focusedMeter.color }}
+          />
+          <span>
+            Highlighting <span className="font-semibold">{focusedMeter.name}</span>{" "}
+            shifts
+            <span className="text-muted-foreground">
+              {" "}
+              — everything else is dimmed; new shifts default to{" "}
+              {focusedMeter.name}.
+            </span>
+          </span>
+          <button
+            type="button"
+            className="ml-auto whitespace-nowrap text-[12px] font-semibold text-primary hover:underline"
+            onClick={() => setFocusedMeterId(null)}
+          >
+            Show all <span className="font-normal text-muted-foreground">(esc)</span>
+          </button>
+        </div>
+      )}
+
+      {/* One card, two horizontal scrollers kept in step: the hours and coverage rows on
+          top, pinned under the site header while the page scrolls, and the agent rows
+          below.
+
+          The pinned part cannot simply be a sticky row inside the rows' scroller. An
+          `overflow-x` element is a scroll container in both axes, so a sticky row would
+          stick to it — which never scrolls vertically — rather than to the window. The
+          card clips (`overflow-clip`) instead of hiding for the same reason:
+          `overflow-hidden` would capture the pinned block too.
+
+          The rows' scroller owns the sideways scroll and the pinned block follows it, so
+          the agent column (sticky inside each) and the hours stay aligned. `relative` sits
+          on each inner track, so each NowLine measures its own and scrolls with it. */}
+      <div className="mx-5 mb-6 overflow-clip rounded-xl border border-border bg-card shadow-sm">
+        {!scheduleIsLoading && (
+          <div
+            ref={pinnedRef}
+            // top-16 is the site header's h-16, which is sticky itself. z-[6] clears the
+            // rows' sticky agent column (z-[3]) and their now-line (z-[5]).
+            className="sticky top-16 z-[6] overflow-hidden bg-card"
+            // A sideways trackpad swipe over the hours scrolls the grid, as it would have
+            // when they were part of it.
+            onWheel={(event) => {
+              if (event.deltaX && rowsScrollerRef.current) {
+                rowsScrollerRef.current.scrollLeft += event.deltaX;
+              }
+            }}
+          >
+            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
+              <CalendarHeader
+                agentCount={visibleUsers.length}
+                isToday={isToday}
+                selectedDate={selectedDate}
+              />
+
+              {/* Coverage rows are admin-only, on the client and on the API. */}
+              {isAdmin &&
+                coverageMeters.map((meter) => (
+                  <CoverageRow
+                    key={meter._id}
+                    meter={meter}
+                    roster={allUsers}
+                    shifts={shifts}
+                    selectedDate={selectedDate}
+                    showTargets={showTargets}
+                    focused={meter._id === focusedMeterId}
+                    dimmed={focusedMeterId !== null && meter._id !== focusedMeterId}
+                    onToggleFocus={() =>
+                      setFocusedMeterId((current) =>
+                        current === meter._id ? null : meter._id
+                      )
+                    }
+                  />
+                ))}
+
+              <NowLine isToday={isToday} />
+            </div>
+          </div>
+        )}
+
+        <div
+          ref={rowsScrollerRef}
+          className="overflow-x-auto"
+          onScroll={syncPinnedScroll}
+        >
           {scheduleIsLoading ? (
             <div className="p-3">
               {Array.from({
@@ -257,44 +498,35 @@ const Schedule = () => {
             </div>
           ) : (
             <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
-              <CalendarHeader
-                agentCount={visibleUsers.length}
-                isToday={isToday}
-                selectedDate={selectedDate}
-              />
-
-              {/* Coverage rows are admin-only, on the client and on the API. */}
-              {isAdmin &&
-                coverageMeters.map((meter) => (
-                  <CoverageRow
-                    key={meter._id}
-                    meter={meter}
-                    roster={allUsers}
-                    shifts={shifts}
-                    selectedDate={selectedDate}
-                    showTargets={showTargets}
-                  />
-                ))}
-
               {visibleUsers.map((currUser) => (
                 <AgentRow
                   key={currUser.id}
                   user={currUser}
                   shifts={shifts[currUser.id] ?? []}
-                  events={eventsByUser.get(String(currUser.id)) ?? []}
+                  // Hiding empties the list, but a fetch already in flight can still refill
+                  // it; gating here keeps the rows honest to the toggle regardless.
+                  events={
+                    showCalendarEvents
+                      ? eventsByUser.get(String(currUser.id)) ?? NO_EVENTS
+                      : NO_EVENTS
+                  }
                   positionsById={positionsById}
                   selectedDate={selectedDate}
                   isVisitor={String(currUser.id) === String(visitorId)}
-                  reloadScheduleCalendar={() => fetchData(selectedDate)}
+                  reloadScheduleCalendar={reloadSchedule}
                 />
               ))}
 
-              <NowLine isToday={isToday} />
+              {/* The rest of the same line; its label is in the pinned block above. */}
+              <NowLine isToday={isToday} showLabel={false} />
             </div>
           )}
         </div>
 
-        <ScheduleLegend showCoverage={isAdmin} showEvents={isAdmin} />
+        <ScheduleLegend
+          showCoverage={isAdmin}
+          showEvents={isAdmin && showCalendarEvents}
+        />
 
         {/* One prompt for every grid gesture — a resize or a drop — rendered here rather
             than per shift, since any of the 384 EmptySlots can raise one. */}

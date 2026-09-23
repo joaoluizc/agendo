@@ -1,7 +1,8 @@
 import { Link, NavLink } from "react-router-dom";
-import { Menu, Sun, Moon } from "lucide-react";
+import { Clock, Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { TimeFormatPreference, useTimeFormat } from "@/utils/timeFormat";
 import agendoLogoLight from "../../resources/agendo-logo.svg";
 import agendoLogoDark from "../../resources/agendo-logo-dark.svg";
 import agendoAudio from "../../resources/agendo.mp3";
@@ -9,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -28,9 +32,20 @@ import { cn } from "@/lib/utils";
 
 const IS_LOCALHOST = import.meta.env.DEV;
 
+const TIME_FORMATS: { value: TimeFormatPreference; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "24h", label: "24-hour" },
+  { value: "12h", label: "12-hour (AM/PM)" },
+];
+
 const Header = () => {
   const { setTheme, theme } = useTheme();
   const { type } = useUserSettings();
+  const {
+    preference: timeFormat,
+    setPreference: setTimeFormat,
+    browserHour12,
+  } = useTimeFormat();
   const logoRef = useRef(null);
   const [nrOfLogoClicks, setNrOfLogoClicks] = useState<number>(0);
 
@@ -279,25 +294,57 @@ const Header = () => {
               </Button>
             </Link>
           </SignedOut>
+          {/* How the app looks, which now includes how it writes a clock time — both are
+              this browser's own display preferences, so they share one menu. The clock on
+              the icon is what says the time format lives here too. */}
           <div id="theme-toggle" className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" className="relative">
                   <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                   <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                  <span className="sr-only">Toggle theme</span>
+                  {/* `!size` because Button pins every icon inside it to 16px, and
+                      `bg-inherit` takes the button's own fill — hover included — so the badge
+                      reads as cut out of the sun rather than pasted on it. */}
+                  <Clock
+                    aria-hidden="true"
+                    strokeWidth={2.5}
+                    className="absolute bottom-[4px] right-[4px] !size-[10px] rounded-full bg-inherit"
+                  />
+                  <span className="sr-only">Theme and time format</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setSiteTheme("light")}>
-                  Light
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSiteTheme("dark")}>
-                  Dark
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSiteTheme("system")}>
-                  System
-                </DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Theme
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={theme} onValueChange={setSiteTheme}>
+                  <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Time format
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={timeFormat}
+                  onValueChange={(value) =>
+                    setTimeFormat(value as TimeFormatPreference)
+                  }
+                >
+                  {TIME_FORMATS.map((option) => (
+                    <DropdownMenuRadioItem key={option.value} value={option.value}>
+                      {option.label}
+                      {/* Says what "auto" resolved to, so choosing it is never a surprise. */}
+                      {option.value === "auto" && (
+                        <span className="ml-1 text-muted-foreground">
+                          (browser: {browserHour12 ? "12-hour" : "24-hour"})
+                        </span>
+                      )}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

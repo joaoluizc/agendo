@@ -67,6 +67,89 @@ async function getShift(shiftId) {
   return shift;
 }
 
+/**
+ * Create many shifts in one write. The duplicate-day flow's counterpart to `createShift`,
+ * with the same "new means draft" default: a copied full day used to be one save plus one
+ * position-usage write per shift, per target day, all serial.
+ *
+ * `ordered: false` lets the valid documents land when one fails validation. Returns what
+ * was inserted and a message per failure, so the caller can still count both.
+ */
+async function createShifts(shiftDetailsList) {
+  const docs = shiftDetailsList.map(
+    ({
+      startTime,
+      endTime,
+      userId,
+      positionId,
+      createdBy,
+      status = "draft",
+      source = "ui",
+      runId,
+      notes,
+      publishedAt,
+      publishedBy,
+      isSynced = false,
+      syncedEvent = {},
+    }) => ({
+      startTime,
+      endTime,
+      userId,
+      positionId,
+      createdBy,
+      status,
+      source,
+      runId,
+      notes,
+      publishedAt,
+      publishedBy,
+      isSynced,
+      syncedEvent,
+    })
+  );
+  if (docs.length === 0) return { created: [], errors: [] };
+
+  let created = [];
+  const errors = [];
+  try {
+    created = await Shift.insertMany(docs, { ordered: false });
+  } catch (err) {
+    // With `ordered: false` a write error still inserts the rest; Mongoose hands those
+    // back on the error.
+    created = err.insertedDocs ?? [];
+    const writeErrors = err.writeErrors ?? [];
+    if (writeErrors.length) {
+      writeErrors.forEach((writeError) =>
+        errors.push(writeError.errmsg ?? writeError.message ?? String(writeError))
+      );
+    } else {
+      errors.push(err.message);
+    }
+  }
+  // Mongoose drops documents that fail validation from an unordered insert without
+  // throwing, so account for any shortfall rather than let it vanish.
+  const unaccounted = docs.length - created.length - errors.length;
+  if (unaccounted > 0) {
+    errors.push(
+      `${unaccounted} shift${
+        unaccounted === 1 ? " was" : "s were"
+      } not created (failed validation)`
+    );
+  }
+
+  const positionIds = [...new Set(created.map((shift) => String(shift.positionId)))];
+  await Promise.all(positionIds.map((positionId) => notePositionUsed(positionId)));
+
+  return { created, errors };
+}
+
+/** Delete many shifts in one write. */
+async function deleteShifts(shiftIds) {
+  if (!shiftIds?.length) return 0;
+  const result = await Shift.deleteMany({ _id: { $in: shiftIds } });
+  return result.deletedCount ?? 0;
+}
+
 async function deleteShift(shiftId) {
   const shift = await Shift.findByIdAndDelete(shiftId);
   return shift;
@@ -184,21 +267,27 @@ async function publishShifts(shiftIds, publishedBy) {
     .map(String)
     .filter((shiftId) => !foundIds.has(shiftId));
 
-  const published = [];
-  const alreadyPublished = [];
-  const publishedAt = new Date();
+  const alreadyPublished = shifts.filter((shift) => shift.status !== "draft");
+  const draftIds = shifts
+    .filter((shift) => shift.status === "draft")
+    .map((shift) => shift._id);
+  if (draftIds.length === 0) return { published: [], alreadyPublished, notFound };
 
-  for (const shift of shifts) {
-    if (shift.status !== "draft") {
-      alreadyPublished.push(shift);
-      continue;
-    }
-    shift.status = "published";
-    shift.publishedAt = publishedAt;
-    shift.publishedBy = publishedBy;
-    await shift.save();
-    published.push(shift);
-  }
+  const publishedAt = new Date();
+  // One write for the batch instead of a save per shift. The `status: "draft"` filter is
+  // what keeps two concurrent publishes of the same shift from both claiming it: only one
+  // write matches, and the re-read below returns only the shifts *this* call flipped, so
+  // only one of them goes on to create the calendar event.
+  await Shift.updateMany(
+    { _id: { $in: draftIds }, status: "draft" },
+    { $set: { status: "published", publishedAt, publishedBy } }
+  );
+  const published = await Shift.find({
+    _id: { $in: draftIds },
+    status: "published",
+    publishedAt,
+    publishedBy,
+  });
 
   return { published, alreadyPublished, notFound };
 }
@@ -224,23 +313,40 @@ async function unpublishShifts(shiftIds) {
     .map(String)
     .filter((shiftId) => !foundIds.has(shiftId));
 
-  const unpublished = [];
-  const alreadyDraft = [];
+  const alreadyDraft = shifts.filter((shift) => shift.status === "draft");
+  const toUnpublish = shifts.filter((shift) => shift.status !== "draft");
+  if (toUnpublish.length === 0) return { unpublished: [], alreadyDraft, notFound };
 
-  for (const shift of shifts) {
-    if (shift.status === "draft") {
-      alreadyDraft.push(shift);
-      continue;
+  // Capture each event before the write clears it — the controller still needs the ids to
+  // delete them from Google.
+  const priorEvents = new Map(
+    toUnpublish.map((shift) => [
+      String(shift._id),
+      shift.isSynced ? shift.syncedEvent : null,
+    ])
+  );
+
+  // One write for the batch. `$ne: "draft"` rather than `"published"`: a legacy shift has
+  // no status at all and is published (see ShiftModel).
+  await Shift.updateMany(
+    { _id: { $in: toUnpublish.map((shift) => shift._id) }, status: { $ne: "draft" } },
+    {
+      $set: {
+        status: "draft",
+        publishedAt: null,
+        publishedBy: null,
+        isSynced: false,
+        syncedEvent: null,
+      },
     }
-    const priorEvent = shift.isSynced ? shift.syncedEvent : null;
-    shift.status = "draft";
-    shift.publishedAt = null;
-    shift.publishedBy = null;
-    shift.isSynced = false;
-    shift.syncedEvent = null;
-    await shift.save();
-    unpublished.push({ shift, priorEvent });
-  }
+  );
+  const updated = await Shift.find({
+    _id: { $in: toUnpublish.map((shift) => shift._id) },
+  });
+
+  const unpublished = updated
+    .filter((shift) => shift.status === "draft")
+    .map((shift) => ({ shift, priorEvent: priorEvents.get(String(shift._id)) }));
 
   return { unpublished, alreadyDraft, notFound };
 }
@@ -249,6 +355,8 @@ export default {
   createShift,
   getShift,
   deleteShift,
+  deleteShifts,
+  createShifts,
   updateShift,
   findShiftsByRange,
   publishShifts,

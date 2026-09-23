@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { useSchedule } from "@/providers/useSchedule";
 import CreateShiftDialog from "./shift-dialogs/CreateShiftDialog";
+import { focusedDefaultPosition } from "./scheduleUtils";
 
 type NewShiftButtonProps = {
   selectedDate: Date;
@@ -16,7 +18,8 @@ type NewShiftButtonProps = {
  * dialog.
  */
 const NewShiftButton = ({ selectedDate }: NewShiftButtonProps) => {
-  const { type: userType } = useUserSettings();
+  const { type: userType, allPositions } = useUserSettings();
+  const { focusedPositionIds } = useSchedule();
   const [open, setOpen] = useState(false);
 
   if (userType !== "admin") return null;
@@ -38,6 +41,11 @@ const NewShiftButton = ({ selectedDate }: NewShiftButtonProps) => {
           open
           onOpenChange={setOpen}
           selectedDate={selectedDate}
+          // With a coverage meter focused, a new shift starts on that meter's position.
+          initialPositionId={focusedDefaultPosition(
+            allPositions,
+            focusedPositionIds
+          )}
         />
       )}
     </>

@@ -12,8 +12,8 @@ import { useSchedule } from "@/providers/useSchedule";
 import { isDraft } from "../scheduleUtils";
 import {
   applyShiftChanges,
-  publishShifts,
-  unpublishShifts,
+  publishShiftsInBatches,
+  unpublishShiftsInBatches,
 } from "../shift-dialogs/shiftRequests";
 
 type BulkStatusBtnProps = {
@@ -41,6 +41,7 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
     setShifts,
     setEvents,
     exitBulkSelect,
+    reloadSchedule,
   } = useSchedule();
   const [busy, setBusy] = useState(false);
 
@@ -61,21 +62,31 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
 
     try {
       const result = publishing
-        ? await publishShifts(ids)
-        : await unpublishShifts(ids);
+        ? await publishShiftsInBatches(ids)
+        : await unpublishShiftsInBatches(ids);
 
       // Patch from the response rather than refetching: it carries each shift's fresh sync
-      // state, which is what the Google Calendar under-lane renders.
+      // state, which is what the Google Calendar under-lane renders. Only the shifts the
+      // server returned are swapped — a batch that failed outright returned nothing, and
+      // removing its shifts here would make them vanish from the grid.
+      const returned = new Set(result.data.map((shift) => shift._id));
       const next = applyShiftChanges({
         shifts,
         events,
-        removed: applicable,
+        removed: applicable.filter((shift) => returned.has(shift._id)),
         created: result.data,
       });
       setShifts(next.shifts);
       setEvents(next.events);
+      // A failed batch may still have gone through server-side (the response is what got
+      // lost), so ask the server rather than guess.
+      if (result.unconfirmed?.length) reloadSchedule();
 
-      if (result.errors?.length) {
+      if (result.unconfirmed?.length) {
+        toast.warning(
+          `${result.unconfirmed.length} not confirmed — the day has been refreshed to show what was saved`
+        );
+      } else if (result.errors?.length) {
         toast.warning(
           publishing
             ? `Published, but ${result.errors.length} did not reach Google Calendar`
@@ -90,6 +101,7 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
         publishing ? "Could not publish shifts" : "Could not unpublish shifts",
         { description: error instanceof Error ? error.message : undefined }
       );
+      reloadSchedule();
     } finally {
       setBusy(false);
       exitBulkSelect();

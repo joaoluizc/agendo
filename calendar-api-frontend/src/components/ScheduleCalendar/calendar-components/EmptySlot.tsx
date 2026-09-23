@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
-import { prettyTimeRange, startOfLocalDay } from "../scheduleUtils";
+import { useTimeFormat } from "@/utils/timeFormat";
+import { startOfLocalDay } from "../scheduleUtils";
 import {
   DAY_HOURS,
   HOUR_STEP,
@@ -33,6 +34,7 @@ function EmptySlot(props: EmptySlotProps) {
     dropTarget,
     setDropTarget,
   } = useSchedule();
+  const { clock } = useTimeFormat();
 
   /**
    * The quarter-hour the pointer is actually over, as a fractional hour.
@@ -132,10 +134,10 @@ function EmptySlot(props: EmptySlotProps) {
       startTime,
       endTime,
       userId,
-      summary: `${positionName(dragged.positionId)} · ${prettyTimeRange(
+      summary: `${positionName(dragged.positionId)} · ${clock.range(
         dragged.startTime,
         dragged.endTime
-      )} → ${prettyTimeRange(startTime, endTime)}`,
+      )} → ${clock.range(startTime, endTime)}`,
       // Naming both people matters more here than anywhere else: a drop can land on a row
       // you did not mean, and "moved to another agent" would not have told you which.
       // A drop late in the day can push the end past midnight, which is legitimate but
@@ -146,12 +148,10 @@ function EmptySlot(props: EmptySlotProps) {
           ? `${agentName(dragged.userId)} → ${agentName(userId)}`
           : null,
         crossesMidnight(startTime, endTime)
-          ? `Crosses midnight — ends ${new Date(endTime).toLocaleString("en-US", {
+          ? `Crosses midnight — ends ${clock.dateTime(endTime, {
               weekday: "short",
               month: "short",
               day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
             })}`
           : null,
       ]
@@ -186,7 +186,7 @@ function EmptySlot(props: EmptySlotProps) {
       key={`key-${currentHour}`}
       role="button"
       tabIndex={-1}
-      aria-label={`Create a shift at ${currentHour}:00`}
+      aria-label={`Create a shift at ${clock.hour(currentHour)}`}
       className={cn(
         "group flex h-full cursor-pointer items-center justify-center",
         "hover:bg-foreground/[0.04]"

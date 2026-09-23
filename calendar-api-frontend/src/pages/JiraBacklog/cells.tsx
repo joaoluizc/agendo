@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from "react";
 import { AlertCircle, AlertTriangle, Loader2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import { ColumnDesc, JiraIssue, JiraTableMeta, MRR_PROBLEM_STAGES } from "./types";
 import { extractIssueKey } from "./api";
 import { urgencyCellClasses } from "./urgency";
@@ -97,6 +98,7 @@ function UrgencyDisplay({ issue }: CellProps) {
 }
 
 function ZdDisplay({ issue }: CellProps) {
+  const { clock } = useTimeFormat();
   if (issue._zdBusy) return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
   if (issue._zdError)
     return (
@@ -104,7 +106,9 @@ function ZdDisplay({ issue }: CellProps) {
         <AlertCircle className="h-3.5 w-3.5" /> err
       </span>
     );
-  const fetchedAt = issue.zdCountFetchedAt ? new Date(issue.zdCountFetchedAt).toLocaleString() : null;
+  const fetchedAt = issue.zdCountFetchedAt
+    ? new Date(issue.zdCountFetchedAt).toLocaleString(undefined, { hourCycle: clock.hourCycle })
+    : null;
   return (
     <span className="tabular-nums" title={fetchedAt ? `Fetched ${fetchedAt}` : undefined}>
       {issue.zdCount == null ? "—" : issue.zdCount}
@@ -119,6 +123,7 @@ const mrrFormatter = new Intl.NumberFormat("en-US", {
 });
 
 function MrrDisplay({ issue }: CellProps) {
+  const { clock } = useTimeFormat();
   if (issue._mrrBusy) return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
   if (issue._mrrError)
     return (
@@ -128,7 +133,9 @@ function MrrDisplay({ issue }: CellProps) {
     );
   if (issue.mrr == null) return dash;
   const problems = (issue.mrrTrace || []).filter((t) => MRR_PROBLEM_STAGES.has(t.stage));
-  const fetchedAt = issue.mrrFetchedAt ? new Date(issue.mrrFetchedAt).toLocaleString() : null;
+  const fetchedAt = issue.mrrFetchedAt
+    ? new Date(issue.mrrFetchedAt).toLocaleString(undefined, { hourCycle: clock.hourCycle })
+    : null;
   const accountCount = issue.mrrAccounts?.length || 0;
   const title = [
     fetchedAt ? `Fetched ${fetchedAt}` : null,

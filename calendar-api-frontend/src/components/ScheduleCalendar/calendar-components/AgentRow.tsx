@@ -22,12 +22,13 @@ import {
   columnStart,
   dayBounds,
   packLanes,
-  prettyGCalTime,
   scheduledHours,
+  focusedDefaultPosition,
 } from "../scheduleUtils";
 import { cn } from "@/lib/utils";
 import { useSchedule } from "@/providers/useSchedule";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { useTimeFormat } from "@/utils/timeFormat";
 import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
 import {
   DAY_HOURS,
@@ -35,8 +36,6 @@ import {
   HourRange,
   clampRange,
   formatDuration,
-  formatHour,
-  formatRange,
 } from "../shift-dialogs/shiftPlanning";
 
 type AgentRowProps = {
@@ -112,8 +111,12 @@ const AgentRow = ({
     isBulkSelectorActive,
     bulkSelectedShifts,
     setBulkSelectedShifts,
+    selectedShiftIds,
+    focusedPositionIds,
   } = useSchedule();
+
   const { type: userType } = useUserSettings();
+  const { clock } = useTimeFormat();
 
   /** The range being drawn by a press-and-drag on empty space, while the pointer is down. */
   const [createDrag, setCreateDrag] = useState<HourRange | null>(null);
@@ -164,8 +167,8 @@ const AgentRow = ({
     () => new Set(shifts.map((shift) => shift._id)),
     [shifts]
   );
-  const selectedInRow = bulkSelectedShifts.filter((shift) =>
-    rowShiftIds.has(shift._id)
+  const selectedInRow = shifts.filter((shift) =>
+    selectedShiftIds.has(shift._id)
   ).length;
   const allRowSelected = shifts.length > 0 && selectedInRow === shifts.length;
   const someRowSelected = selectedInRow > 0 && !allRowSelected;
@@ -177,12 +180,9 @@ const AgentRow = ({
       );
       return;
     }
-    const alreadySelected = new Set(
-      bulkSelectedShifts.map((shift) => shift._id)
-    );
     setBulkSelectedShifts([
       ...bulkSelectedShifts,
-      ...shifts.filter((shift) => !alreadySelected.has(shift._id)),
+      ...shifts.filter((shift) => !selectedShiftIds.has(shift._id)),
     ]);
   };
 
@@ -452,7 +452,7 @@ const AgentRow = ({
             }}
           >
             <span className="truncate text-[10px] font-semibold tabular-nums">
-              {formatHour(ghost.start)}
+              {clock.hour(ghost.start)}
               {ghost.label ? ` · ${ghost.label}` : ""}
             </span>
           </div>
@@ -470,7 +470,7 @@ const AgentRow = ({
             }}
           >
             <span className="truncate text-[10px] font-semibold tabular-nums">
-              {formatRange(createDrag)} ·{" "}
+              {clock.hourRange(createDrag)} ·{" "}
               {formatDuration(createDrag.end - createDrag.start)}
             </span>
           </div>
@@ -524,7 +524,12 @@ const AgentRow = ({
               <HoverCard key={event.id}>
                 <HoverCardTrigger asChild>
                   <div
-                    className="pointer-events-auto mx-[2px] flex items-center overflow-hidden truncate rounded-[4px] border border-border bg-muted px-1 text-[9.5px] font-medium leading-none text-muted-foreground"
+                    className={cn(
+                      "pointer-events-auto mx-[2px] flex items-center overflow-hidden truncate rounded-[4px] border border-border bg-muted px-1 text-[9.5px] font-medium leading-none text-muted-foreground",
+                      // A Google event is on no coverage meter, so a focused meter dims
+                      // it like any other off-meter shift.
+                      focusedPositionIds && "opacity-40"
+                    )}
                     title={event.summary}
                     style={{
                       gridColumnStart: columnStart(item.start),
@@ -552,7 +557,7 @@ const AgentRow = ({
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CalendarIcon className="h-4 w-4" />
                         <span>
-                          {prettyGCalTime(
+                          {clock.eventRange(
                             event.start.dateTime,
                             event.end.dateTime
                           )}
@@ -600,6 +605,11 @@ const AgentRow = ({
           selectedDate={selectedDate}
           initialUserId={String(user.id)}
           initialRange={createRange}
+          // With a coverage meter focused, a new shift starts on that meter's position.
+          initialPositionId={focusedDefaultPosition(
+            [...positionsById.values()],
+            focusedPositionIds
+          )}
         />
       )}
     </div>

@@ -10,13 +10,12 @@ import { CalendarIcon, CalendarSearch, RepeatIcon } from "lucide-react";
 import { Markup } from "interweave";
 import {
   getShifts,
-  prettyTimeRange,
   calculateGridColumnSpan,
   calculateGridColumnStart,
   getGCalendarEvents,
-  prettyGCalTime,
   calculateShiftOverlapAmount,
 } from "./scheduleUtils.ts";
+import { useTimeFormat } from "@/utils/timeFormat.ts";
 import { CalendarUser } from "@/types/gCalendarTypes.ts";
 import {
   HoverCard,
@@ -73,6 +72,7 @@ const SlingSchedule = () => {
   const { user } = useUser();
   const visitorEmail = user?.emailAddresses[0]?.emailAddress || "";
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
+  const { clock } = useTimeFormat();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -233,7 +233,7 @@ const SlingSchedule = () => {
                         }}
                       >
                         <div className="font-bold truncate">
-                          {prettyTimeRange(shift.dtstart, shift.dtend)}
+                          {clock.range(shift.dtstart, shift.dtend)}
                         </div>
                         <div className="truncate">{shift?.position?.name}</div>
                       </div>
@@ -299,7 +299,7 @@ const SlingSchedule = () => {
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <CalendarIcon className="w-4 h-4" />
                                     <span>
-                                      {prettyGCalTime(
+                                      {clock.eventRange(
                                         event.start.dateTime,
                                         event.end.dateTime
                                       )}

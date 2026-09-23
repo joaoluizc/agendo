@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import {
   DAY_HOURS,
   HOUR_STEP,
   HourRange,
   StripSeries,
   clampRange,
-  formatHour,
 } from "./shiftPlanning";
 
 type CoverageStripProps = {
@@ -69,6 +69,7 @@ const CoverageStrip = ({
   height = 44,
   showKey,
 }: CoverageStripProps) => {
+  const { clock } = useTimeFormat();
   const duration = range.end - range.start;
   const scale = (value: number) => Math.round((value / series.peak) * height);
   const interactive = Boolean(onRangeChange);
@@ -256,7 +257,7 @@ const CoverageStrip = ({
                 </>
               );
 
-              const title = `${formatHour(hour)} · ${total} scheduled · target ${target}${
+              const title = `${clock.hour(hour)} · ${total} scheduled · target ${target}${
                 draftBase > 0 ? ` · ${draftBase} unpublished` : ""
               }${delta > 0 ? ` · ${delta} from this change` : ""}`;
               const className = cn(
@@ -269,7 +270,7 @@ const CoverageStrip = ({
                   key={hour}
                   type="button"
                   title={title}
-                  aria-label={`Move the shift to ${formatHour(hour)}`}
+                  aria-label={`Move the shift to ${clock.hour(hour)}`}
                   className={cn(className, "cursor-pointer")}
                   onClick={() => onRangeChange(moveTo(hour))}
                 >
@@ -330,13 +331,15 @@ const CoverageStrip = ({
           </div>
         </div>
 
+        {/* A tick is wider than its hour cell in 12-hour form (`12 PM` against ~12px), so it
+            runs on into the five empty cells after it rather than wrapping. */}
         <div className="mt-1 flex">
           {Array.from({ length: DAY_HOURS }, (_, hour) => (
             <div
               key={hour}
-              className="min-w-0 flex-1 text-[9px] font-semibold tabular-nums text-muted-foreground"
+              className="min-w-0 flex-1 whitespace-nowrap text-[9px] font-semibold tabular-nums text-muted-foreground"
             >
-              {hour % 6 === 0 ? String(hour).padStart(2, "0") : ""}
+              {hour % 6 === 0 ? clock.headerHour(hour) : ""}
             </div>
           ))}
         </div>

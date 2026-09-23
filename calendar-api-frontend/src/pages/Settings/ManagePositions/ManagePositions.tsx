@@ -288,7 +288,7 @@ export default function ManagePositions() {
   });
 
   return (
-    <Card>
+    <Card className="scroll-mt-20" id="manage-positions">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>

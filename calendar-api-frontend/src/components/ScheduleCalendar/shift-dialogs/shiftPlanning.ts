@@ -66,37 +66,21 @@ export const clampRange = (
 };
 
 /**
- * `13` -> `13:00`, `13.5` -> `13:30`, `24` -> `24:00`, `25` -> `01:00`.
- *
- * Hour 24 stays 24 rather than wrapping to 00: a shift labelled `22:00–00:00` reads as
- * ending before it started. Same reasoning as `formatSlotTime` in scheduleUtils.
- *
- * Past 24 it does wrap, because those are real next-day clock times on an overnight
- * shift — `21:00–01:00` is how people write it, and `21:00–25:00` is not. Which day the
- * end falls on is carried by the field's own label, not smuggled into the number.
- */
-export const formatHour = (hour: number): string => {
-  const onClock = hour > DAY_HOURS ? hour - DAY_HOURS : hour;
-  const whole = Math.floor(onClock);
-  const minutes = Math.round((onClock - whole) * 60);
-  return `${String(whole).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-};
-
-export const formatRange = (range: HourRange): string =>
-  `${formatHour(range.start)}–${formatHour(range.end)}`;
-
-/**
  * A typed time, as fractional hours — or `null` when it can't be read.
  *
  * Stepping a 9-hour shift into place is a lot of clicks, so the fields accept text too.
  * Deliberately forgiving about how a time is written and strict about the result:
  *
- *   `14` · `14:30` · `1430` · `930` · `2.30` · `2:30pm` · `9pm` · `24:00`
+ *   `14` · `14:30` · `1430` · `930` · `2.30` · `2:30pm` · `9:30 PM` · `9pm` · `24:00`
  *
- * Minutes snap to the nearest half hour, because that is the whole resolution of the
- * grid and of `Shift` placement — `9:45` becomes `10:00` rather than being rejected.
- * A bare `0` in the *end* field reads as midnight-at-the-end (hour 24), since `09:00`
- * to `00:00` is how people write an overnight close.
+ * Both clocks are accepted whichever one the field displays in (see `utils/timeFormat`):
+ * a field showing `9:30 PM` reads back what it shows, and typing `21:30` into it still
+ * works. `clock.hour` writes hour 24 as `24:00` or `12:00 AM`, and both read back as the
+ * end of the day in the *end* field.
+ *
+ * Minutes snap to the nearest quarter hour, `HOUR_STEP` — `9:40` becomes `9:45` rather
+ * than being rejected. A bare `0` in the *end* field reads as midnight-at-the-end
+ * (hour 24), since `09:00` to `00:00` is how people write an overnight close.
  *
  * Returning `null` rather than a sentinel is the point: the old dialogs wrote the literal
  * string "Invalid date" into the field and toasted, which lost what you had typed *and*

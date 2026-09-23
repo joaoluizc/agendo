@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import { JiraIssue } from "./types";
 import { isJiraStatusStale, relativeToNow } from "./dates";
 
@@ -17,11 +18,12 @@ import { isJiraStatusStale, relativeToNow } from "./dates";
  * the column never widens to fit its contents.
  */
 export function JiraStatusChip({ issue, compact = false }: { issue: JiraIssue; compact?: boolean }) {
+  const { clock } = useTimeFormat();
   if (!issue.jiraStatus) return null;
 
   return (
     <span
-      title={jiraStatusTitle(issue)}
+      title={jiraStatusTitle(issue, clock.hourCycle)}
       className={cn(
         "inline-flex max-w-full items-center rounded font-medium",
         compact ? "gap-0.5 px-1 py-0 text-[10px] leading-4" : "gap-1 px-2 py-0.5 text-xs",
@@ -61,8 +63,11 @@ export function jiraStatusChipClasses(value: string): string {
  * too small to show any of that inline. Mirrors the `Fetched <date>` convention the Zendesk and
  * MRR cells use.
  */
-function jiraStatusTitle(issue: JiraIssue): string {
+function jiraStatusTitle(
+  issue: JiraIssue,
+  hourCycle: Intl.DateTimeFormatOptions["hourCycle"],
+): string {
   const at = issue.jiraStatusFetchedAt;
   if (!at) return `Jira status: ${issue.jiraStatus} — sync time unknown`;
-  return `Jira status: ${issue.jiraStatus} — synced ${relativeToNow(at)} (${new Date(at).toLocaleString()})`;
+  return `Jira status: ${issue.jiraStatus} — synced ${relativeToNow(at)} (${new Date(at).toLocaleString(undefined, { hourCycle })})`;
 }

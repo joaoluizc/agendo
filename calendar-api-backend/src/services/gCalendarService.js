@@ -133,12 +133,25 @@ const addEvent = async (user, event, requestId = "req-id-nd") => {
   return addedEvent.data;
 };
 
-const addEvent_cl = async (user, event, requestId = "req-id-nd") => {
+/**
+ * @param {object} [preloadedTokens] The user's Google tokens, when the caller already
+ *   fetched them for a batch. `undefined` means "look them up"; `null` is a real answer
+ *   (no Google connection) and is passed through so the insert fails loudly.
+ */
+const addEvent_cl = async (
+  user,
+  event,
+  requestId = "req-id-nd",
+  preloadedTokens = undefined,
+) => {
   console.log(
     `[${requestId}] - Adding event to user ${user.firstName}: `,
     JSON.stringify(event),
   );
-  const tokens = await userService.getGoogleOAuthTokenByClerkId(user.id);
+  const tokens =
+    preloadedTokens === undefined
+      ? await userService.getGoogleOAuthTokenByClerkId(user.id)
+      : preloadedTokens;
   const oauth2Client = getOAuth2Client(tokens);
   const calendar = google.calendar({ version: "v3", auth: oauth2Client });
   const addedEvent = await new Promise((resolve, reject) => {
@@ -683,16 +696,31 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
   }
 };
 
+/**
+ * Put one agendo shift on its agent's calendar.
+ *
+ * `options.context` carries lookups a batch caller has already done for this agent —
+ * `{ clerkUser, mongoUser, tokens, positionsById }` — so publishing a full day does not
+ * fetch the same Clerk user, OAuth token, Mongo user and position two or three times per
+ * shift. Anything missing from it is looked up as before.
+ *
+ * `options.throwOnError` rethrows a failed insert instead of returning nothing. Without
+ * it, "Google refused" and "this agent has the position's sync switched off" both come
+ * back empty, and callers reported the failure as a success.
+ */
 const addEventForShift = async (
   userId,
   shift,
   requestId = "req-id-nd",
   enforcedObjectIds = null,
+  { context = null, throwOnError = false } = {},
 ) => {
   console.log(`[${requestId}] - Starting addEventForShift flow`);
 
-  const user = await userService.getClerkUserById(userId);
-  if (!(await shouldSyncShift(user, shift, requestId, enforcedObjectIds))) {
+  const user = context?.clerkUser ?? (await userService.getClerkUserById(userId));
+  if (
+    !(await shouldSyncShift(user, shift, requestId, enforcedObjectIds, context))
+  ) {
     console.log(
       `[${requestId}] - Shift not eligible to be synced. Ending addEventForShift flow.`,
     );
@@ -703,23 +731,28 @@ const addEventForShift = async (
   let addedEvent = null;
   try {
     // Get MongoDB user for consistent database tracking
-    const mongoUser = await userService.findUserByClerkId(user.id);
+    const mongoUser = context
+      ? context.mongoUser
+      : await userService.findUserByClerkId(user.id);
     if (!mongoUser) {
       console.error(
         `[${requestId}] - MongoDB user not found for Clerk ID ${user.id}, cannot sync shift`,
       );
+      if (throwOnError) throw new Error(`No agendo user for ${user.id}`);
       return;
     }
 
     // Resolve the user's chosen Google Calendar color for this shift's position
     // (user-level default -> per-position choice -> none). Read from the Mongo user,
     // the same source the settings panel writes.
-    const position = await positionService.getPositionById(shift.positionId);
+    const position =
+      context?.positionsById?.get(String(shift.positionId)) ??
+      (await positionService.getPositionById(shift.positionId));
     const colorId = positionService.resolveEventColorId(mongoUser, position);
     // transform shift into calendar event
-    event = await newShiftToEvent(shift, colorId);
+    event = await newShiftToEvent(shift, colorId, position);
     // add event to GCal
-    addedEvent = await addEvent_cl(user, event, requestId);
+    addedEvent = await addEvent_cl(user, event, requestId, context?.tokens);
     // add event to addedGCalEvents collection with MongoDB user ID for consistency
     const userForTracking = { ...user, id: mongoUser.id };
     await addedGCalEventsService.addEvents_cl(userForTracking, [addedEvent], requestId);
@@ -729,6 +762,7 @@ const addEventForShift = async (
       `[${requestId}] - Error adding event to calendar for shift ${shift._id}: `,
       e,
     );
+    if (throwOnError) throw e;
   }
 
   console.log(`[${requestId}] - Ending addEventForShift flow`);
@@ -741,6 +775,7 @@ async function shouldSyncShift(
   shift,
   requestId = "req-id-nd",
   enforcedObjectIds = null,
+  context = null,
 ) {
   // A draft is a plan, not a commitment: it never reaches an agent's calendar. Publishing
   // is what syncs it (see shiftService.publishShifts), so this returns false until then.
@@ -784,8 +819,12 @@ async function shouldSyncShift(
   // Sling positionId, so positionService.prefersSync owns that bridge. It is the
   // same predicate positionService.getSyncRulesForUser reports to admins, so what
   // the edit dialog promises and what this gate does cannot drift apart.
-  const mongoUser = await userService.findUserByClerkId(clerkUser.id);
-  const position = await positionService.getPositionById(shift.positionId);
+  const mongoUser = context
+    ? context.mongoUser
+    : await userService.findUserByClerkId(clerkUser.id);
+  const position =
+    context?.positionsById?.get(shiftPositionId) ??
+    (await positionService.getPositionById(shift.positionId));
   const shouldSync = positionService.prefersSync(mongoUser, position);
 
   console.log(

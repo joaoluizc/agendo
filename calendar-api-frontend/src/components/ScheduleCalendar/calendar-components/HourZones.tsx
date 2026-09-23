@@ -8,6 +8,7 @@ import type React from "react";
  * hour to put them on. This answers that without leaving the grid.
  */
 
+import type { Clock } from "@/utils/timeFormat";
 import {
   BrazilFlag,
   IsraelFlag,
@@ -35,7 +36,10 @@ export const ZONES = [
 export type ZoneReading = {
   label: string;
   Flag: (props: { className?: string }) => React.ReactElement;
-  /** Always `HH:MM` — a shift can start at 15, 30 or 45 past, so minutes always show. */
+  /**
+   * Always with minutes (`14:30` / `2:30 PM`) — a shift can start at 15, 30 or 45 past, and
+   * half-hour zones exist.
+   */
   time: string;
   /** `+1` when that zone is already on the next day, `-1` when still on the previous. */
   dayShift: number;
@@ -54,6 +58,24 @@ const dayNumber = (date: Date, zone: string) =>
   );
 
 /**
+ * The zone's hour and minute as numbers, written by `clock` like every other time.
+ *
+ * `h23` rather than `hour12: false`: some engines map the latter to `h24` and read midnight
+ * as `24:00`.
+ */
+const clockIn = (instant: Date, zone: string, clock: Clock) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: zone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const part = (type: "hour" | "minute") =>
+    Number(parts.find((entry) => entry.type === type)?.value ?? 0);
+  return clock.hm(part("hour"), part("minute"));
+};
+
+/**
  * Read `instant` in each region.
  *
  * The day shift is computed by comparing calendar dates in each zone rather than by
@@ -62,18 +84,13 @@ const dayNumber = (date: Date, zone: string) =>
  * sides are formatted as YYYYMMDD and subtracted, which is exact for the ±1 day this can
  * ever produce.
  */
-export const readZones = (instant: Date): ZoneReading[] => {
+export const readZones = (instant: Date, clock: Clock): ZoneReading[] => {
   const localDay = dayNumber(instant, Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   return ZONES.map(({ label, zone, Flag }) => ({
     label,
     Flag,
-    time: new Intl.DateTimeFormat("en-GB", {
-      timeZone: zone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(instant),
+    time: clockIn(instant, zone, clock),
     // Dates are adjacent by construction — one instant cannot be two days apart across
     // inhabited zones — so a plain difference of the YYYYMMDD numbers is not meaningful,
     // but its sign is.

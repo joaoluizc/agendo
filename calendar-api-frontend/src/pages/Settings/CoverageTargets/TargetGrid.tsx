@@ -7,6 +7,7 @@ import {
   localZoneLabel,
   summarizeTargets,
 } from "@/utils/coverageTargets";
+import { useTimeFormat } from "@/utils/timeFormat";
 import { cn } from "@/lib/utils";
 
 type TargetGridProps = {
@@ -30,6 +31,7 @@ const WEEKDAYS = [1, 2, 3, 4, 5];
  */
 const TargetGrid = ({ local, color, onChange }: TargetGridProps) => {
   const { total, peak } = summarizeTargets(local);
+  const { clock } = useTimeFormat();
 
   const setCell = (day: number, hour: number, value: number) => {
     const next = local.map((row) => [...row]);
@@ -101,9 +103,9 @@ const TargetGrid = ({ local, color, onChange }: TargetGridProps) => {
           {Array.from({ length: HOURS_PER_DAY }, (_, hour) => (
             <div
               key={`head-${hour}`}
-              className="border-b border-border py-[7px] text-center text-[10px] font-semibold tabular-nums text-muted-foreground"
+              className="whitespace-nowrap border-b border-border py-[7px] text-center text-[10px] font-semibold tabular-nums text-muted-foreground"
             >
-              {String(hour).padStart(2, "0")}
+              {clock.headerHour(hour)}
             </div>
           ))}
 
@@ -124,8 +126,8 @@ const TargetGrid = ({ local, color, onChange }: TargetGridProps) => {
                   <button
                     key={`${label}-${hour}`}
                     type="button"
-                    aria-label={`${label} ${String(hour).padStart(2, "0")}:00 — ${value} agents`}
-                    title={`${label} ${String(hour).padStart(2, "0")}:00 — ${value} agents`}
+                    aria-label={`${label} ${clock.hour(hour)} — ${value} agents`}
+                    title={`${label} ${clock.hour(hour)} — ${value} agents`}
                     className={cn(
                       "h-[28px] border-l border-border-subtle text-[11px] font-semibold tabular-nums",
                       day < 6 && "border-b border-border",

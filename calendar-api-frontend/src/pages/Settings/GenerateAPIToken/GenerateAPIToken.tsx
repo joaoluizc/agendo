@@ -37,7 +37,7 @@ function GenerateAPIToken() {
     };
 
     return (
-      <Card className="" id="generate-api-token">
+      <Card className="scroll-mt-20" id="generate-api-token">
         <CardHeader>
           <CardTitle>Generate API Token</CardTitle>
           <CardDescription>

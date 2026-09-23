@@ -1,7 +1,12 @@
 import positionService from "../services/positionService.js";
 
-export async function newShiftToEvent(shift, colorId) {
-  const positionName = await positionService.getPositionById(shift.positionId);
+/**
+ * @param {object} [position] The shift's position doc, when the caller already has it —
+ *   the bulk publish path loads every position once rather than once per shift.
+ */
+export async function newShiftToEvent(shift, colorId, position = null) {
+  const positionName =
+    position ?? (await positionService.getPositionById(shift.positionId));
   console.log("positionName: ", JSON.stringify(positionName));
 
   const event = {
