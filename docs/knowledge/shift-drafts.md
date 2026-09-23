@@ -2,7 +2,7 @@
 
 _The draft/published lifecycle: what a draft is excluded from, and the one filter rule that matters._
 
-_Last updated: 2026-09-14_
+_Last updated: 2026-09-23_
 
 An agendo shift is a **draft** until an admin publishes it. Creating one no longer syncs
 it to anybody's calendar — publishing does. This is the first real step toward agendo
@@ -229,6 +229,15 @@ second set of drafts on top of the first.
 Copies always land as drafts themselves, whatever the source was, and never inherit its
 `runId`, `notes`, or publish stamps.
 
+The same rule applies to the dialog's own reads. `fetchShiftsBetween` (the busy-day
+markers and the source-day counts) asks for `includeDrafts=1`; it used not to, so a day
+holding only drafts was marked free and `skip` then refused it server-side.
+
+The source day is choosable ("Copy from" opens a calendar) and defaults to the day on
+screen. The agent chips take the schedule's location flags: picking a flag narrows the list
+to that location *and* selects exactly its agents, and the chips then untick individuals —
+the same `useAgentLocations` lookup as the grid, so "who is in APAC" cannot disagree.
+
 ## A missing status means published
 
 Every shift written before this field existed has no `status` at all, and those are real,
@@ -344,8 +353,8 @@ first pick, instead of opening the edit dialog — only the first click needs th
 Both keys are accepted rather than sniffing the platform: Ctrl is the multi-select modifier
 on Windows and Linux, Cmd is on macOS, and Ctrl there also raises the context menu.
 
-Select-shifts mode has four actions: clear, publish (`p`), unpublish (`u`), delete
-(`delete`). Publish and unpublish send only the applicable half of the selection — drafts
+Select-shifts mode has five actions: select all (`ctrl A`), clear, publish (`p`), unpublish
+(`u`), delete (`delete`). Publish and unpublish send only the applicable half of the selection — drafts
 to publish, published shifts to unpublish — so a mixed selection does the sensible thing,
 and each button disables when the selection holds nothing of its kind.
 
@@ -363,10 +372,66 @@ Two rules, both learned the hard way:
   "Done selecting" clears it for the same reason: once the checkboxes are gone, a retained
   selection is invisible and impossible to deselect.
 
+**Select all takes what the grid draws** — `visibleShifts`, published to the provider by
+`ScheduleCalendar` — never the unfiltered day, so a location filter narrows it and a hidden
+agent's shifts are never swept in. Row checkboxes derive from the selection, so they show
+checked and one agent can be taken back out.
+
+**Ctrl/Cmd+A and holding Ctrl/Cmd work outside select mode** (`useSelectShortcuts`, mounted
+by `ScheduleCalendar` for admins). Ctrl/Cmd+A selects all and enters the mode. Holding the
+modifier alone for 200ms enters it as a *peek*: releasing leaves again if nothing was
+selected, and stays if something was — for the invisible-selection reason above. Both stand
+down in inputs and while any dialog is open, so text selection still works there. Blur,
+a hidden tab and Ctrl+wheel (zoom) count as a release; any other key cancels a pending peek,
+so Ctrl+C or Ctrl+P never flash the toolbar.
+
 The `p`/`u` hotkeys carry a guard the older `esc`/`delete` ones do not: they bail out when
 the event target is an input, textarea, select or contenteditable, and on any modifier
 combination. A bare printable letter would otherwise fire while being typed into the agent
 search box, and `Ctrl+P` has to stay print.
+
+## Coverage focus
+
+Clicking a meter's name in its coverage row focuses it: shifts on other positions (and the
+Google events under-lane) dim to 28% and desaturate, the other meter rows fade, a banner says
+what is going on, and Escape or clicking the name again clears it. New shifts default to the
+meter's most recently used position (`focusedDefaultPosition`).
+
+**Dimmed, not hidden, and every row stays.** The use case is a sick day: "Ana is out, where
+does Tickets break, and who can take it?" Hiding off-meter shifts makes a busy agent look
+free, so the obvious next move — drawing a Tickets shift on them — lands on top of a meeting
+nobody could see. Hiding rows would also remove the people you are trying to reassign to.
+
+The coverage hover card lists who covers each half hour; `buildCoverageSeries` now returns
+the covering agents per slot, with `draftOnly` marking the ones counted only through a draft
+(the same agents `draftCounts` counts).
+
+## Bulk work vs. the proxy timeout
+
+The deployed frontend reaches the API through Vercel's rewrite to Render, which gives up on
+a slow response long before Render does. The handler keeps going; the browser gets a 504.
+That is how publishing 92 drafts put every event on Google Calendar while the bar kept
+saying "92 unpublished": one request doing ~10 serial Clerk/Mongo/Google round-trips per
+shift, and a bar that only refetched on success.
+
+What now keeps a full day inside the limit, and honest when it is not:
+
+- **The client batches.** Publish/unpublish go 10 ids per request, two in flight
+  (`runInBatches`); duplicate goes one target day per request. Both show progress.
+- **A batch with no answer is "unconfirmed", not failed** — in the incident, every "failed"
+  shift had published. The caller always refetches afterwards, quietly (no skeleton), and a
+  late answer for a day the user has left is dropped (`latestFetchKey`).
+- **Shifts and Google events load independently** (`Promise.allSettled`); a failing events
+  call used to discard perfectly good shifts.
+- **The server does bulk writes**: one `updateMany` to publish/unpublish (the `status`
+  filter stops two concurrent publishes both syncing a shift), one `insertMany` per copied
+  day, one `deleteMany` for a replaced day.
+- **Sync loads each agent once** — Clerk user, OAuth token, Mongo user, positions — and runs
+  four agents at a time, each agent's own shifts in order (`addEventForShift`'s `context`).
+- **A refused insert is an error.** `addEventForShift` used to return nothing both when
+  Google refused and when the agent had the position switched off, so failures were
+  reported as successes; the publish paths now pass `throwOnError`. Failed event deletes on
+  unpublish are reported per shift too.
 
 ## Position picker order
 
