@@ -23,6 +23,7 @@ import { useUserSettings } from "@/providers/useUserSettings.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { useSchedule } from "@/providers/useSchedule.tsx";
 import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
+import { useAgentLocations } from "@/hooks/useAgentLocations.ts";
 import { FILTERABLE_LOCATIONS } from "./calendar-components/LocationFilter.tsx";
 
 /** Row height of a single-lane agent row — the skeleton matches it so nothing jumps. */
@@ -40,7 +41,7 @@ const Schedule = () => {
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
-  const { type, allUsers, allPositions, coverageMeters, locations } =
+  const { type, allUsers, allPositions, coverageMeters } =
     useUserSettings();
 
   /**
@@ -54,39 +55,13 @@ const Schedule = () => {
     ...FILTERABLE_LOCATIONS,
   ]);
 
-  /** clerkId -> location name, from the location documents' own assignment lists. */
-  const locationByUserId = useMemo(() => {
-    const map = new Map<string, string>();
-    locations.forEach((location) =>
-      location.assignedUsers.forEach((userId) =>
-        map.set(String(userId), location.name)
-      )
-    );
-    return map;
-  }, [locations]);
+  const { agentsByLocation, filterByLocations } = useAgentLocations();
 
-  const agentsByLocation = useMemo(() => {
-    const tally = new Map<string, number>();
-    allUsers.forEach((user) => {
-      const name = locationByUserId.get(String(user.id));
-      if (name) tally.set(name, (tally.get(name) ?? 0) + 1);
-    });
-    return tally;
-  }, [allUsers, locationByUserId]);
-
-  /**
-   * The agents the grid draws. An agent with no location is only ever shown when nothing
-   * is filtered out — a new hire is invisible under a specific flag rather than appearing
-   * under one they do not belong to.
-   */
-  const visibleUsers = useMemo(() => {
-    const showing = new Set(locationFilter);
-    if (FILTERABLE_LOCATIONS.every((name) => showing.has(name))) return allUsers;
-    return allUsers.filter((user) => {
-      const name = locationByUserId.get(String(user.id));
-      return name ? showing.has(name) : false;
-    });
-  }, [allUsers, locationByUserId, locationFilter]);
+  /** The agents the grid draws — see `useAgentLocations` for the no-location rule. */
+  const visibleUsers = useMemo(
+    () => filterByLocations(allUsers, locationFilter),
+    [allUsers, filterByLocations, locationFilter]
+  );
   /**
    * The day's shifts, narrowed to the agents the grid actually draws.
    *

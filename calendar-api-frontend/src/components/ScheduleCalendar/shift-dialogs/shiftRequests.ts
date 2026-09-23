@@ -187,7 +187,12 @@ export const unpublishShifts = async (
   };
 };
 
-/** Every shift between two instants, ungrouped. Used to find days that already have shifts. */
+/**
+ * Every shift between two instants, ungrouped, drafts included. Used to find days that
+ * already have shifts and to count a copy's source day — both of which must see drafts,
+ * because a day that was just built is entirely draft (see the duplicate-day trap in
+ * docs/knowledge/shift-drafts.md). The API only honours `includeDrafts` for an admin.
+ */
 export const fetchShiftsBetween = async (
   from: Date,
   to: Date
@@ -195,12 +200,108 @@ export const fetchShiftsBetween = async (
   const startTime = from.toISOString();
   const endTime = to.toISOString();
   const response = await fetch(
-    `/api/shift/range?startTime=${startTime}&endTime=${endTime}`,
+    `/api/shift/range?startTime=${startTime}&endTime=${endTime}&includeDrafts=1`,
     { method: "GET", credentials: "include" }
   );
   if (!response.ok) throw new Error("Failed to fetch shifts");
   const payload = await response.json();
   return Array.isArray(payload) ? payload : [];
+};
+
+/**
+ * How big one publish/unpublish request is allowed to be.
+ *
+ * Each shift costs the API several serial Clerk, Mongo and Google round-trips, and the
+ * whole request sits behind Vercel's rewrite to Render, which gives up long before a full
+ * day finishes. Publishing 92 drafts in one request is how the UI once reported a failure
+ * while every event was landing in Google behind it: the server kept going, the proxy
+ * returned a 504, and the grid was never told. Small requests keep each one well inside
+ * that limit and let the button show real progress.
+ */
+export const STATUS_BATCH_SIZE = 10;
+/** Requests in flight at once. Two keeps the API busy without stacking Clerk calls. */
+const STATUS_BATCH_CONCURRENCY = 2;
+
+export type BatchProgress = { done: number; total: number };
+
+/**
+ * Run `send` over `ids` in chunks, a few at a time, and fold the results together.
+ *
+ * A chunk that fails outright does not stop the others: its ids are reported as failed
+ * and the rest carry on, because the alternative — stopping halfway — leaves exactly the
+ * half-published day the batching exists to avoid. The caller refetches afterwards either
+ * way, so the grid shows what the server actually holds.
+ */
+const runInBatches = async <R>(
+  ids: string[],
+  send: (chunk: string[]) => Promise<R>,
+  onProgress?: (progress: BatchProgress) => void
+): Promise<{ results: R[]; failed: { shiftId: string; message: string }[] }> => {
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += STATUS_BATCH_SIZE) {
+    chunks.push(ids.slice(index, index + STATUS_BATCH_SIZE));
+  }
+
+  const results: R[] = [];
+  const failed: { shiftId: string; message: string }[] = [];
+  let done = 0;
+  let next = 0;
+  onProgress?.({ done, total: ids.length });
+
+  const worker = async () => {
+    while (next < chunks.length) {
+      const chunk = chunks[next++];
+      try {
+        results.push(await send(chunk));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Request failed";
+        chunk.forEach((shiftId) => failed.push({ shiftId, message }));
+      }
+      done += chunk.length;
+      onProgress?.({ done, total: ids.length });
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(STATUS_BATCH_CONCURRENCY, chunks.length) }, worker)
+  );
+  return { results, failed };
+};
+
+/** `publishShifts` for any number of shifts — see `STATUS_BATCH_SIZE` for why. */
+export const publishShiftsInBatches = async (
+  shiftIds: string[],
+  onProgress?: (progress: BatchProgress) => void
+): Promise<PublishResult> => {
+  const { results, failed } = await runInBatches(shiftIds, publishShifts, onProgress);
+  const published = results.reduce((sum, result) => sum + result.published, 0);
+  const errors = [...results.flatMap((result) => result.errors ?? []), ...failed];
+  return {
+    message: `${published} shift${published === 1 ? "" : "s"} published`,
+    published,
+    alreadyPublished: results.reduce((sum, result) => sum + result.alreadyPublished, 0),
+    data: results.flatMap((result) => result.data),
+    errors: errors.length ? errors : undefined,
+    notFound: results.flatMap((result) => result.notFound ?? []),
+  };
+};
+
+/** `unpublishShifts` for any number of shifts. */
+export const unpublishShiftsInBatches = async (
+  shiftIds: string[],
+  onProgress?: (progress: BatchProgress) => void
+): Promise<UnpublishResult> => {
+  const { results, failed } = await runInBatches(shiftIds, unpublishShifts, onProgress);
+  const unpublished = results.reduce((sum, result) => sum + result.unpublished, 0);
+  const errors = [...results.flatMap((result) => result.errors ?? []), ...failed];
+  return {
+    message: `${unpublished} shift${unpublished === 1 ? "" : "s"} moved back to draft`,
+    unpublished,
+    alreadyDraft: results.reduce((sum, result) => sum + result.alreadyDraft, 0),
+    data: results.flatMap((result) => result.data),
+    errors: errors.length ? errors : undefined,
+    notFound: results.flatMap((result) => result.notFound ?? []),
+  };
 };
 
 /** Local-midnight-to-23:59 ISO bounds for a day, matching how the day view fetches. */
@@ -337,4 +438,52 @@ export const applyShiftChanges = ({
     : events;
 
   return { shifts: nextShifts, events: nextEvents };
+};
+
+/**
+ * `duplicateShifts`, one target day per request, in order.
+ *
+ * A five-day copy of a full roster used to be one request doing every insert for every
+ * day, which is the same shape that let a publish outlive the proxy timeout. One day per
+ * request bounds each call to a single day's work, lets the dialog say which day it is
+ * on, and means a failure names the day it hit instead of losing the whole run.
+ */
+export const duplicateShiftsByDay = async (
+  input: Parameters<typeof duplicateShifts>[0],
+  onProgress?: (progress: BatchProgress) => void
+): Promise<DuplicateResult> => {
+  const total = input.targetDates.length;
+  const days: DuplicateDayOutcome[] = [];
+  const errors: { date: string; message: string }[] = [];
+  let created = 0;
+  let replaced = 0;
+
+  onProgress?.({ done: 0, total });
+  for (const [index, targetDate] of input.targetDates.entries()) {
+    try {
+      const result = await duplicateShifts({ ...input, targetDates: [targetDate] });
+      created += result.created;
+      replaced += result.replaced;
+      days.push(...result.days);
+      errors.push(...(result.errors ?? []));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to duplicate";
+      days.push({ date: targetDate, status: "failed", created: 0 });
+      errors.push({ date: targetDate, message });
+    }
+    onProgress?.({ done: index + 1, total });
+  }
+
+  const copiedDays = days.filter((day) => day.status === "copied").length;
+  return {
+    message: created
+      ? `${created} shift${created === 1 ? "" : "s"} duplicated onto ${copiedDays} day${
+          copiedDays === 1 ? "" : "s"
+        }`
+      : "No shifts were duplicated",
+    created,
+    replaced,
+    days,
+    errors: errors.length ? errors : undefined,
+  };
 };
