@@ -1,9 +1,10 @@
 import AirDatepicker from "air-datepicker";
 import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   TRACK_MIN_PX,
+  firstShiftStart,
   getShifts,
   getGCalendarEvents,
   startOfLocalDay,
@@ -30,6 +31,29 @@ import { FILTERABLE_LOCATIONS } from "./calendar-components/LocationFilter.tsx";
 
 /** Row height of a single-lane agent row — the skeleton matches it so nothing jumps. */
 const SKELETON_ROW_HEIGHT = 32;
+
+/** One empty list for every row while events are hidden, so no row's lane memo is busted. */
+const NO_EVENTS: GCalEventWithGrid[] = [];
+
+const SHOW_EVENTS_KEY = "agendo.showCalendarEvents";
+
+/** Stored only while hidden, so a browser that never chose gets the default: shown. */
+const readShowCalendarEvents = () => {
+  try {
+    return localStorage.getItem(SHOW_EVENTS_KEY) !== "hidden";
+  } catch {
+    return true;
+  }
+};
+
+const storeShowCalendarEvents = (show: boolean) => {
+  try {
+    if (show) localStorage.removeItem(SHOW_EVENTS_KEY);
+    else localStorage.setItem(SHOW_EVENTS_KEY, "hidden");
+  } catch {
+    // Private windows and blocked storage: the choice still holds until a reload.
+  }
+};
 
 const Schedule = () => {
   const {
@@ -61,6 +85,25 @@ const Schedule = () => {
   const [locationFilter, setLocationFilter] = useState<string[]>([
     ...FILTERABLE_LOCATIONS,
   ]);
+
+  /**
+   * Whether each row also draws that agent's Google Calendar events — the toolbar's Google
+   * Calendar switch.
+   *
+   * Turning them off is for reading the shifts on their own: someone unsure when their shift
+   * is can drop the day's meetings and see where it falls. Meeting clashes stop showing while
+   * they are off, which is accepted — the shift dialogs never checked Google events anyway.
+   *
+   * Hidden means *not fetched*, not just not drawn: the events call is the heavy one (every
+   * agent's calendar, through the proxy), so hiding them also makes switching days faster.
+   * Rows lose their event lanes and shrink back to shift height.
+   *
+   * Persisted, unlike the location filter, because it is a way of working rather than a
+   * question asked of one day. The switch shows its own state, so it is never forgotten on.
+   */
+  const [showCalendarEvents, setShowCalendarEvents] = useState(
+    readShowCalendarEvents
+  );
 
   const { agentsByLocation, filterByLocations } = useAgentLocations();
 
@@ -97,11 +140,34 @@ const Schedule = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [focusedMeterId, isBulkSelectorActive]);
 
-  /** The agents the grid draws — see `useAgentLocations` for the no-location rule. */
-  const visibleUsers = useMemo(
-    () => filterByLocations(allUsers, locationFilter),
-    [allUsers, filterByLocations, locationFilter]
+  const positionsById = useMemo(
+    () => new Map(allPositions.map((position) => [String(position._id), position])),
+    [allPositions]
   );
+
+  /**
+   * The agents the grid draws — see `useAgentLocations` for the no-location rule — in the
+   * order their day starts, then by name. Agents with nothing starting today come last.
+   *
+   * Re-sorted whenever the day's shifts change, so moving an agent's first shift earlier
+   * moves their row up once it is saved. See `firstShiftStart` for what counts as a start.
+   */
+  const visibleUsers = useMemo(() => {
+    const startOf = (userId: string) =>
+      firstShiftStart(shifts[userId], selectedDate) ?? Infinity;
+    const nameOf = (user: { firstName?: string; lastName?: string }) =>
+      `${user.firstName ?? ""} ${user.lastName ?? ""}`;
+    const starts = new Map(
+      allUsers.map((currUser) => [String(currUser.id), startOf(currUser.id)])
+    );
+    return [...filterByLocations(allUsers, locationFilter)].sort(
+      (a, b) =>
+        // Infinity - Infinity is NaN, which is falsy, so two agents with no start fall
+        // through to their names like any other tie.
+        starts.get(String(a.id))! - starts.get(String(b.id))! ||
+        nameOf(a).localeCompare(nameOf(b))
+    );
+  }, [allUsers, filterByLocations, locationFilter, shifts, selectedDate]);
   /**
    * The day's shifts, narrowed to the agents the grid actually draws.
    *
@@ -142,11 +208,6 @@ const Schedule = () => {
 
   const [showTargets] = useState(true);
 
-  const positionsById = useMemo(
-    () => new Map(allPositions.map((position) => [String(position._id), position])),
-    [allPositions]
-  );
-
   /** Google Calendar events keyed by user, ready for the under-lane. */
   const eventsByUser = useMemo(() => {
     const byUser = new Map<string, GCalEventWithGrid[]>();
@@ -177,23 +238,36 @@ const Schedule = () => {
    * failing events call (the heavy one — every agent's Google Calendar) also discarded
    * perfectly good shifts: after a publish the grid kept showing drafts that the server
    * had already published.
+   *
+   * `withEvents` defaults to the Google Calendar switch's setting. The switch passes it
+   * explicitly: it calls this before its own state change has rendered, when the closure
+   * still holds the old value.
    */
-  const fetchData = async (date: Date, { quiet = false } = {}) => {
+  const fetchData = async (
+    date: Date,
+    { quiet = false, withEvents = showCalendarEvents } = {}
+  ) => {
     const key = formatDateParam(date);
     latestFetchKey.current = key;
     if (!quiet) setScheduleIsLoading(true);
     try {
       const [shiftsResult, eventsResult] = await Promise.allSettled([
         getShifts(date),
-        isAdmin ? getGCalendarEvents(date) : Promise.resolve([]),
+        isAdmin && withEvents ? getGCalendarEvents(date) : Promise.resolve(null),
       ]);
       if (latestFetchKey.current !== key) return;
 
       if (shiftsResult.status === "fulfilled") setShifts(shiftsResult.value);
       else console.error("Error fetching shifts:", shiftsResult.reason);
 
-      if (eventsResult.status === "fulfilled") setEvents(eventsResult.value);
-      else console.error("Error fetching calendar events:", eventsResult.reason);
+      // `null` is a fetch that did not ask for events, and it leaves them alone rather than
+      // emptying them — hiding them is what clears them. Otherwise a fetch still in flight
+      // when they are switched back on could land last and blank what the new one loaded.
+      if (eventsResult.status === "rejected") {
+        console.error("Error fetching calendar events:", eventsResult.reason);
+      } else if (eventsResult.value) {
+        setEvents(eventsResult.value);
+      }
     } finally {
       if (!quiet && latestFetchKey.current === key) setScheduleIsLoading(false);
     }
@@ -208,6 +282,17 @@ const Schedule = () => {
   useEffect(() => {
     registerReload(reloadCurrentDay);
   });
+
+  const changeShowCalendarEvents = (next: boolean) => {
+    setShowCalendarEvents(next);
+    storeShowCalendarEvents(next);
+    // Days loaded while hidden came without their events. Quiet, so the grid stays put and
+    // the lanes appear when they arrive.
+    if (next) fetchData(selectedDateRef.current, { quiet: true, withEvents: true });
+    // Cleared rather than kept: while hidden nothing refreshes them, so by the time they
+    // are shown again they could belong to a day that is no longer on screen.
+    else setEvents([]);
+  };
 
   const todayButton = {
     content: "Today",
@@ -265,6 +350,19 @@ const Schedule = () => {
     exitBulkSelect();
   }, [dateKey]);
 
+  /** The pinned hours and coverage rows, and the agent rows' scroller they follow sideways. */
+  const pinnedRef = useRef<HTMLDivElement>(null);
+  const rowsScrollerRef = useRef<HTMLDivElement>(null);
+
+  const syncPinnedScroll = () => {
+    if (pinnedRef.current && rowsScrollerRef.current) {
+      pinnedRef.current.scrollLeft = rowsScrollerRef.current.scrollLeft;
+    }
+  };
+
+  // The pinned block remounts after every loading skeleton; start it where the rows are.
+  useLayoutEffect(syncPinnedScroll, [scheduleIsLoading]);
+
   return (
     <div>
       <ScheduleToolbar
@@ -275,6 +373,9 @@ const Schedule = () => {
         locationFilter={locationFilter}
         onLocationFilterChange={setLocationFilter}
         agentsByLocation={agentsByLocation}
+        canShowCalendarEvents={isAdmin}
+        showCalendarEvents={showCalendarEvents}
+        onShowCalendarEventsChange={changeShowCalendarEvents}
       />
 
       {/* Creating a shift no longer syncs it, so the day needs somewhere that says
@@ -314,30 +415,34 @@ const Schedule = () => {
         </div>
       )}
 
-      {/* One card, one horizontal scroll container. The agent column is sticky
-          inside it, so the whole grid scrolls together instead of every row owning
-          its own scrollbar. `relative` sits on the inner track rather than on
-          the scroll container, so NowLine measures the full track and scrolls with
-          it instead of hanging off the viewport. */}
-      <div className="mx-5 mb-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          {scheduleIsLoading ? (
-            <div className="p-3">
-              {Array.from({
-                length: Math.max(6, allUsers.length || 12),
-              }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="mb-1 flex items-center gap-2"
-                  style={{ height: SKELETON_ROW_HEIGHT }}
-                >
-                  <Skeleton className="h-[22px] w-[22px] shrink-0 rounded-full" />
-                  <Skeleton className="h-4 w-[200px] shrink-0" />
-                  <Skeleton className="h-[22px] flex-1" />
-                </div>
-              ))}
-            </div>
-          ) : (
+      {/* One card, two horizontal scrollers kept in step: the hours and coverage rows on
+          top, pinned under the site header while the page scrolls, and the agent rows
+          below.
+
+          The pinned part cannot simply be a sticky row inside the rows' scroller. An
+          `overflow-x` element is a scroll container in both axes, so a sticky row would
+          stick to it — which never scrolls vertically — rather than to the window. The
+          card clips (`overflow-clip`) instead of hiding for the same reason:
+          `overflow-hidden` would capture the pinned block too.
+
+          The rows' scroller owns the sideways scroll and the pinned block follows it, so
+          the agent column (sticky inside each) and the hours stay aligned. `relative` sits
+          on each inner track, so each NowLine measures its own and scrolls with it. */}
+      <div className="mx-5 mb-6 overflow-clip rounded-xl border border-border bg-card shadow-sm">
+        {!scheduleIsLoading && (
+          <div
+            ref={pinnedRef}
+            // top-16 is the site header's h-16, which is sticky itself. z-[6] clears the
+            // rows' sticky agent column (z-[3]) and their now-line (z-[5]).
+            className="sticky top-16 z-[6] overflow-hidden bg-card"
+            // A sideways trackpad swipe over the hours scrolls the grid, as it would have
+            // when they were part of it.
+            onWheel={(event) => {
+              if (event.deltaX && rowsScrollerRef.current) {
+                rowsScrollerRef.current.scrollLeft += event.deltaX;
+              }
+            }}
+          >
             <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
               <CalendarHeader
                 agentCount={visibleUsers.length}
@@ -365,12 +470,46 @@ const Schedule = () => {
                   />
                 ))}
 
+              <NowLine isToday={isToday} />
+            </div>
+          </div>
+        )}
+
+        <div
+          ref={rowsScrollerRef}
+          className="overflow-x-auto"
+          onScroll={syncPinnedScroll}
+        >
+          {scheduleIsLoading ? (
+            <div className="p-3">
+              {Array.from({
+                length: Math.max(6, allUsers.length || 12),
+              }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="mb-1 flex items-center gap-2"
+                  style={{ height: SKELETON_ROW_HEIGHT }}
+                >
+                  <Skeleton className="h-[22px] w-[22px] shrink-0 rounded-full" />
+                  <Skeleton className="h-4 w-[200px] shrink-0" />
+                  <Skeleton className="h-[22px] flex-1" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
               {visibleUsers.map((currUser) => (
                 <AgentRow
                   key={currUser.id}
                   user={currUser}
                   shifts={shifts[currUser.id] ?? []}
-                  events={eventsByUser.get(String(currUser.id)) ?? []}
+                  // Hiding empties the list, but a fetch already in flight can still refill
+                  // it; gating here keeps the rows honest to the toggle regardless.
+                  events={
+                    showCalendarEvents
+                      ? eventsByUser.get(String(currUser.id)) ?? NO_EVENTS
+                      : NO_EVENTS
+                  }
                   positionsById={positionsById}
                   selectedDate={selectedDate}
                   isVisitor={String(currUser.id) === String(visitorId)}
@@ -378,12 +517,16 @@ const Schedule = () => {
                 />
               ))}
 
-              <NowLine isToday={isToday} />
+              {/* The rest of the same line; its label is in the pinned block above. */}
+              <NowLine isToday={isToday} showLabel={false} />
             </div>
           )}
         </div>
 
-        <ScheduleLegend showCoverage={isAdmin} showEvents={isAdmin} />
+        <ScheduleLegend
+          showCoverage={isAdmin}
+          showEvents={isAdmin && showCalendarEvents}
+        />
 
         {/* One prompt for every grid gesture — a resize or a drop — rendered here rather
             than per shift, since any of the 384 EmptySlots can raise one. */}

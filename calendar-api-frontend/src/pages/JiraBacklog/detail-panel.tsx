@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import { ColumnDesc, IssuePatch, JiraIssue, JiraTableMeta, MRR_PROBLEM_STAGES } from "./types";
 import { DETAIL_GROUPS, STATUS_FIELD } from "./constants";
 import { CollapsibleSection } from "./collapsible-section";
@@ -50,6 +51,7 @@ function patch(field: keyof JiraIssue, value: unknown): IssuePatch {
  * confidence as a fresh one. Amber once stale (which includes an unknown sync time).
  */
 function JiraStatusSyncNote({ issue }: { issue: JiraIssue }) {
+  const { clock } = useTimeFormat();
   const at = issue.jiraStatusFetchedAt;
   const stale = isJiraStatusStale(at);
   const label = at
@@ -60,7 +62,11 @@ function JiraStatusSyncNote({ issue }: { issue: JiraIssue }) {
 
   return (
     <p
-      title={at ? `Fetched ${new Date(at).toLocaleString()}` : undefined}
+      title={
+        at
+          ? `Fetched ${new Date(at).toLocaleString(undefined, { hourCycle: clock.hourCycle })}`
+          : undefined
+      }
       className={cn("text-xs", stale ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}
     >
       {label}

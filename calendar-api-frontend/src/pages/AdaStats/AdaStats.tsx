@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTimeFormat } from "@/utils/timeFormat";
 
 interface AdaSearch {
   requestedAt: string;
@@ -49,6 +50,7 @@ const AdaStats: React.FC = () => {
   const [searches, setSearches] = useState<AdaSearch[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("90d");
+  const { clock } = useTimeFormat();
 
   useEffect(() => {
     const from = getISODate(90);
@@ -168,15 +170,9 @@ const AdaStats: React.FC = () => {
                     axisLine={false}
                     tickMargin={8}
                     minTickGap={32}
-                    tickFormatter={(value) => {
-                      const date = new Date(value);
-                      return date.toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      });
-                    }}
+                    tickFormatter={(value) =>
+                      clock.dateTime(value, { month: "short", day: "numeric" })
+                    }
                   />
                   <YAxis
                     label={{ value: "ms", angle: -90, position: "insideLeft" }}
@@ -235,15 +231,9 @@ const AdaStats: React.FC = () => {
                     axisLine={false}
                     tickMargin={8}
                     minTickGap={32}
-                    tickFormatter={(value) => {
-                      const date = new Date(value);
-                      return date.toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      });
-                    }}
+                    tickFormatter={(value) =>
+                      clock.dateTime(value, { month: "short", day: "numeric" })
+                    }
                   />
                   <YAxis
                     label={{ value: "ms", angle: -90, position: "insideLeft" }}

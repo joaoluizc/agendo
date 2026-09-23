@@ -22,13 +22,13 @@ import {
   columnStart,
   dayBounds,
   packLanes,
-  prettyGCalTime,
   scheduledHours,
   focusedDefaultPosition,
 } from "../scheduleUtils";
 import { cn } from "@/lib/utils";
 import { useSchedule } from "@/providers/useSchedule";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { useTimeFormat } from "@/utils/timeFormat";
 import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
 import {
   DAY_HOURS,
@@ -36,8 +36,6 @@ import {
   HourRange,
   clampRange,
   formatDuration,
-  formatHour,
-  formatRange,
 } from "../shift-dialogs/shiftPlanning";
 
 type AgentRowProps = {
@@ -118,6 +116,7 @@ const AgentRow = ({
   } = useSchedule();
 
   const { type: userType } = useUserSettings();
+  const { clock } = useTimeFormat();
 
   /** The range being drawn by a press-and-drag on empty space, while the pointer is down. */
   const [createDrag, setCreateDrag] = useState<HourRange | null>(null);
@@ -453,7 +452,7 @@ const AgentRow = ({
             }}
           >
             <span className="truncate text-[10px] font-semibold tabular-nums">
-              {formatHour(ghost.start)}
+              {clock.hour(ghost.start)}
               {ghost.label ? ` · ${ghost.label}` : ""}
             </span>
           </div>
@@ -471,7 +470,7 @@ const AgentRow = ({
             }}
           >
             <span className="truncate text-[10px] font-semibold tabular-nums">
-              {formatRange(createDrag)} ·{" "}
+              {clock.hourRange(createDrag)} ·{" "}
               {formatDuration(createDrag.end - createDrag.start)}
             </span>
           </div>
@@ -558,7 +557,7 @@ const AgentRow = ({
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CalendarIcon className="h-4 w-4" />
                         <span>
-                          {prettyGCalTime(
+                          {clock.eventRange(
                             event.start.dateTime,
                             event.end.dateTime
                           )}

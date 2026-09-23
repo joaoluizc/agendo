@@ -21,8 +21,10 @@ import {
  * drops out of this list and simply stops having a button, which is the safe failure:
  * its agents stay visible under the globe rather than vanishing from a filter nobody can
  * see.
+ *
+ * Exported for the duplicate dialog, which groups its agent chips under the same flags.
  */
-const FLAGS = [
+export const FLAGS = [
   { location: "Colorado", label: "Colorado", Flag: UnitedStatesFlag },
   { location: "LATAM", label: "LATAM", Flag: BrazilFlag },
   { location: "Israel", label: "Israel", Flag: IsraelFlag },

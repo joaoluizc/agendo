@@ -19,6 +19,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import DateRangePicker, { DateRangeValue, PresetKey, presetRange, shiftRange } from "./DateRangePicker";
 import { reportsApi, HoursReportRow } from "./api";
 import { usePageTitle } from "./use-page-title";
@@ -141,6 +142,7 @@ export default function Reports() {
 
   /** When the figures on screen were computed, per the server. Null if it couldn't say. */
   const [computedAt, setComputedAt] = useState<string | null>(null);
+  const { clock } = useTimeFormat();
 
   /**
    * `?refresh=true` on this page's own URL makes every fetch recompute server-side rather
@@ -346,7 +348,7 @@ export default function Reports() {
                     <TooltipContent className="max-w-[240px]">
                       <p>
                         {computedAt
-                          ? `Calculated at ${format(new Date(computedAt), "HH:mm")} — ${formatDistanceToNow(new Date(computedAt))} ago. Click to recalculate.`
+                          ? `Calculated at ${clock.time(computedAt)} — ${formatDistanceToNow(new Date(computedAt))} ago. Click to recalculate.`
                           : "Age of these figures is unknown. Click to recalculate."}
                       </p>
                     </TooltipContent>

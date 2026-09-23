@@ -3,7 +3,6 @@ import {
   dayBounds,
   isDraft,
   positionDisplay,
-  prettyTimeRange,
   spanPlacement,
 } from "./scheduleUtils";
 import type { Shift } from "@/types/shiftTypes";
@@ -11,12 +10,12 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import {
   DAY_HOURS,
   HOUR_STEP,
-  formatRange,
   rangeToIso,
 } from "./shift-dialogs/shiftPlanning";
 import EditShiftDialog from "./shift-dialogs/EditShiftDialog";
 import { useSchedule } from "@/providers/useSchedule";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 
 type ShiftProps = {
   shift: Shift;
@@ -55,6 +54,7 @@ export function Shift(props: ShiftProps) {
     setDropTarget,
   } = useSchedule();
   const { allPositions, type: userType } = useUserSettings();
+  const { clock } = useTimeFormat();
   const [isOpen, setIsOpen] = useState(false);
   // Read straight off the provider's id set. This used to be local state synced by an
   // effect that scanned the whole selection, which made select-all quadratic and painted
@@ -202,8 +202,8 @@ export function Shift(props: ShiftProps) {
           endTime: next.endTime,
           userId: String(shift.userId),
           summary: latest.deleteIntent
-            ? `${position.name} · ${formatRange(base)}`
-            : `${position.name} · ${formatRange(base)} → ${formatRange(latest)}`,
+            ? `${position.name} · ${clock.hourRange(base)}`
+            : `${position.name} · ${clock.hourRange(base)} → ${clock.hourRange(latest)}`,
         });
       };
 
@@ -306,10 +306,14 @@ export function Shift(props: ShiftProps) {
    * claims. Since a block is inset inside its cells, a 15-minute shift claims one whole
    * cell but only paints half of it — sizing the content off the claim would put a
    * two-line label in a block half its assumed width.
+   *
+   * The time shows from 2 hours rather than 3, so someone reading their own day finds it on
+   * the block instead of only on hover. A 24-hour range always fits there; a long 12-hour
+   * one ("11:30 AM – 1:30 PM") can end in an ellipsis on a screen narrower than ~1600px.
    */
   const widths = (span.end - span.start) * 2;
   const mode =
-    widths >= 6 ? "full" : widths >= 3 ? "label" : widths >= 2 ? "tight" : "code";
+    widths >= 4 ? "full" : widths >= 3 ? "label" : widths >= 2 ? "tight" : "code";
 
   // Unpublished shifts are drawn differently everywhere they appear; see blockStyle.
   const draft = isDraft(shift);
@@ -391,7 +395,7 @@ export function Shift(props: ShiftProps) {
       : {}),
   };
 
-  const title = `${position.name} · ${prettyTimeRange(
+  const title = `${position.name} · ${clock.range(
     shift.startTime,
     shift.endTime
   )}${draft ? " · draft (unpublished)" : ""}${
@@ -415,7 +419,7 @@ export function Shift(props: ShiftProps) {
             dominant line because it is bold. Buying that 1.25px back is half of what makes
             two lines fit the lane without touching its edges — see SHIFT_LANE. */}
         <div className="text-[10px] font-bold tabular-nums leading-tight truncate">
-          {prettyTimeRange(shift.startTime, shift.endTime)}
+          {clock.range(shift.startTime, shift.endTime)}
         </div>
         <div className="text-[10.5px] font-medium leading-tight truncate opacity-90">
           {position.name}

@@ -238,37 +238,6 @@ export const getGCalendarEvents = async (
   return filteredData;
 };
 
-/**
- * Formats Date as 'pretty' string, removing minutes for round hours
- * @param {string} date - date to format
- * @returns {string} - formatted date
- * examples:
- * date: 2021-09-30T10:00:00Z -> 10 AM
- * date: 2021-09-30T10:30:00Z -> 10:30 AM
- */
-const prettyHour = (date: string): string => {
-  const dateObj = new Date(date);
-  let timeString = dateObj.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
-  if (timeString.endsWith(":00 AM") || timeString.endsWith(":00 PM")) {
-    timeString = timeString.replace(":00", "");
-  }
-
-  return timeString;
-};
-
-export const prettyTimeRange = (startRaw: string, endRaw: string) => {
-  const start = prettyHour(startRaw);
-  const end = prettyHour(endRaw);
-  if (start.slice(-2) === end.slice(-2)) {
-    return `${start.slice(0, -3)}-${end.slice(0, -3)} ${end.slice(-2)}`;
-  }
-  return `${start} - ${end}`;
-};
-
 /** Local midnight of the day being rendered.
  * `dateToRender` is the selected day's local calendar date as `YYYY-MM-DD`
  * (`dateKey`). We build local midnight from its parts rather than parsing it as
@@ -318,32 +287,6 @@ export const calculateGridColumnSpan = (
   const durationInMinutes =
     (effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60);
   return Math.max(1, Math.ceil(durationInMinutes / 15)); // Assuming each column represents 15 minutes
-};
-
-/** Formats Google Calendar event start and end times as 'pretty' string
- * @param {string} start - start time of the event
- * @param {string} end - end time of the event
- * @returns {string} - formatted time range
- * examples:
- * startDate: 2021-09-30T10:00:00-04:00 -> Thu, Sep 30, 10:00 AM
- * endDate: 2021-09-30T12:00:00-04:00 -> 12:00 PM
- * result: Thu, Sep 30, 10:00 AM to 12:00 PM
- */
-export const prettyGCalTime = (start: string, end: string) => {
-  const startAsDate = new Date(start);
-  const endAsDate = new Date(end);
-  const firstPart = startAsDate.toLocaleDateString("en-us", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const secondPart = endAsDate.toLocaleTimeString("en-us", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${firstPart} to ${secondPart}`;
 };
 
 // export const calculateOverlapAmount = (events: GCalendarEventList) => {

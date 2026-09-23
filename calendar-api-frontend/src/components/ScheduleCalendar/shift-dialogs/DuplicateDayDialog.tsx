@@ -21,8 +21,10 @@ import { useSchedule } from "@/providers/useSchedule";
 import { formatDateParam, parseDateParam } from "@/utils/utils";
 import { useAgentLocations } from "@/hooks/useAgentLocations";
 import { SortedCalendar } from "@/types/shiftTypes";
+import { UserSafeInfo } from "@/types/userTypes";
 import LocationFilter, {
   FILTERABLE_LOCATIONS,
+  FLAGS,
 } from "../calendar-components/LocationFilter";
 import { isOffDutyPosition, startOfLocalDay } from "../scheduleUtils";
 import { initialsOf } from "./shiftPlanning";
@@ -76,11 +78,13 @@ const CALENDAR_CLASSNAMES = {
 };
 
 /**
- * Which days in and around `month` already have shifts, drafts included. Fetched per
- * displayed month so a calendar can mark them before anything is copied.
+ * Which days in and around `month` already have shifts, drafts included — and whose, since
+ * the copy decides skip and replace per agent. Keyed by the day each shift *starts*, the same
+ * rule the copy uses to decide a day is taken. Fetched per displayed month so a calendar can
+ * mark them before anything is copied.
  */
 const useBusyDays = (enabled: boolean, month: Date) => {
-  const [busyDays, setBusyDays] = useState<Set<string>>(new Set());
+  const [busyDays, setBusyDays] = useState<Map<string, Set<string>>>(new Map());
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
 
@@ -94,13 +98,18 @@ const useBusyDays = (enabled: boolean, month: Date) => {
     fetchShiftsBetween(start, end)
       .then((found) => {
         if (cancelled) return;
-        setBusyDays(
-          new Set(found.map((shift) => formatDateParam(new Date(shift.startTime))))
-        );
+        const byDay = new Map<string, Set<string>>();
+        found.forEach((shift) => {
+          const day = formatDateParam(new Date(shift.startTime));
+          const agents = byDay.get(day) ?? new Set<string>();
+          agents.add(String(shift.userId));
+          byDay.set(day, agents);
+        });
+        setBusyDays(byDay);
       })
       .catch(() => {
         // A failed probe only costs the markers; copying still works.
-        if (!cancelled) setBusyDays(new Set());
+        if (!cancelled) setBusyDays(new Map());
       });
 
     return () => {
@@ -134,7 +143,8 @@ const SourceDayPicker = ({
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState<Date>(value);
   const busyDays = useBusyDays(open, month);
-  const busyDates = useMemo(() => toDates(busyDays), [busyDays]);
+  // Anyone's shifts: the question here is only whether there is something to copy.
+  const busyDates = useMemo(() => toDates(busyDays.keys()), [busyDays]);
 
   useEffect(() => {
     if (open) setMonth(value);
@@ -204,12 +214,27 @@ const DuplicateDayDialog = ({
 }: DuplicateDayDialogProps) => {
   const { allUsers, allPositions } = useUserSettings();
   const { shifts, exitBulkSelect } = useSchedule();
-  const { agentsByLocation, filterByLocations } = useAgentLocations();
+  const { filterByLocations, locationByUserId } = useAgentLocations();
 
   const [sourceDate, setSourceDate] = useState<Date>(selectedDate);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [month, setMonth] = useState<Date>(selectedDate);
-  const [userIds, setUserIds] = useState<string[]>([]);
+  /**
+   * Who comes along. `null` until anyone changes it, meaning everyone listed — derived rather
+   * than filled in, so a source day that is still loading needs nothing to catch up with it.
+   */
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  /**
+   * Agents kept in the list whatever the flags show: the selection as it stood at the last flag
+   * change. Snapshotted there rather than read live, so a chip you untick stays where it is
+   * until the flags change, instead of vanishing under the pointer.
+   */
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  /**
+   * The initial state is over on this source day: a flag was clicked, or the selection was
+   * changed by hand. Only a flag clicked *before* this selects; every later one filters.
+   */
+  const [flagsUsed, setFlagsUsed] = useState(false);
   const [locationFilter, setLocationFilter] = useState<string[]>([
     ...FILTERABLE_LOCATIONS,
   ]);
@@ -217,7 +242,15 @@ const DuplicateDayDialog = ({
   const [includeOffDuty, setIncludeOffDuty] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
-  const busyDays = useBusyDays(open, month);
+  const busyByDay = useBusyDays(open, month);
+
+  /** Back to "everyone from the source day, selected, every flag on". */
+  const resetAgents = () => {
+    setPicked(null);
+    setPinned(new Set());
+    setFlagsUsed(false);
+    setLocationFilter([...FILTERABLE_LOCATIONS]);
+  };
 
   /** Breaks, meetings and unavailable blocks — what the checkbox leaves behind. */
   const offDutyPositionIds = useMemo(
@@ -233,8 +266,7 @@ const DuplicateDayDialog = ({
     setSourceDate(selectedDate);
     setSelectedDays([]);
     setMonth(selectedDate);
-    setUserIds(allUsers.map((user) => String(user.id)));
-    setLocationFilter([...FILTERABLE_LOCATIONS]);
+    resetAgents();
     setMode("skip");
     setIncludeOffDuty(true);
   }, [open, selectedDate, allUsers]);
@@ -289,38 +321,6 @@ const DuplicateDayDialog = ({
     [sourceIsOnScreen, shifts, fetchedSource, sourceKey]
   );
 
-  /** The agents the location flags leave in the list. */
-  const visibleAgents = useMemo(
-    () => filterByLocations(allUsers, locationFilter),
-    [allUsers, filterByLocations, locationFilter]
-  );
-  /**
-   * Who actually comes along: ticked *and* in view. Narrowing the flags already re-ticks
-   * to match, so this only guards against a selection outliving its location.
-   */
-  const chosenIds = useMemo(() => {
-    const inView = new Set(visibleAgents.map((user) => String(user.id)));
-    return userIds.filter((id) => inView.has(id));
-  }, [userIds, visibleAgents]);
-  const allVisibleChosen =
-    visibleAgents.length > 0 && chosenIds.length === visibleAgents.length;
-
-  /**
-   * Picking locations picks their agents. The flags are how you say "copy APAC only";
-   * after that, the chips are how you leave one person out.
-   */
-  const changeLocations = (next: string[]) => {
-    setLocationFilter(next);
-    setUserIds(filterByLocations(allUsers, next).map((user) => String(user.id)));
-  };
-
-  /** A day cannot be copied onto itself, so choosing it as the source drops it as a target. */
-  const changeSource = (date: Date) => {
-    const key = formatDateParam(date);
-    setSourceDate(date);
-    setSelectedDays((current) => current.filter((day) => day !== key));
-  };
-
   const countsShift = (positionId: string) =>
     includeOffDuty || !offDutyPositionIds.includes(String(positionId));
 
@@ -328,6 +328,143 @@ const DuplicateDayDialog = ({
     (sourceShifts[userId] ?? []).filter((shift) =>
       countsShift(String(shift.positionId))
     ).length;
+
+  /**
+   * Agents with something to copy from the source day — the only ones worth listing. Follows
+   * the off-duty checkbox, since leaving breaks behind can leave someone with nothing.
+   *
+   * They are also all the copy's skip and replace look at, which run per selected agent: an
+   * agent with nothing on the source day no longer has their target days cleared by
+   * replace, or makes a day count as taken for skip, just by being on the roster.
+   */
+  const sourceAgents = useMemo(
+    () => allUsers.filter((user) => countFor(String(user.id)) > 0),
+    [allUsers, sourceShifts, includeOffDuty, offDutyPositionIds]
+  );
+
+  /** Everyone listed until the selection is touched. */
+  const selectedIds = useMemo(
+    () => picked ?? new Set(sourceAgents.map((user) => String(user.id))),
+    [picked, sourceAgents]
+  );
+
+  /**
+   * Who is listed: the flags' locations plus everyone pinned, so widening the flags offers
+   * more people without losing sight of the ones already picked.
+   */
+  const listed = useMemo(() => {
+    const offered = new Set(
+      filterByLocations(sourceAgents, locationFilter).map((user) => String(user.id))
+    );
+    return sourceAgents.filter((user) => {
+      const id = String(user.id);
+      return offered.has(id) || pinned.has(id);
+    });
+  }, [sourceAgents, filterByLocations, locationFilter, pinned]);
+
+  /** Who comes along. Only listed chips can be picked, so they are always on screen. */
+  const chosenIds = useMemo(
+    () =>
+      sourceAgents
+        .map((user) => String(user.id))
+        .filter((id) => selectedIds.has(id)),
+    [sourceAgents, selectedIds]
+  );
+  const allListedChosen =
+    listed.length > 0 && listed.every((user) => selectedIds.has(String(user.id)));
+
+  /**
+   * Target days already holding shifts *for the agents being copied*. The copy decides skip
+   * and replace per selected agent, so another agent's shift on a day does not make it taken
+   * — counting it would warn about, and leave out of the total, days the copy will fill.
+   */
+  const busyDays = useMemo(() => {
+    const chosen = new Set(chosenIds);
+    return new Set(
+      [...busyByDay]
+        .filter(([, agents]) => [...agents].some((id) => chosen.has(id)))
+        .map(([day]) => day)
+    );
+  }, [busyByDay, chosenIds]);
+
+  /** Per-location counts for the flags' tooltips — of agents with something to copy. */
+  const sourceCountsByLocation = useMemo(() => {
+    const tally = new Map<string, number>();
+    sourceAgents.forEach((user) => {
+      const name = locationByUserId.get(String(user.id));
+      if (name) tally.set(name, (tally.get(name) ?? 0) + 1);
+    });
+    return tally;
+  }, [sourceAgents, locationByUserId]);
+
+  /**
+   * The listed chips under their location's flag, in the toolbar's flag order, so adding a
+   * location adds its own group instead of reshuffling one list. A location the flags do not
+   * know (renamed in Settings) is labelled by name; agents without one come last.
+   */
+  const groups = useMemo(() => {
+    const byLocation = new Map<string, UserSafeInfo[]>();
+    listed.forEach((user) => {
+      const name = locationByUserId.get(String(user.id)) ?? "";
+      byLocation.set(name, [...(byLocation.get(name) ?? []), user]);
+    });
+    const flagged: string[] = FLAGS.map((flag) => flag.location);
+    const unflagged = [...byLocation.keys()]
+      .filter((name) => name && !flagged.includes(name))
+      .sort();
+    const nameOf = (user: UserSafeInfo) => `${user.firstName} ${user.lastName}`;
+    return [...flagged, ...unflagged, ""]
+      .filter((name) => byLocation.has(name))
+      .map((name) => {
+        const flag = FLAGS.find((entry) => entry.location === name);
+        return {
+          name,
+          label: flag?.label ?? (name || "No location"),
+          Flag: flag?.Flag,
+          agents: [...byLocation.get(name)!].sort((a, b) =>
+            nameOf(a).localeCompare(nameOf(b))
+          ),
+        };
+      });
+  }, [listed, locationByUserId]);
+
+  /**
+   * A flag clicked while the selection is still the untouched "everyone" means "copy only
+   * these": the selection becomes exactly that location's agents — the one-click way to copy
+   * a single region, and the same "first flag means only this" rule as the grid's own
+   * filter. Once anyone has been ticked or unticked by hand, not even the first flag does
+   * that: it would throw the hand-made pick away.
+   *
+   * After that the flags never change who is selected. Adding one offers its agents,
+   * unticked; removing one, or the globe, only changes who else is offered; and anyone
+   * selected stays listed. That is what lets you build "APAC, plus two from Israel" without
+   * the second flag undoing the first.
+   */
+  const changeLocations = (next: string[]) => {
+    setLocationFilter(next);
+    if (!flagsUsed) {
+      // The globe while every location already shows changes nothing, so it uses nothing up.
+      if (FILTERABLE_LOCATIONS.every((name) => next.includes(name))) return;
+      setPicked(
+        new Set(filterByLocations(sourceAgents, next).map((user) => String(user.id)))
+      );
+      setPinned(new Set());
+      setFlagsUsed(true);
+      return;
+    }
+    setPinned(new Set(selectedIds));
+  };
+
+  /**
+   * A day cannot be copied onto itself, so choosing it as the source drops it as a target —
+   * and a new source day starts the agents over: everyone on it, selected.
+   */
+  const changeSource = (date: Date) => {
+    const key = formatDateParam(date);
+    setSourceDate(date);
+    setSelectedDays((current) => current.filter((day) => day !== key));
+    resetAgents();
+  };
 
   const sourceSummary = useMemo(() => {
     if (sourceLoading) return "Loading that day's shifts…";
@@ -401,12 +538,30 @@ const DuplicateDayDialog = ({
     },
   ];
 
-  const toggleUser = (userId: string) =>
-    setUserIds((current) =>
-      current.includes(userId)
-        ? current.filter((id) => id !== userId)
-        : [...current, userId]
-    );
+  // Touching the selection by hand ends the initial state just as a flag does: from then on
+  // the flags only filter, so a pick someone has started is never replaced by a location.
+  const toggleUser = (userId: string) => {
+    setFlagsUsed(true);
+    setPicked((current) => {
+      const next = new Set(current ?? selectedIds);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  /** Select all / Clear all, over the listed chips only. Also ends the initial state. */
+  const toggleAllListed = () => {
+    setFlagsUsed(true);
+    setPicked((current) => {
+      const next = new Set(current ?? selectedIds);
+      listed.forEach((user) => {
+        if (allListedChosen) next.delete(String(user.id));
+        else next.add(String(user.id));
+      });
+      return next;
+    });
+  };
 
   const handleSubmit = async () => {
     if (selectedDays.length === 0) return toast.error("Pick at least one day");
@@ -549,22 +704,17 @@ const DuplicateDayDialog = ({
                 Agents
               </div>
               <div className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">
-                {allVisibleChosen
-                  ? `all ${visibleAgents.length} agents come along`
-                  : `${chosenIds.length} of ${visibleAgents.length} selected`}
+                {allListedChosen
+                  ? `all ${listed.length} agents come along`
+                  : `${chosenIds.length} of ${listed.length} selected`}
               </div>
               <button
                 type="button"
-                className="whitespace-nowrap text-[12px] font-semibold text-primary hover:underline"
-                onClick={() =>
-                  setUserIds(
-                    allVisibleChosen
-                      ? []
-                      : visibleAgents.map((user) => String(user.id))
-                  )
-                }
+                className="whitespace-nowrap text-[12px] font-semibold text-primary hover:underline disabled:pointer-events-none disabled:opacity-50"
+                disabled={listed.length === 0}
+                onClick={toggleAllListed}
               >
-                {allVisibleChosen ? "Clear all" : "Select all"}
+                {allListedChosen ? "Clear all" : "Select all"}
               </button>
             </div>
 
@@ -572,47 +722,73 @@ const DuplicateDayDialog = ({
               <LocationFilter
                 selected={locationFilter}
                 onChange={changeLocations}
-                countsByLocation={agentsByLocation}
+                countsByLocation={sourceCountsByLocation}
               />
               <div className="text-[11px] text-muted-foreground">
-                Pick a location to copy only its agents
+                {flagsUsed
+                  ? "Flags add people to pick from — anyone selected stays listed"
+                  : "Pick a location to copy only its agents"}
               </div>
             </div>
 
-            <div className="flex flex-wrap content-start gap-1.5 px-4 py-3">
-              {visibleAgents.map((user) => {
-                const id = String(user.id);
-                const isOn = userIds.includes(id);
-                const count = countFor(id);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={isOn}
-                    title={`${user.firstName} ${user.lastName} · ${count} shift${
-                      count === 1 ? "" : "s"
-                    } on ${sourceDate.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })}`}
-                    className={cn(
-                      "flex h-[30px] items-center gap-1.5 rounded-lg border pl-[3px] pr-2.5 text-[12px] font-semibold",
-                      isOn
-                        ? "border-primary bg-primary/[0.08] text-foreground dark:bg-primary/[0.2]"
-                        : "border-border text-muted-foreground hover:bg-muted"
+            <div className="flex flex-col gap-3 px-4 py-3">
+              {groups.length === 0 && (
+                <div className="text-[12px] text-muted-foreground">
+                  {sourceLoading
+                    ? "Loading that day's shifts…"
+                    : sourceAgents.length === 0
+                      ? `Nobody has shifts on ${sourceDate.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}.`
+                      : "Nobody with shifts in these locations."}
+                </div>
+              )}
+              {groups.map((group) => (
+                <div key={group.name || "no-location"} className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                    {group.Flag && (
+                      <group.Flag className="h-[10px] w-[15px] rounded-[2px] ring-1 ring-inset ring-foreground/25" />
                     )}
-                    onClick={() => toggleUser(id)}
-                  >
-                    <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-bold text-muted-foreground">
-                      {initialsOf(user)}
-                    </span>
-                    {user.firstName}
-                    <span className="text-[10px] tabular-nums text-muted-foreground">
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+                    {group.label}
+                  </div>
+                  <div className="flex flex-wrap content-start gap-1.5">
+                    {group.agents.map((user) => {
+                      const id = String(user.id);
+                      const isOn = selectedIds.has(id);
+                      const count = countFor(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-pressed={isOn}
+                          title={`${user.firstName} ${user.lastName} · ${count} shift${
+                            count === 1 ? "" : "s"
+                          } on ${sourceDate.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}`}
+                          className={cn(
+                            "flex h-[30px] items-center gap-1.5 rounded-lg border pl-[3px] pr-2.5 text-[12px] font-semibold",
+                            isOn
+                              ? "border-primary bg-primary/[0.08] text-foreground dark:bg-primary/[0.2]"
+                              : "border-border text-muted-foreground hover:bg-muted"
+                          )}
+                          onClick={() => toggleUser(id)}
+                        >
+                          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-bold text-muted-foreground">
+                            {initialsOf(user)}
+                          </span>
+                          {user.firstName}
+                          <span className="text-[10px] tabular-nums text-muted-foreground">
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="mt-auto flex flex-col gap-2.5 px-4 pb-3.5">

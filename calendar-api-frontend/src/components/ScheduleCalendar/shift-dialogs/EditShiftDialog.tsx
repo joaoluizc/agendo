@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
 import type { Shift } from "@/types/shiftTypes";
+import { useTimeFormat } from "@/utils/timeFormat";
 import { isDraft, positionDisplay, startOfLocalDay } from "../scheduleUtils";
 import TimeRangeStepper from "./TimeRangeStepper";
 import PositionCombobox from "./PositionCombobox";
@@ -36,9 +37,7 @@ import {
   buildRoster,
   buildStripSeries,
   formatDuration,
-  formatHour,
   formatHourTotal,
-  formatRange,
   leadHour,
   meterForPosition,
   rangeToIso,
@@ -85,6 +84,7 @@ const EditShiftDialog = ({
   const { allUsers, allPositions, coverageMeters, markPositionUsed } =
     useUserSettings();
   const { shifts, events, setShifts, setEvents } = useSchedule();
+  const { clock } = useTimeFormat();
 
   /**
    * The day this shift's times are measured from — its own start day, not the day you are
@@ -273,11 +273,11 @@ const EditShiftDialog = ({
     const total = without + series.delta[leading];
     const target = series.targets[leading];
     if (total < target) {
-      return `${name} ${formatHour(leading)} is ${total} of ${target} — still ${
+      return `${name} ${clock.hour(leading)} is ${total} of ${target} — still ${
         target - total
       } short.`;
     }
-    return `${name} ${formatHour(leading)} is ${total} of ${target}. Delete this and it drops to ${without}${
+    return `${name} ${clock.hour(leading)} is ${total} of ${target}. Delete this and it drops to ${without}${
       without < target ? ", below target." : "."
     }`;
   };
@@ -394,23 +394,14 @@ const EditShiftDialog = ({
         weekday: "long",
       })}`,
       value: `${formatHourTotal(agent?.scheduledHours ?? 0)}h scheduled · break ${
-        breakSpan
-          ? `${formatHour(breakSpan.start)}–${formatHour(breakSpan.end)}`
-          : "none"
+        breakSpan ? clock.hourRange(breakSpan) : "none"
       }`,
     },
     {
       label: "Created",
       value: `${createdByName}${
         createdAt
-          ? ` · ${createdAt.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}, ${createdAt.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })}`
+          ? ` · ${clock.dateTime(createdAt, { month: "short", day: "numeric" })}`
           : ""
       }`,
     },
@@ -502,7 +493,7 @@ const EditShiftDialog = ({
     }
 
     toast.success("Shift updated", {
-      description: `${position.name} · ${formatRange(range)}${
+      description: `${position.name} · ${clock.hourRange(range)}${
         toUpdate.length > 1 ? ` · ${toUpdate.length} agents` : ""
       }${removed.length > toUpdate.length ? ` · ${removedIds.length} removed` : ""}`,
     });
@@ -560,7 +551,7 @@ const EditShiftDialog = ({
                 </span>
               </div>
               <DialogDescription className="mt-0.5 text-[12.5px] tabular-nums">
-                {formatRange(range)} ·{" "}
+                {clock.hourRange(range)} ·{" "}
                 {selectedDate.toLocaleDateString("en-US", {
                   weekday: "long",
                   month: "long",
@@ -590,7 +581,7 @@ const EditShiftDialog = ({
                   </span>
                   <span className={dirty ? "text-warn" : "text-muted-foreground"}>
                     {dirty
-                      ? `was ${formatRange(original.range)}`
+                      ? `was ${clock.hourRange(original.range)}`
                       : "unchanged"}
                   </span>
                 </div>
@@ -698,7 +689,7 @@ const EditShiftDialog = ({
               <div className="flex items-center gap-2.5 border-b border-border bg-band px-3 py-[11px]">
                 <div className="whitespace-nowrap text-[12.5px] font-semibold">
                   {group.length} {group.length === 1 ? "agent" : "agents"} on{" "}
-                  {position.label} {formatRange(range)}
+                  {position.label} {clock.hourRange(range)}
                 </div>
                 <div className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">
                   {others.length > 0
@@ -735,11 +726,7 @@ const EditShiftDialog = ({
                         </span>
                         <span className="whitespace-nowrap">{member.agentName}</span>
                         <span className="whitespace-nowrap text-[10.5px] tabular-nums text-muted-foreground">
-                          {isThis
-                            ? formatRange(range)
-                            : `${formatHour(member.span.start)}–${formatHour(
-                                member.span.end
-                              )}`}
+                          {clock.hourRange(isThis ? range : member.span)}
                         </span>
                         {isThis ? (
                           <span className="whitespace-nowrap text-[9.5px] font-bold uppercase tracking-[0.04em] text-primary">
@@ -891,7 +878,7 @@ const EditShiftDialog = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this shift?</AlertDialogTitle>
             <AlertDialogDescription>
-              {agent?.name}&apos;s {position.name} shift, {formatRange(range)}.
+              {agent?.name}&apos;s {position.name} shift, {clock.hourRange(range)}.
               {shift.isSynced
                 ? " It will also be removed from their Google Calendar."
                 : ""}{" "}

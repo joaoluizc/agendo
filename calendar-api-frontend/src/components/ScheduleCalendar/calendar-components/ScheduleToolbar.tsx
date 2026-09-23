@@ -6,6 +6,7 @@ import DuplicateShifts from "../DuplicateShifts";
 import ToggleBulkSelector from "./ToggleBulkSelector";
 import { cn } from "@/lib/utils";
 import LocationFilter from "./LocationFilter";
+import CalendarEventsToggle from "./CalendarEventsToggle";
 
 type ScheduleToolbarProps = {
   selectedDate: Date;
@@ -18,6 +19,10 @@ type ScheduleToolbarProps = {
   onLocationFilterChange: (next: string[]) => void;
   /** Agents per location, for the filter's tooltips. */
   agentsByLocation: Map<string, number>;
+  /** Whether the viewer loads Google Calendar events at all (admins only). */
+  canShowCalendarEvents: boolean;
+  showCalendarEvents: boolean;
+  onShowCalendarEventsChange: (next: boolean) => void;
 };
 
 /** A given Date, shifted by `delta` days and normalised to local midnight. */
@@ -27,7 +32,7 @@ const addDays = (date: Date, delta: number): Date =>
 /**
  * `Thu • Aug 27, 2026` — the picker's label, and the only place the day is shown.
  *
- * Month before day, matching every other date in the app (`prettyGCalTime`, the duplicate
+ * Month before day, matching every other date in the app (`clock.eventRange`, the duplicate
  * dialog, the reports range). One `toLocaleDateString` call for the date part, so the
  * comma is en-US's own rather than hand-placed; only the weekday and the `•` are joined on.
  *
@@ -60,6 +65,9 @@ const ScheduleToolbar = ({
   locationFilter,
   onLocationFilterChange,
   agentsByLocation,
+  canShowCalendarEvents,
+  showCalendarEvents,
+  onShowCalendarEventsChange,
 }: ScheduleToolbarProps) => (
   <div className="px-5 pb-3.5 pt-5">
     {/* The label keeps its own line, with every control on the line below — the layout it
@@ -139,6 +147,15 @@ const ScheduleToolbar = ({
         onChange={onLocationFilterChange}
         countsByLocation={agentsByLocation}
       />
+
+      {/* With the filter for the same reason: it changes how the grid reads, not what is
+          on it. Admins only, because only admins load the events at all. */}
+      {canShowCalendarEvents && (
+        <CalendarEventsToggle
+          checked={showCalendarEvents}
+          onCheckedChange={onShowCalendarEventsChange}
+        />
+      )}
 
       <div className="ml-auto flex flex-wrap items-center gap-2.5">
         <DuplicateShifts selectedDate={selectedDate} onDuplicated={onReload} />

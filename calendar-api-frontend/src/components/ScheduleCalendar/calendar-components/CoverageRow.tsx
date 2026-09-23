@@ -7,10 +7,10 @@ import {
   GRID_COLUMNS,
   SLOTS_PER_DAY,
   buildCoverageSeries,
-  formatSlotTime,
   shortName,
 } from "../scheduleUtils";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import {
   Tooltip,
   TooltipContent,
@@ -50,6 +50,7 @@ const SlotDetails = ({
   target: number;
   agents: CoverageAgent[];
 }) => {
+  const { clock } = useTimeFormat();
   const short = target - count;
   const shown = agents.slice(0, MAX_NAMES);
   const hidden = agents.length - shown.length;
@@ -57,7 +58,7 @@ const SlotDetails = ({
     <div className="flex max-w-[260px] flex-col gap-1">
       <div className="flex items-baseline gap-2">
         <span className="font-semibold tabular-nums">
-          {formatSlotTime(slot)}–{formatSlotTime(slot + 1)}
+          {clock.hourRange({ start: slot / 2, end: (slot + 1) / 2 })}
         </span>
         <span className="text-muted-foreground">target {target}</span>
       </div>
@@ -120,9 +121,10 @@ const CoverageRow = ({
   dimmed,
   onToggleFocus,
 }: CoverageRowProps) => {
+  const { clock } = useTimeFormat();
   const series = useMemo(
-    () => buildCoverageSeries(meter, roster, shifts, selectedDate),
-    [meter, roster, shifts, selectedDate],
+    () => buildCoverageSeries(meter, roster, shifts, selectedDate, clock),
+    [meter, roster, shifts, selectedDate, clock],
   );
 
   const isShort = series.summary.includes("short");

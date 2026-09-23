@@ -11,6 +11,7 @@ import { Position } from "@/types/positionTypes.ts";
 import { CoverageMeter } from "@/types/coverageTypes.ts";
 import { UserSafeInfo } from "@/types/userTypes.ts";
 import { targetAt } from "@/utils/coverageTargets.ts";
+import { Clock } from "@/utils/timeFormat.ts";
 import { toast } from "sonner";
 
 type GetCalEventsSuccessResponse = {
@@ -143,62 +144,6 @@ export const getGCalendarEvents = async (
   }
 
   return filteredData;
-};
-
-/** Formats Date as 'pretty' string, removing minutes for round hours
- * @param {string} date - date to format
- * @returns {string} - formatted date
- * examples:
- * date: 2021-09-30T10:00:00Z -> 10 AM
- * date: 2021-09-30T10:30:00Z -> 10:30 AM
- */
-const prettyHour = (date: string): string => {
-  const dateObj = new Date(date);
-  let timeString = dateObj.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
-  if (timeString.endsWith(":00 AM") || timeString.endsWith(":00 PM")) {
-    timeString = timeString.replace(":00", "");
-  }
-
-  return timeString;
-};
-
-export const prettyTimeRange = (startRaw: string, endRaw: string) => {
-  const start = prettyHour(startRaw);
-  const end = prettyHour(endRaw);
-  if (start.slice(-2) === end.slice(-2)) {
-    return `${start.slice(0, -3)}-${end.slice(0, -3)} ${end.slice(-2)}`;
-  }
-  return `${start} - ${end}`;
-};
-
-/** Formats Google Calendar event start and end times as 'pretty' string
- * @param {string} start - start time of the event
- * @param {string} end - end time of the event
- * @returns {string} - formatted time range
- * examples:
- * startDate: 2021-09-30T10:00:00-04:00 -> Thu, Sep 30, 10:00 AM
- * endDate: 2021-09-30T12:00:00-04:00 -> 12:00 PM
- * result: Thu, Sep 30, 10:00 AM to 12:00 PM
- */
-export const prettyGCalTime = (start: string, end: string) => {
-  const startAsDate = new Date(start);
-  const endAsDate = new Date(end);
-  const firstPart = startAsDate.toLocaleDateString("en-us", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const secondPart = endAsDate.toLocaleTimeString("en-us", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${firstPart} to ${secondPart}`;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -465,23 +410,20 @@ export type CoverageSeries = {
 export type CoverageAgent = { user: UserSafeInfo; draftOnly: boolean };
 
 /**
- * Slot 18 -> `09:00`, slot 19 -> `09:30`.
- *
- * Slot 48 is a valid *end* bound and renders as `24:00`, not `00:00` — a range that
- * runs to midnight has to read as ending after it started.
- */
-export const formatSlotTime = (slot: number) => {
-  const hour = String(Math.floor(slot / 2)).padStart(2, "0");
-  const minute = slot % 2 === 0 ? "00" : "30";
-  return `${hour}:${minute}`;
-};
-
-/**
  * The one-line verdict in a coverage row's sticky cell. Reports the widest stretch
  * that falls short (earliest wins a tie) and how deep the gap gets inside it, since
  * that is what an admin scanning the row actually needs to act on.
+ *
+ * The stretch is written as a range (`2 short 09:00–11:30`) rather than "between 09:00 and
+ * 11:30": the cell has about 125px, which the longer sentence already overran in 24-hour
+ * form and would cut before the end time in 12-hour form.
  */
-const summarize = (counts: number[], targets: number[], hasTarget: boolean) => {
+const summarize = (
+  counts: number[],
+  targets: number[],
+  hasTarget: boolean,
+  clock: Clock
+) => {
   if (!hasTarget) return "no target set";
 
   type ShortRun = { from: number; to: number; deficit: number };
@@ -510,9 +452,11 @@ const summarize = (counts: number[], targets: number[], hasTarget: boolean) => {
   if (worst.from === 0 && worst.to === SLOTS_PER_DAY) {
     return `${worst.deficit} short all day`;
   }
-  return `${worst.deficit} short between ${formatSlotTime(
-    worst.from
-  )} and ${formatSlotTime(worst.to)}`;
+  // Slot 48 is hour 24, so a gap running to midnight reads as ending at 24:00.
+  return `${worst.deficit} short ${clock.hourRange({
+    start: worst.from / 2,
+    end: worst.to / 2,
+  })}`;
 };
 
 /**
@@ -524,12 +468,15 @@ const summarize = (counts: number[], targets: number[], hasTarget: boolean) => {
  * Targets are resolved from each slot's absolute instant rather than from a day/hour
  * label, so this stays correct when the local day straddles two UTC days (which it
  * does for most of the world) and across DST. See src/utils/coverageTargets.ts.
+ *
+ * `clock` only writes `summary`, the one part of the series that is text.
  */
 export const buildCoverageSeries = (
   meter: CoverageMeter,
   roster: UserSafeInfo[],
   shifts: SortedCalendar,
-  selectedDate: Date
+  selectedDate: Date,
+  clock: Clock
 ): CoverageSeries => {
   const meterPositions = new Set(meter.positionIds.map(String));
   const dayStart = startOfLocalDay(selectedDate).getTime();
@@ -587,7 +534,7 @@ export const buildCoverageSeries = (
     agents,
     peak,
     hasTarget,
-    summary: summarize(counts, targets, hasTarget),
+    summary: summarize(counts, targets, hasTarget, clock),
   };
 };
 
@@ -714,6 +661,25 @@ export const scheduledHours = (
     const span = dayBounds(shift.startTime, shift.endTime, selectedDate);
     return total + Math.max(0, span.end - span.start);
   }, 0);
+
+/**
+ * When an agent's day starts, in fractional hours on the selected day — null when nothing
+ * does. The grid orders its rows by this.
+ *
+ * Any block that *begins* on the selected day counts, unavailable time and drafts included,
+ * so the order matches where each row's first block sits. One carried over from the night
+ * before does not: it is drawn from 00:00, but it ends that agent's previous day rather than
+ * starting this one, so an overnight closer sorts by what they actually start today.
+ */
+export const firstShiftStart = (
+  userShifts: Shift[] | undefined,
+  selectedDate: Date
+): number | null =>
+  (userShifts ?? []).reduce<number | null>((first, shift) => {
+    const span = dayBounds(shift.startTime, shift.endTime, selectedDate);
+    if (span.clippedStart) return first;
+    return first === null || span.start < first ? span.start : first;
+  }, null);
 
 /**
  * Order positions for a picker: most recently used first, alphabetical within a day.

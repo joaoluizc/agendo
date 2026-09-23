@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useTimeFormat } from "@/utils/timeFormat";
 
 const CalendarHeader = () => {
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
+  const { clock } = useTimeFormat();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -9,7 +11,6 @@ const CalendarHeader = () => {
     }, 60 * 1000); // update every minute
     return () => clearInterval(interval);
   }, []);
-  const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
 
   return (
     <div className="flex sticky top-16 bg-background z-20">
@@ -27,7 +28,7 @@ const CalendarHeader = () => {
               } ${currentHour === i / 2 ? "bg-secondary/80" : "background"}`}
               style={{ gridColumn: `span 2` }}
             >
-              {i % 2 === 0 && hours[i / 2]}
+              {i % 2 === 0 && clock.headerHour(i / 2)}
             </div>
           ))}
         </div>

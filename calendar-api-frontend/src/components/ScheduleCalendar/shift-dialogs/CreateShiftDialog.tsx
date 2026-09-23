@@ -21,7 +21,13 @@ import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useSchedule } from "@/providers/useSchedule";
 import { Shift } from "@/types/shiftTypes";
+import { Clock, useTimeFormat } from "@/utils/timeFormat";
 import { byRecentUse, positionDisplay } from "../scheduleUtils";
+import { useAgentLocations } from "@/hooks/useAgentLocations";
+import LocationFilter, {
+  FILTERABLE_LOCATIONS,
+  FLAGS,
+} from "../calendar-components/LocationFilter";
 import TimeRangeStepper from "./TimeRangeStepper";
 import PositionCombobox from "./PositionCombobox";
 import CoverageStrip from "./CoverageStrip";
@@ -39,9 +45,7 @@ import {
   clampRange,
   defaultResolution,
   formatDuration,
-  formatHour,
   formatHourTotal,
-  formatRange,
   leadHour,
   meterForPosition,
   rangeToIso,
@@ -65,9 +69,6 @@ type AgentFilter = "all" | "free" | "busy" | "off";
 
 const DURATION_PRESETS = [0.25, 0.5, 0.75, 1, 2, 4];
 
-/** `13:00` -> `13`, `13:30` stays — for the tight overlap badge. */
-const compactHour = (hour: number) => formatHour(hour).replace(":00", "");
-
 const BADGE_TONE: Record<ConflictKind, string> = {
   clear: "bg-ok-bg text-ok",
   overlap: "bg-warn-bg text-warn",
@@ -90,27 +91,35 @@ const joinNames = (names: string[]): string => {
   return `${head.slice(0, -1).join(", ")} and ${head[head.length - 1]}`;
 };
 
-const badgeText = (status: AgentStatus, positionLabel: string) => {
+const badgeText = (
+  status: AgentStatus,
+  positionLabel: string,
+  clock: Clock
+) => {
   if (status.kind === "same") return `Already on ${positionLabel}`;
   if (status.kind === "unavailable") return "Unavailable";
   if (status.kind === "overlap" && status.reference) {
-    return `${status.reference.position.label} ${compactHour(
-      status.reference.start
-    )}–${compactHour(status.reference.end)}`;
+    // Tight, so `Chats 13–14:30` fits the 132px badge.
+    return `${status.reference.position.label} ${clock.hourRange(
+      status.reference,
+      { tight: true }
+    )}`;
   }
   return "Free";
 };
 
-const conflictText = (status: AgentStatus, resolution: Resolution) => {
+const conflictText = (
+  status: AgentStatus,
+  resolution: Resolution,
+  clock: Clock
+) => {
   if (status.kind === "same" && status.reference) {
-    return `Already covered by ${status.reference.position.name} ${formatHour(
-      status.reference.start
-    )}–${formatHour(status.reference.end)} — nothing to add.`;
+    return `Already covered by ${status.reference.position.name} ${clock.hourRange(
+      status.reference
+    )} — nothing to add.`;
   }
   if (status.kind === "unavailable" && status.reference) {
-    return `Marked unavailable ${formatHour(
-      status.reference.start
-    )}–${formatHour(status.reference.end)}.`;
+    return `Marked unavailable ${clock.hourRange(status.reference)}.`;
   }
   const what =
     resolution === "replace"
@@ -142,6 +151,7 @@ const CreateShiftDialog = ({
   const { allUsers, allPositions, coverageMeters, markPositionUsed } =
     useUserSettings();
   const { shifts, events, setShifts, setEvents } = useSchedule();
+  const { clock } = useTimeFormat();
 
   /**
    * The slot to open on: the clicked hour, or the next whole hour when there is no prefill.
@@ -186,6 +196,22 @@ const CreateShiftDialog = ({
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AgentFilter>("all");
+  /**
+   * Which locations' agents are offered. A filter only — it never selects or deselects
+   * anyone — and whoever is selected stays listed whatever it shows (`pinned`, snapshotted
+   * at each flag change so an agent you untick stays put until the flags change again).
+   * Same rule as the duplicate dialog's flags after their first click.
+   */
+  const [locationFilter, setLocationFilter] = useState<string[]>([
+    ...FILTERABLE_LOCATIONS,
+  ]);
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  const { agentsByLocation, filterByLocations, locationByUserId } =
+    useAgentLocations();
+  /** The agent's location flag, for the list — which, unlike the duplicate dialog's, is
+   *  sorted by availability rather than grouped by place. */
+  const flagFor = (agentId: string) =>
+    FLAGS.find((flag) => flag.location === locationByUserId.get(agentId));
   const [submitting, setSubmitting] = useState(false);
   // Off by default: a new shift is a draft unless you say otherwise, so the reviewable
   // outcome is the one you get without thinking about it.
@@ -216,6 +242,8 @@ const CreateShiftDialog = ({
     setResolutions({});
     setQuery("");
     setFilter("all");
+    setLocationFilter([...FILTERABLE_LOCATIONS]);
+    setPinned(new Set());
     setPublishNow(false);
   }, [open, initialUserId, initialRange?.start, initialRange?.end, initialPositionId]);
 
@@ -322,16 +350,29 @@ const CreateShiftDialog = ({
 
   const shortfall = series ? shortfallInRange(series, range) : null;
 
+  /** The roster the location flags leave on offer, plus everyone pinned. */
+  const located = useMemo(() => {
+    const inLocations = new Set(
+      filterByLocations(roster, locationFilter).map((agent) => agent.id)
+    );
+    return roster.filter((agent) => inLocations.has(agent.id) || pinned.has(agent.id));
+  }, [roster, filterByLocations, locationFilter, pinned]);
+
+  const changeLocations = (next: string[]) => {
+    setLocationFilter(next);
+    setPinned(new Set(selectedIds));
+  };
+
   const counts = useMemo(() => {
-    const tally = { all: roster.length, free: 0, busy: 0, off: 0 };
-    roster.forEach((agent) => {
+    const tally = { all: located.length, free: 0, busy: 0, off: 0 };
+    located.forEach((agent) => {
       const kind = statuses.get(agent.id)?.kind;
       if (kind === "clear") tally.free++;
       else if (kind === "unavailable") tally.off++;
       else tally.busy++;
     });
     return tally;
-  }, [roster, statuses]);
+  }, [located, statuses]);
 
   /**
    * Ordered by who can actually take the shift, not alphabetically: free agents, then
@@ -343,7 +384,7 @@ const CreateShiftDialog = ({
    */
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return roster
+    return located
       .filter((agent) => {
         if (needle && !agent.name.toLowerCase().includes(needle)) return false;
         const kind = statuses.get(agent.id)?.kind;
@@ -353,7 +394,7 @@ const CreateShiftDialog = ({
         return true;
       })
       .sort(byAvailability(statuses));
-  }, [roster, statuses, query, filter]);
+  }, [located, statuses, query, filter]);
 
   const toggleAgent = (agentId: string) =>
     setSelectedIds((current) =>
@@ -371,7 +412,7 @@ const CreateShiftDialog = ({
     }
     const name = meterContext.meter.name.toLowerCase();
     if (shortfall) {
-      return `${name} still ${shortfall.deficit} short at ${formatHour(
+      return `${name} still ${shortfall.deficit} short at ${clock.hour(
         shortfall.hour
       )}`;
     }
@@ -443,7 +484,7 @@ const CreateShiftDialog = ({
         toast.success(
           `${created.length} ${created.length === 1 ? "shift" : "shifts"} created`,
           {
-            description: `${position.name} · ${formatRange(range)}${
+            description: `${position.name} · ${clock.hourRange(range)}${
               removed.length ? ` · ${removed.length} replaced` : ""
             }`,
           }
@@ -603,7 +644,7 @@ const CreateShiftDialog = ({
                   style={toneStyle(position)}
                 >
                   <div className="text-[11px] font-bold tabular-nums">
-                    {formatRange(range)}
+                    {clock.hourRange(range)}
                   </div>
                   <div className="text-[10.5px] font-medium opacity-90">
                     {position.label}
@@ -654,16 +695,32 @@ const CreateShiftDialog = ({
               <button
                 type="button"
                 className="shrink-0 whitespace-nowrap px-0.5 text-[12px] font-semibold text-primary hover:underline"
+                // Adds the free agents in the chosen locations and keeps everyone already
+                // picked, so "all free in APAC" can be added to a pick from elsewhere.
                 onClick={() =>
-                  setSelectedIds(
-                    roster
-                      .filter((agent) => statuses.get(agent.id)?.kind === "clear")
-                      .map((agent) => agent.id)
-                  )
+                  setSelectedIds((current) => [
+                    ...new Set([
+                      ...current,
+                      ...located
+                        .filter((agent) => statuses.get(agent.id)?.kind === "clear")
+                        .map((agent) => agent.id),
+                    ]),
+                  ])
                 }
               >
                 Select all free ({counts.free})
               </button>
+            </div>
+
+            <div className="flex items-center gap-2.5 border-b border-border px-4 py-2.5">
+              <LocationFilter
+                selected={locationFilter}
+                onChange={changeLocations}
+                countsByLocation={agentsByLocation}
+              />
+              <div className="text-[11px] text-muted-foreground">
+                Filters who is listed — anyone selected stays
+              </div>
             </div>
 
             {selected.length > 0 && (
@@ -727,6 +784,7 @@ const CreateShiftDialog = ({
                   status={statuses.get(agent.id)!}
                   range={range}
                   positionLabel={position.label}
+                  location={flagFor(agent.id)}
                   isSelected={selected.includes(agent.id)}
                   resolution={resolutionFor(agent.id)}
                   onToggle={() => toggleAgent(agent.id)}
@@ -749,7 +807,7 @@ const CreateShiftDialog = ({
                 ? "No shifts to create"
                 : `${creating.length} ${
                     creating.length === 1 ? "shift" : "shifts"
-                  } · ${position.label} · ${formatRange(range)} · ${formatDuration(
+                  } · ${position.label} · ${clock.hourRange(range)} · ${formatDuration(
                     duration
                   )}`}
             </div>
@@ -795,6 +853,7 @@ type AgentPickRowProps = {
   status: AgentStatus;
   range: HourRange;
   positionLabel: string;
+  location?: (typeof FLAGS)[number];
   isSelected: boolean;
   resolution: Resolution;
   onToggle: () => void;
@@ -806,11 +865,13 @@ const AgentPickRow = ({
   status,
   range,
   positionLabel,
+  location,
   isSelected,
   resolution,
   onToggle,
   onResolve,
 }: AgentPickRowProps) => {
+  const { clock } = useTimeFormat();
   const options = resolutionOptions(status.kind);
   const showResolve = isSelected && status.kind !== "clear";
 
@@ -858,8 +919,15 @@ const AgentPickRow = ({
         </Avatar>
 
         <div className="w-[124px] min-w-0">
-          <div className="truncate text-[12.5px] font-semibold leading-tight">
-            {agent.name}
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[12.5px] font-semibold leading-tight">
+              {agent.name}
+            </span>
+            {location && (
+              <span title={location.label} className="flex shrink-0">
+                <location.Flag className="h-[9px] w-[13px] rounded-[1.5px] ring-1 ring-inset ring-foreground/25" />
+              </span>
+            )}
           </div>
           <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
             {agent.scheduledHours > 0
@@ -874,7 +942,7 @@ const AgentPickRow = ({
             BADGE_TONE[status.kind]
           )}
         >
-          {badgeText(status, positionLabel)}
+          {badgeText(status, positionLabel, clock)}
         </span>
 
         <AgentDayStrip spans={agent.spans} range={range} className="flex-1" />
@@ -888,7 +956,7 @@ const AgentPickRow = ({
               status.kind === "same" ? "text-muted-foreground" : "text-warn"
             )}
           >
-            {conflictText(status, resolution)}
+            {conflictText(status, resolution, clock)}
           </div>
           {options.length > 0 && (
             <div className="flex h-[26px] items-center gap-0.5 rounded-lg bg-muted p-0.5">

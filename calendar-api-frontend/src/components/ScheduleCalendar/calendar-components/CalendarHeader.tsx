@@ -6,6 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import { GRID_COLUMNS } from "../scheduleUtils";
 import ZoneStrip from "./ZoneStrip";
 
@@ -33,6 +34,7 @@ const CalendarHeader = ({
   selectedDate,
 }: CalendarHeaderProps) => {
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  const { clock } = useTimeFormat();
 
   useEffect(() => {
     const timer = setInterval(
@@ -63,7 +65,7 @@ const CalendarHeader = ({
               <TooltipTrigger asChild>
                 <div
                   className={cn(
-                    "cursor-default border-l border-border-subtle pb-[9px] pt-2.5 text-center",
+                    "cursor-default whitespace-nowrap border-l border-border-subtle pb-[9px] pt-2.5 text-center",
                     "text-[11px] font-semibold tabular-nums transition-colors hover:bg-muted/60",
                     isToday && currentHour === hour
                       ? "bg-me-tint text-foreground"
@@ -71,7 +73,7 @@ const CalendarHeader = ({
                   )}
                   style={{ gridColumn: "span 2" }}
                 >
-                  {String(hour).padStart(2, "0")}
+                  {clock.headerHour(hour)}
                 </div>
               </TooltipTrigger>
               <TooltipContent sideOffset={6} className="px-2.5 py-2">

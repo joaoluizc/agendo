@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import ZoneStrip from "../calendar-components/ZoneStrip";
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTimeFormat } from "@/utils/timeFormat";
 import {
   DAY_HOURS,
   HOUR_STEP,
   HourRange,
   clampRange,
   formatDuration,
-  formatHour,
   parseHourInput,
 } from "./shiftPlanning";
 
@@ -40,6 +40,7 @@ const HourField = ({
   onType,
 }: HourFieldProps) => {
   const [draft, setDraft] = useState<string | null>(null);
+  const { clock } = useTimeFormat();
   const cell = compact ? "w-7" : "w-[30px]";
 
   /**
@@ -85,14 +86,15 @@ const HourField = ({
         </button>
         <input
           type="text"
-          inputMode="numeric"
+          // A numeric keypad has no letters, and the field shows (and reads back) `PM`.
+          inputMode={clock.hour12 ? "text" : "numeric"}
           autoComplete="off"
           aria-label={`${label} time`}
           className="min-w-0 flex-1 bg-transparent text-center text-[13.5px] font-semibold tabular-nums outline-none"
-          value={draft ?? formatHour(value)}
+          value={draft ?? clock.hour(value)}
           onChange={(event) => setDraft(event.target.value)}
           onFocus={(event) => {
-            setDraft(formatHour(value));
+            setDraft(clock.hour(value));
             event.target.select();
           }}
           onBlur={commit}
