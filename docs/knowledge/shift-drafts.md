@@ -172,7 +172,7 @@ a normal shift still cannot be pushed past its own day, so no dialog gained the 
 
 Three details that follow:
 
-- The **End** field relabels to "End · next day", and `formatHour` wraps past 24 so the
+- The **End** field relabels to "End · next day", and `clock.hour` wraps past 24 so the
   number stays a clock time (`01:00`, not `25:00`). Which day it falls on is the label's job.
 - A typed end at or before the start means the next day when that is allowed. Unambiguous
   because shifts never run near 24 hours.
@@ -234,9 +234,23 @@ markers and the source-day counts) asks for `includeDrafts=1`; it used not to, s
 holding only drafts was marked free and `skip` then refused it server-side.
 
 The source day is choosable ("Copy from" opens a calendar) and defaults to the day on
-screen. The agent chips take the schedule's location flags: picking a flag narrows the list
-to that location *and* selects exactly its agents, and the chips then untick individuals —
-the same `useAgentLocations` lookup as the grid, so "who is in APAC" cannot disagree.
+screen. The agent list holds only agents with something to copy from that day, grouped
+under their location's flag and all selected to start; changing the source day starts over.
+
+The flags there filter rather than select, with one exception. A flag clicked while the
+selection is still the untouched "everyone" selects exactly that location's agents: one
+click to copy a single region, the same "first flag means only this" as the grid. Changing
+the selection by hand first (a chip, Select all / Clear all) ends that state just as a flag
+does, so the hand-made pick is never replaced. After that a flag only changes who else is *offered*.
+Adding one lists its agents unticked; anyone already selected stays listed whatever the flags
+show; and a chip you untick stays put until the next flag change. That way "APAC, plus two
+from Israel" doesn't undo itself when the second flag goes on. It's the same
+`useAgentLocations` lookup as the grid, so "who is in APAC" cannot disagree.
+
+Skip and replace run **per selected agent** on the backend (`existing` is filtered by
+`users`). So the target calendar's busy markers, the conflict warning and the footer's day
+count only look at the selected agents' shifts. An agent with nothing on the source day is
+never sent, so replace can't clear their target days and skip can't count them.
 
 ## A missing status means published
 
@@ -466,3 +480,11 @@ does not need a second migration over the same collection.
 [calendar sync paths](agendo-sync-paths.md) and `src/database/scripts/purgeOrphanShifts.js`).
 Drafts make this cheaper — dev-created shifts are drafts, so they stay out of reports and
 calendars by default — but they do not fix it.
+
+Locations *are* split now (`dev-locations` in development), because a local run's roster is
+`dev-users` and assigning anyone to a location wrote dev ids into production documents. For
+a roster worth testing the location flags with, `src/database/scripts/seedTestAgents.js`
+adds twelve `test_` agents to `dev-users` (three per location), assigns them in
+`dev-locations`, and with `--shifts-on=YYYY-MM-DD` gives each a day of drafts. They have no
+Clerk account, so publishing their shifts reports a sync error but still publishes.
+`--remove --apply` deletes the agents, their assignments and every `test_` shift.

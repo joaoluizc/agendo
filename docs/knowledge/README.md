@@ -8,5 +8,5 @@ teammates. Keep entries tight and skimmable; one topic per file.
 - [Clerk / Mongo boundary](clerk-mongo-boundary.md) — which store owns which user field, the id spaces, and why `publicMetadata` is banned
 - [Calendar sync paths](agendo-sync-paths.md) — the two ways shifts reach Google Calendar, and the position id-space gotcha
 - [Shift drafts](shift-drafts.md) — the draft/published lifecycle, what drafts are excluded from, the one filter rule that matters, bulk selection, coverage focus, and keeping bulk work inside the proxy timeout
-- [Schedule screens & date handling](frontend-schedule-date.md) — the two schedule screens, the URL `?date=` convention, and the date footguns
+- [Schedule screens & date handling](frontend-schedule-date.md) — the two schedule screens, the URL `?date=` convention, clock times (24-hour or AM/PM), hiding Google events, the pinned hour rows, row order, and the date footguns
 - [Frontend build & lint](frontend-build-and-lint.md) — what gates a build, and why ESLint is noisy

@@ -1,8 +1,8 @@
 # Schedule screens & date handling (frontend)
 
-_The two schedule screens, how the selected day is driven by a URL param, and the date footguns._
+_The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows, row order, and the date footguns._
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-23_
 
 The frontend (`calendar-api-frontend`) has **two schedule screens**, one per
 shift source (see [agendo overview](agendo-overview.md) for why both exist):
@@ -67,6 +67,88 @@ Two consequences worth knowing:
 - Coverage requires a shift to span a **whole** half-hour slot to count, so a 15-minute
   shift contributes nothing to a coverage meter. That is intended — a meter asks "is this
   half hour covered" — but it means short breaks are invisible to coverage.
+
+## Clock times: one formatter, 24-hour or AM/PM
+
+Every clock time the app writes goes through `src/utils/timeFormat.ts`. Components read
+`useTimeFormat().clock`; utilities that produce text take a `clock` argument
+(`buildCoverageSeries`, `readZones`). **Don't format a time with `toLocaleTimeString`,
+`padStart` or date-fns `HH:mm`** — one-off formatters are how the grid header came to be
+24-hour while the blocks on it were AM/PM.
+
+- The choice is `"auto" | "24h" | "12h"`, set in the header's theme menu — the sun/moon
+  button, which carries a small clock to say so — on every page, and kept per browser in
+  localStorage (`agendo.timeFormat`). It is a module-level store read through
+  `useSyncExternalStore`, so switching it re-renders exactly the components that write a
+  time and never touches the schedule provider.
+- **"Auto" is only as good as the browser.** It reads
+  `Intl.DateTimeFormat().resolvedOptions().hourCycle`. Chrome and Edge derive that from the
+  browser's *language* (en-US gives AM/PM; en-GB, pt-BR and he-IL give 24-hour), not from
+  the OS 12/24-hour switch; Safari and Firefox can follow OS regional settings. Hence the
+  explicit override, and the menu's "Auto (browser: …)" label saying what it resolved to.
+- Resolved once per page load, and there are only two clock objects: about 500 grid
+  components call the hook on every render, and an `Intl.DateTimeFormat` each would show.
+- Rules the old formatters had, kept:
+  - `clock.hour(h)` on fractional hours: 24 stays `24:00` (`12:00 AM`) and past 24 wraps
+    (`25` is `01:00`) — the overnight-edit rule from [shift drafts](shift-drafts.md).
+  - `clock.range(start, end)` writes an end at exactly midnight as `24:00` too, so a block
+    reads like its dialog. `clock.hourRange` is the same on fractional hours.
+  - 12-hour ranges write a shared suffix once (`9–11 AM`), except across midnight
+    (`9 PM – 1 AM`), where `9–1 AM` would read backwards.
+- Written by hand, not by `toLocaleTimeString`. ICU 72 put a narrow no-break space
+  (U+202F) before AM/PM in some engines, which silently broke the old string surgery on
+  `"10:00 AM"`. The only browser-locale timestamps left (Bug Tracker tooltips) pass
+  `hourCycle: clock.hourCycle`.
+- Typing is unaffected: `parseHourInput` reads both clocks whichever one the field shows
+  (`9:30 PM`, `21:30`, `930p`).
+
+## Hiding Google Calendar events
+
+The toolbar's **Google Calendar** switch (`CalendarEventsToggle`; admins only, since nobody
+else loads events) shows or hides every agent's Google events on the grid. It is for reading
+the shifts on their own — someone unsure when their shift is can drop the day's meetings and
+see where it falls. `ScheduleCalendar` holds it and keeps it in localStorage
+(`agendo.showCalendarEvents`, written only while hidden), so it stays as left across
+reloads, sessions and days.
+
+- Hidden means *not fetched*: `fetchData` skips `getGCalendarEvents`, the heavy call, so
+  switching days is faster too. Rows lose their event lanes and shrink, and the legend drops
+  its entry. A switch rather than a menu item, because its position is the state.
+- Showing them again refetches quietly. A fetch that did not ask for events leaves them
+  alone — hiding is what clears them — so one still in flight cannot blank what the newer
+  fetch loaded.
+- **Accepted trade-off: hidden events hide meeting clashes.** The shift dialogs have never
+  looked at Google events — their conflicts come from agendo shifts alone — so while the
+  under-lane is off, nothing shows a shift being drawn over a meeting.
+
+## Pinned hours and coverage rows
+
+While the page scrolls, the hour row and the coverage rows stay pinned under the site header
+(`sticky top-16`, the header's `h-16`), so the hours stay readable deep in the roster.
+
+- **They can't be a sticky row inside the grid's scroller.** An `overflow-x` element is a
+  scroll container in both axes, so a sticky child sticks to it — and it never scrolls
+  vertically. So the grid card holds two scrollers: the pinned block (`overflow-hidden`),
+  and the agent rows (`overflow-x-auto`, which owns the sideways scroll). The rows'
+  `onScroll` copies `scrollLeft` into the pinned block, and a sideways wheel over the pinned
+  block is forwarded to the rows.
+- **The card is `overflow-clip`, not `overflow-hidden`.** Hidden would make the card a
+  scroll container too and capture the pinned block; clip still rounds the corners without
+  that.
+- `NowLine` is drawn in both parts; only the pinned one has the time label.
+
+## Row order
+
+Agent rows are ordered by when each agent's day starts, then by name
+(`scheduleUtils.firstShiftStart`). Agents with nothing starting that day come last.
+
+- Only a shift that **begins** on the day counts. One carried over from the night before is
+  drawn from 00:00, but it ends yesterday rather than starting today.
+- Every kind of block counts, unavailable time and drafts included, so the order matches
+  where each row's first block sits — an agent whose day opens with an Unavailable block
+  sorts by that block.
+- The order is re-derived from the day's shifts, so moving an agent's first shift earlier
+  moves their row once the change is saved.
 
 ## Footguns
 
