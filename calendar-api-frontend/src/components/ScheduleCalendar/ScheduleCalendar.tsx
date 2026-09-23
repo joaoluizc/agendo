@@ -41,6 +41,8 @@ const Schedule = () => {
     exitBulkSelect,
     registerReload,
     reloadSchedule,
+    isBulkSelectorActive,
+    setFocusedPositionIds,
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
@@ -59,6 +61,39 @@ const Schedule = () => {
   ]);
 
   const { agentsByLocation, filterByLocations } = useAgentLocations();
+
+  /**
+   * The coverage meter the admin clicked, if any. Its shifts stay as they are and every
+   * other shift is dimmed — dimmed, not hidden, because the reason to focus a meter is
+   * usually to move someone onto it ("Ana is out, who can take Tickets?"), and a hidden
+   * meeting makes a busy agent look free. Every row stays, so a new shift can still be
+   * drawn anywhere. Not persisted, like the location filter.
+   */
+  const [focusedMeterId, setFocusedMeterId] = useState<string | null>(null);
+  const focusedMeter =
+    coverageMeters.find((meter) => meter._id === focusedMeterId) ?? null;
+
+  useEffect(() => {
+    setFocusedPositionIds(
+      focusedMeter ? new Set(focusedMeter.positionIds.map(String)) : null
+    );
+  }, [focusedMeter]);
+
+  // The provider outlives this page; leaving must not strand the grid dimmed.
+  useEffect(() => () => setFocusedPositionIds(null), []);
+
+  // Escape clears the focus — unless select mode is on (Escape clears the selection
+  // there) or a dialog is open (Escape is closing it).
+  useEffect(() => {
+    if (!focusedMeterId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || isBulkSelectorActive) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      setFocusedMeterId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focusedMeterId, isBulkSelectorActive]);
 
   /** The agents the grid draws — see `useAgentLocations` for the no-location rule. */
   const visibleUsers = useMemo(
@@ -243,6 +278,33 @@ const Schedule = () => {
         />
       )}
 
+      {/* Says out loud that the grid is dimmed on purpose, and how to undo it — a grid
+          that is mostly faded with no explanation reads as broken. */}
+      {focusedMeter && (
+        <div className="mx-5 mb-3 flex items-center gap-2.5 rounded-lg border border-border bg-band px-3.5 py-2 text-[12.5px]">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+            style={{ backgroundColor: focusedMeter.color }}
+          />
+          <span>
+            Highlighting <span className="font-semibold">{focusedMeter.name}</span>{" "}
+            shifts
+            <span className="text-muted-foreground">
+              {" "}
+              — everything else is dimmed; new shifts default to{" "}
+              {focusedMeter.name}.
+            </span>
+          </span>
+          <button
+            type="button"
+            className="ml-auto whitespace-nowrap text-[12px] font-semibold text-primary hover:underline"
+            onClick={() => setFocusedMeterId(null)}
+          >
+            Show all <span className="font-normal text-muted-foreground">(esc)</span>
+          </button>
+        </div>
+      )}
+
       {/* One card, one horizontal scroll container. The agent column is sticky
           inside it, so the whole grid scrolls together instead of every row owning
           its own scrollbar. `relative` sits on the inner track rather than on
@@ -284,6 +346,13 @@ const Schedule = () => {
                     shifts={shifts}
                     selectedDate={selectedDate}
                     showTargets={showTargets}
+                    focused={meter._id === focusedMeterId}
+                    dimmed={focusedMeterId !== null && meter._id !== focusedMeterId}
+                    onToggleFocus={() =>
+                      setFocusedMeterId((current) =>
+                        current === meter._id ? null : meter._id
+                      )
+                    }
                   />
                 ))}
 

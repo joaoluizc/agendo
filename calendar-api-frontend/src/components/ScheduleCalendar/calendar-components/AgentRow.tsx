@@ -24,6 +24,7 @@ import {
   packLanes,
   prettyGCalTime,
   scheduledHours,
+  focusedDefaultPosition,
 } from "../scheduleUtils";
 import { cn } from "@/lib/utils";
 import { useSchedule } from "@/providers/useSchedule";
@@ -112,7 +113,10 @@ const AgentRow = ({
     isBulkSelectorActive,
     bulkSelectedShifts,
     setBulkSelectedShifts,
+    selectedShiftIds,
+    focusedPositionIds,
   } = useSchedule();
+
   const { type: userType } = useUserSettings();
 
   /** The range being drawn by a press-and-drag on empty space, while the pointer is down. */
@@ -164,8 +168,8 @@ const AgentRow = ({
     () => new Set(shifts.map((shift) => shift._id)),
     [shifts]
   );
-  const selectedInRow = bulkSelectedShifts.filter((shift) =>
-    rowShiftIds.has(shift._id)
+  const selectedInRow = shifts.filter((shift) =>
+    selectedShiftIds.has(shift._id)
   ).length;
   const allRowSelected = shifts.length > 0 && selectedInRow === shifts.length;
   const someRowSelected = selectedInRow > 0 && !allRowSelected;
@@ -177,12 +181,9 @@ const AgentRow = ({
       );
       return;
     }
-    const alreadySelected = new Set(
-      bulkSelectedShifts.map((shift) => shift._id)
-    );
     setBulkSelectedShifts([
       ...bulkSelectedShifts,
-      ...shifts.filter((shift) => !alreadySelected.has(shift._id)),
+      ...shifts.filter((shift) => !selectedShiftIds.has(shift._id)),
     ]);
   };
 
@@ -524,7 +525,12 @@ const AgentRow = ({
               <HoverCard key={event.id}>
                 <HoverCardTrigger asChild>
                   <div
-                    className="pointer-events-auto mx-[2px] flex items-center overflow-hidden truncate rounded-[4px] border border-border bg-muted px-1 text-[9.5px] font-medium leading-none text-muted-foreground"
+                    className={cn(
+                      "pointer-events-auto mx-[2px] flex items-center overflow-hidden truncate rounded-[4px] border border-border bg-muted px-1 text-[9.5px] font-medium leading-none text-muted-foreground",
+                      // A Google event is on no coverage meter, so a focused meter dims
+                      // it like any other off-meter shift.
+                      focusedPositionIds && "opacity-40"
+                    )}
                     title={event.summary}
                     style={{
                       gridColumnStart: columnStart(item.start),
@@ -600,6 +606,11 @@ const AgentRow = ({
           selectedDate={selectedDate}
           initialUserId={String(user.id)}
           initialRange={createRange}
+          // With a coverage meter focused, a new shift starts on that meter's position.
+          initialPositionId={focusedDefaultPosition(
+            [...positionsById.values()],
+            focusedPositionIds
+          )}
         />
       )}
     </div>

@@ -452,10 +452,17 @@ export type CoverageSeries = {
    */
   draftCounts: number[];
   targets: number[];
+  /**
+   * Who covers each slot, for the hover card. `draftOnly` marks an agent counted only
+   * because of an unpublished shift — the same agents `draftCounts` counts.
+   */
+  agents: CoverageAgent[][];
   peak: number;
   summary: string;
   hasTarget: boolean;
 };
+
+export type CoverageAgent = { user: UserSafeInfo; draftOnly: boolean };
 
 /**
  * Slot 18 -> `09:00`, slot 19 -> `09:30`.
@@ -538,6 +545,7 @@ export const buildCoverageSeries = (
     const toSpan = (shift: Shift) =>
       dayBounds(shift.startTime, shift.endTime, selectedDate);
     return {
+      user,
       all: onMeter.map(toSpan),
       published: onMeter.filter((shift) => !isDraft(shift)).map(toSpan),
     };
@@ -546,6 +554,7 @@ export const buildCoverageSeries = (
   const counts: number[] = [];
   const draftCounts: number[] = [];
   const targets: number[] = [];
+  const agents: CoverageAgent[][] = [];
 
   for (let slot = 0; slot < SLOTS_PER_DAY; slot++) {
     const slotStart = slot / 2;
@@ -553,12 +562,14 @@ export const buildCoverageSeries = (
     const covers = (spans: DaySpan[]) =>
       spans.some((span) => span.start <= slotStart && span.end >= slotEnd);
 
-    const planned = spansByUser.filter((agent) => covers(agent.all)).length;
-    const committed = spansByUser.filter((agent) =>
-      covers(agent.published)
-    ).length;
+    const coveringAgents = spansByUser
+      .filter((agent) => covers(agent.all))
+      .map((agent) => ({ user: agent.user, draftOnly: !covers(agent.published) }));
+    const planned = coveringAgents.length;
+    const committed = coveringAgents.filter((agent) => !agent.draftOnly).length;
 
     counts.push(planned);
+    agents.push(coveringAgents);
     // The *extra* head count the drafts buy. An agent already covering this slot with a
     // published shift contributes nothing here, so replacing one draft with another never
     // reads as added coverage.
@@ -573,6 +584,7 @@ export const buildCoverageSeries = (
     counts,
     draftCounts,
     targets,
+    agents,
     peak,
     hasTarget,
     summary: summarize(counts, targets, hasTarget),
@@ -718,4 +730,20 @@ export const byRecentUse = (a: Position, b: Position) => {
   const bDay = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
   if (aDay !== bDay) return bDay - aDay;
   return a.name.localeCompare(b.name);
+};
+
+/**
+ * The position a new shift should start on while a coverage meter is focused: the
+ * meter's most recently used position, by the picker's own order. Undefined when nothing
+ * is focused, so the create dialog falls back to its usual choice.
+ */
+export const focusedDefaultPosition = (
+  positions: Position[],
+  focusedPositionIds: Set<string> | null
+): string | undefined => {
+  if (!focusedPositionIds) return undefined;
+  const [first] = positions
+    .filter((position) => focusedPositionIds.has(String(position._id)))
+    .sort(byRecentUse);
+  return first ? String(first._id) : undefined;
 };
