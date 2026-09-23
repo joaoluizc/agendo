@@ -1,4 +1,10 @@
-import { ChevronLeft, ChevronRight, CalendarSearch } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarSearch,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { Label } from "@radix-ui/react-label";
 import { Input } from "@/components/ui/input";
 import CreateShiftForm from "../CreateShiftBtn";
@@ -23,6 +29,10 @@ type ScheduleToolbarProps = {
   canShowCalendarEvents: boolean;
   showCalendarEvents: boolean;
   onShowCalendarEventsChange: (next: boolean) => void;
+  /** How many hours are dropped off each edge of the grid; 0 is the whole day. */
+  zoom: number;
+  maxZoom: number;
+  onZoomChange: (next: number) => void;
 };
 
 /** A given Date, shifted by `delta` days and normalised to local midnight. */
@@ -68,6 +78,9 @@ const ScheduleToolbar = ({
   canShowCalendarEvents,
   showCalendarEvents,
   onShowCalendarEventsChange,
+  zoom,
+  maxZoom,
+  onZoomChange,
 }: ScheduleToolbarProps) => (
   <div className="px-5 pb-3.5 pt-5">
     {/* The label keeps its own line, with every control on the line below — the layout it
@@ -147,6 +160,33 @@ const ScheduleToolbar = ({
         onChange={onLocationFilterChange}
         countsByLocation={agentsByLocation}
       />
+
+      {/* Glued like the day stepper. Each step in drops an hour off each edge of the day;
+          the ends stay clickable rather than disabled, and do nothing. */}
+      <div className="flex h-[34px] items-stretch overflow-hidden rounded-lg border border-border">
+        <button
+          type="button"
+          aria-label="Zoom out"
+          title="Zoom out"
+          className="flex w-9 items-center justify-center hover:bg-muted"
+          onClick={() => onZoomChange(Math.max(0, zoom - 1))}
+        >
+          <ZoomOut size={16} />
+        </button>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          title={
+            zoom
+              ? `Showing ${String(zoom).padStart(2, "0")}–${String(23 - zoom).padStart(2, "0")} · zoom in`
+              : "Zoom in"
+          }
+          className="flex w-9 items-center justify-center border-l border-border hover:bg-muted"
+          onClick={() => onZoomChange(Math.min(maxZoom, zoom + 1))}
+        >
+          <ZoomIn size={16} />
+        </button>
+      </div>
 
       {/* With the filter for the same reason: it changes how the grid reads, not what is
           on it. Admins only, because only admins load the events at all. */}

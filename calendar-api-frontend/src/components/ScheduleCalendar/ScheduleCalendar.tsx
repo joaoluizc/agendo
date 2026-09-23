@@ -3,6 +3,7 @@ import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  LABEL_COLUMN_PX,
   TRACK_MIN_PX,
   firstShiftStart,
   getShifts,
@@ -17,6 +18,7 @@ import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import ScheduleToolbar from "./calendar-components/ScheduleToolbar.tsx";
 import AgentRow from "./calendar-components/AgentRow.tsx";
 import CoverageRow from "./calendar-components/CoverageRow.tsx";
+import ScrollRail from "./calendar-components/ScrollRail.tsx";
 import PublishDraftsBar from "./calendar-components/PublishDraftsBar.tsx";
 import PendingChangePrompt from "./calendar-components/PendingChangePrompt.tsx";
 import NowLine from "./calendar-components/NowLine.tsx";
@@ -54,6 +56,9 @@ const storeShowCalendarEvents = (show: boolean) => {
     // Private windows and blocked storage: the choice still holds until a reload.
   }
 };
+
+/** Deepest zoom: 8 hours on screen (08–15), eight steps in. */
+const MAX_ZOOM = 8;
 
 const Schedule = () => {
   const {
@@ -354,14 +359,64 @@ const Schedule = () => {
   const pinnedRef = useRef<HTMLDivElement>(null);
   const rowsScrollerRef = useRef<HTMLDivElement>(null);
 
-  const syncPinnedScroll = () => {
-    if (pinnedRef.current && rowsScrollerRef.current) {
-      pinnedRef.current.scrollLeft = rowsScrollerRef.current.scrollLeft;
+  /** The two scrollbars drawn under the hours — one below the pinned block, one below the rows. */
+  const topRailRef = useRef<HTMLDivElement>(null);
+  const bottomRailRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Copy one scroller's position to the other three. Writing the value they already hold
+   * fires no scroll event, so the echo from each write stops after one hop.
+   */
+  const syncScrollFrom = (source: HTMLDivElement | null) => {
+    if (!source) return;
+    for (const target of [
+      rowsScrollerRef.current,
+      pinnedRef.current,
+      topRailRef.current,
+      bottomRailRef.current,
+    ]) {
+      if (target && target !== source) target.scrollLeft = source.scrollLeft;
     }
   };
 
+  const syncPinnedScroll = () => syncScrollFrom(rowsScrollerRef.current);
+
   // The pinned block remounts after every loading skeleton; start it where the rows are.
   useLayoutEffect(syncPinnedScroll, [scheduleIsLoading]);
+
+  /**
+   * Zoom: each step drops one hour off each edge of the view — 00 and 23 first, then 01
+   * and 22 — by widening the track so the hours left fill the scroller. The dropped hours
+   * are still there, a sideways scroll away. Level 0 is the whole day, exactly as before.
+   *
+   * Nothing inside the track needs to know: rows, the now line, drops and drag-to-create
+   * all position as fractions of the track's width.
+   */
+  const [zoom, setZoom] = useState(0);
+  const [scrollerWidth, setScrollerWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const scroller = rowsScrollerRef.current;
+    if (!scroller) return;
+    const observer = new ResizeObserver(() =>
+      setScrollerWidth(scroller.clientWidth)
+    );
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, []);
+
+  const hourPx =
+    Math.max(0, scrollerWidth - LABEL_COLUMN_PX) / (24 - 2 * zoom);
+  const trackWidth = Math.max(TRACK_MIN_PX, LABEL_COLUMN_PX + hourPx * 24);
+  /** Only draw the scrollbars when there is somewhere to scroll to. */
+  const overflows = scrollerWidth > 0 && trackWidth > scrollerWidth + 1;
+
+  // Land each zoom step on the hours it keeps, with the dropped ones off either edge.
+  useLayoutEffect(() => {
+    if (!rowsScrollerRef.current) return;
+    rowsScrollerRef.current.scrollLeft = zoom * hourPx;
+    syncPinnedScroll();
+  }, [zoom, scheduleIsLoading, overflows]);
 
   return (
     <div>
@@ -376,6 +431,9 @@ const Schedule = () => {
         canShowCalendarEvents={isAdmin}
         showCalendarEvents={showCalendarEvents}
         onShowCalendarEventsChange={changeShowCalendarEvents}
+        zoom={zoom}
+        maxZoom={MAX_ZOOM}
+        onZoomChange={setZoom}
       />
 
       {/* Creating a shift no longer syncs it, so the day needs somewhere that says
@@ -430,11 +488,12 @@ const Schedule = () => {
           on each inner track, so each NowLine measures its own and scrolls with it. */}
       <div className="mx-5 mb-6 overflow-clip rounded-xl border border-border bg-card shadow-sm">
         {!scheduleIsLoading && (
+          // top-16 is the site header's h-16, which is sticky itself. z-[6] clears the
+          // rows' sticky agent column (z-[3]) and their now-line (z-[5]).
+          <div className="sticky top-16 z-[6] bg-card">
           <div
             ref={pinnedRef}
-            // top-16 is the site header's h-16, which is sticky itself. z-[6] clears the
-            // rows' sticky agent column (z-[3]) and their now-line (z-[5]).
-            className="sticky top-16 z-[6] overflow-hidden bg-card"
+            className="overflow-hidden"
             // A sideways trackpad swipe over the hours scrolls the grid, as it would have
             // when they were part of it.
             onWheel={(event) => {
@@ -443,7 +502,7 @@ const Schedule = () => {
               }
             }}
           >
-            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
+            <div className="relative" style={{ width: trackWidth }}>
               <CalendarHeader
                 agentCount={visibleUsers.length}
                 isToday={isToday}
@@ -473,11 +532,22 @@ const Schedule = () => {
               <NowLine isToday={isToday} />
             </div>
           </div>
+          {/* Outside the clipped block, so it stays put while the hours slide. */}
+          {overflows && (
+            <ScrollRail
+              ref={topRailRef}
+              trackWidth={trackWidth}
+              onScroll={() => syncScrollFrom(topRailRef.current)}
+            />
+          )}
+          </div>
         )}
 
+        {/* Still the scroller that owns the position; its own bar is hidden in favour of
+            the rails, which stop at the agent column. */}
         <div
           ref={rowsScrollerRef}
-          className="overflow-x-auto"
+          className="schedule-scrollbar-hidden overflow-x-auto"
           onScroll={syncPinnedScroll}
         >
           {scheduleIsLoading ? (
@@ -497,7 +567,7 @@ const Schedule = () => {
               ))}
             </div>
           ) : (
-            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
+            <div className="relative" style={{ width: trackWidth }}>
               {visibleUsers.map((currUser) => (
                 <AgentRow
                   key={currUser.id}
@@ -522,6 +592,14 @@ const Schedule = () => {
             </div>
           )}
         </div>
+
+        {overflows && !scheduleIsLoading && (
+          <ScrollRail
+            ref={bottomRailRef}
+            trackWidth={trackWidth}
+            onScroll={() => syncScrollFrom(bottomRailRef.current)}
+          />
+        )}
 
         <ScheduleLegend
           showCoverage={isAdmin}

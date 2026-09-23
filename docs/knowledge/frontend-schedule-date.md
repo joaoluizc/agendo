@@ -1,6 +1,6 @@
 # Schedule screens & date handling (frontend)
 
-_The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows, row order, and the date footguns._
+_The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows and their scrollbars, zoom, row order, and the date footguns._
 
 _Last updated: 2026-09-23_
 
@@ -136,6 +136,28 @@ While the page scrolls, the hour row and the coverage rows stay pinned under the
   scroll container too and capture the pinned block; clip still rounds the corners without
   that.
 - `NowLine` is drawn in both parts; only the pinned one has the time label.
+- **The rows' own scrollbar is hidden** (`schedule-scrollbar-hidden`). In its place are two
+  `ScrollRail`s that start after the agent column: one inside the sticky block, under the
+  coverage rows (so it's in reach at any page scroll), and one under the last agent. A rail
+  is an empty box as wide as the track minus the agent column, offset by that column, so its
+  scroll range equals the rows' and `scrollLeft` copies one to one. `syncScrollFrom` copies
+  whichever of the four scrollers moved into the other three; writing the value a scroller
+  already holds fires no scroll event, so there's no feedback loop. Rails only render when
+  the track is wider than the view.
+
+## Zoom
+
+The toolbar's zoom buttons drop one hour off **each** edge of the view per step (00 and 23,
+then 01 and 22, …) down to 8 hours (08–15, `MAX_ZOOM = 8`). Zoom out restores the last pair
+and does nothing on the whole day.
+
+- It only sets the track's width: `LABEL_COLUMN_PX + 24 × (scroller width − label) / (24 −
+  2 × zoom)`, never below `TRACK_MIN_PX`. Everything inside the track — rows, `NowLine`, the
+  drop ghost, drag-to-create — already positions as a fraction of that width, so nothing
+  else needed to change. Keep it that way: a fixed pixel offset inside the track breaks zoom.
+- Each step scrolls to `zoom × hourPx`, so the kept hours fill the view and the dropped ones
+  sit off either edge. Any sideways scroll the user had done is lost on a zoom.
+- The zoom level is component state: it resets on reload and isn't in the URL.
 
 ## Row order
 
