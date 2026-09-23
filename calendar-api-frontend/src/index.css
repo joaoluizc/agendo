@@ -480,3 +480,25 @@
     font-style: italic;
   }
 }
+
+/* The schedule's sideways scrollbar: a thin rounded thumb on a transparent track, drawn
+   from the theme so it reads in dark mode instead of the browser's white default. */
+.schedule-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+}
+.schedule-scrollbar::-webkit-scrollbar {
+  height: 10px;
+}
+.schedule-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.schedule-scrollbar::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.35);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+.schedule-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.6);
+}

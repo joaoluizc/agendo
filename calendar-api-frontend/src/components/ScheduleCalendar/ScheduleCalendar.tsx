@@ -3,6 +3,7 @@ import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  LABEL_COLUMN_PX,
   TRACK_MIN_PX,
   firstShiftStart,
   getShifts,
@@ -54,6 +55,9 @@ const storeShowCalendarEvents = (show: boolean) => {
     // Private windows and blocked storage: the choice still holds until a reload.
   }
 };
+
+/** Deepest zoom: 8 hours on screen (08–15), eight steps in. */
+const MAX_ZOOM = 8;
 
 const Schedule = () => {
   const {
@@ -363,6 +367,38 @@ const Schedule = () => {
   // The pinned block remounts after every loading skeleton; start it where the rows are.
   useLayoutEffect(syncPinnedScroll, [scheduleIsLoading]);
 
+  /**
+   * Zoom: each step drops one hour off each edge of the view — 00 and 23 first, then 01
+   * and 22 — by widening the track so the hours left fill the scroller. The dropped hours
+   * are still there, a sideways scroll away. Level 0 is the whole day, exactly as before.
+   *
+   * Nothing inside the track needs to know: rows, the now line, drops and drag-to-create
+   * all position as fractions of the track's width.
+   */
+  const [zoom, setZoom] = useState(0);
+  const [scrollerWidth, setScrollerWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const scroller = rowsScrollerRef.current;
+    if (!scroller) return;
+    const observer = new ResizeObserver(() =>
+      setScrollerWidth(scroller.clientWidth)
+    );
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, []);
+
+  const hourPx =
+    Math.max(0, scrollerWidth - LABEL_COLUMN_PX) / (24 - 2 * zoom);
+  const trackWidth = Math.max(TRACK_MIN_PX, LABEL_COLUMN_PX + hourPx * 24);
+
+  // Land each zoom step on the hours it keeps, with the dropped ones off either edge.
+  useLayoutEffect(() => {
+    if (!rowsScrollerRef.current) return;
+    rowsScrollerRef.current.scrollLeft = zoom * hourPx;
+    syncPinnedScroll();
+  }, [zoom, scheduleIsLoading]);
+
   return (
     <div>
       <ScheduleToolbar
@@ -376,6 +412,9 @@ const Schedule = () => {
         canShowCalendarEvents={isAdmin}
         showCalendarEvents={showCalendarEvents}
         onShowCalendarEventsChange={changeShowCalendarEvents}
+        zoom={zoom}
+        maxZoom={MAX_ZOOM}
+        onZoomChange={setZoom}
       />
 
       {/* Creating a shift no longer syncs it, so the day needs somewhere that says
@@ -443,7 +482,7 @@ const Schedule = () => {
               }
             }}
           >
-            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
+            <div className="relative" style={{ width: trackWidth }}>
               <CalendarHeader
                 agentCount={visibleUsers.length}
                 isToday={isToday}
@@ -477,7 +516,7 @@ const Schedule = () => {
 
         <div
           ref={rowsScrollerRef}
-          className="overflow-x-auto"
+          className="schedule-scrollbar overflow-x-auto"
           onScroll={syncPinnedScroll}
         >
           {scheduleIsLoading ? (
@@ -497,7 +536,7 @@ const Schedule = () => {
               ))}
             </div>
           ) : (
-            <div className="relative" style={{ minWidth: TRACK_MIN_PX }}>
+            <div className="relative" style={{ width: trackWidth }}>
               {visibleUsers.map((currUser) => (
                 <AgentRow
                   key={currUser.id}
