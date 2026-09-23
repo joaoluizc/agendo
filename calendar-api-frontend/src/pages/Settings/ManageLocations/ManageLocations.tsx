@@ -142,7 +142,7 @@ export default function LocationManager() {
   };
 
   return (
-    <Card className="w-full max-w-4xl">
+    <Card className="w-full max-w-4xl scroll-mt-20" id="manage-locations">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MapPin className="h-5 w-5" />

@@ -11,6 +11,21 @@ import CoverageTargets from "./CoverageTargets/CoverageTargets.tsx";
 import ReportGroups from "./ReportGroups/ReportGroups.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
+/**
+ * The side nav, in the order the sections render. Each `id` must match the section card's
+ * own `id` — a link with no target silently does nothing, which is how "Manage Locations"
+ * went dead and "Positions" never got a link at all. `adminOnly` mirrors the section's own
+ * gate below, so a normal user is not offered links to cards they cannot see.
+ */
+const SECTIONS = [
+  { id: "shifts-to-add-to-cal", label: "Synced shifts", adminOnly: false },
+  { id: "generate-api-token", label: "API Token", adminOnly: true },
+  { id: "manage-locations", label: "Locations", adminOnly: true },
+  { id: "manage-positions", label: "Positions", adminOnly: true },
+  { id: "coverage-targets", label: "Coverage targets", adminOnly: true },
+  { id: "report-groups", label: "Report groups", adminOnly: true },
+] as const;
+
 export default function Settings() {
   const {
     positionsToSync,
@@ -77,48 +92,17 @@ export default function Settings() {
         </div>
         <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
           <nav className="grid gap-4 text-sm text-muted-foreground sticky top-20">
-            {/* <a
-              href="#google-integration"
-              className={"font-semibold text-primary"}
-            >
-              Google Integration
-            </a> */}
-            <a
-              href="#shifts-to-add-to-cal"
-              className={"font-semibold text-primary"}
-            >
-              Synced shifts
-            </a>
-            <a
-              href="#generate-api-token"
-              className={"font-semibold text-primary"}
-            >
-              API Token
-            </a>
-            <a
-              href="#manage-locations"
-              className={"font-semibold text-primary"}
-            >
-              Manage Locations
-            </a>
-            {/* Coverage targets are admin-only, so the link is too. */}
-            {type === "admin" && (
+            {SECTIONS.filter(
+              (section) => !section.adminOnly || type === "admin"
+            ).map((section) => (
               <a
-                href="#coverage-targets"
+                key={section.id}
+                href={`#${section.id}`}
                 className={"font-semibold text-primary"}
               >
-                Coverage targets
+                {section.label}
               </a>
-            )}
-            {/* Report groups are admin-only, so the link is too. */}
-            {type === "admin" && (
-              <a
-                href="#report-groups"
-                className={"font-semibold text-primary"}
-              >
-                Report groups
-              </a>
-            )}
+            ))}
           </nav>
           <div className="grid gap-6" id="settings-wrapper">
             {/* <GoogleIntegration></GoogleIntegration> */}
