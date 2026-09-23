@@ -502,3 +502,10 @@
 .schedule-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.6);
 }
+/* The rows scroll by trackpad and by the rails above; their own full-width bar is hidden. */
+.schedule-scrollbar-hidden {
+  scrollbar-width: none;
+}
+.schedule-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
