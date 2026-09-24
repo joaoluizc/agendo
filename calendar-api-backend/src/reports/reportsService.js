@@ -2,7 +2,6 @@ import { User } from "../models/UserModel.js";
 import Position from "../models/PositionModel.js";
 import Location from "../models/LocationModel.js";
 import shiftService from "../services/shiftService.js";
-import slingController from "../controllers/slingController.js";
 import redisClient from "../database/redisClient.js";
 import { ReportGroup } from "./reportGroupModel.js";
 
@@ -144,21 +143,22 @@ function endOfToday() {
 }
 
 /**
- * Hours worked per agent, per report group, over [start, end]. Merges agendo-native
- * shifts with Sling-sourced ones (best-effort — a Sling failure or empty response still
- * returns native-only results, since Sling is expected to go away eventually). Hours are
- * truncated to whole numbers, never rounded, per product decision; the Total column
- * floors the true summed minutes rather than summing the already-floored group cells, so
- * it can occasionally read 1h higher than its visible group cells add up to.
+ * Hours worked per agent, per report group, over [start, end], from agendo shifts only.
+ * Sling is not read: as of the end of Q3 2026 every shift is created in agendo, and the
+ * Sling history was copied into agendo's `shifts` collection, so agendo alone covers the
+ * past as well as the present — adding Sling on top would count the copied shifts twice.
+ * Hours are truncated to whole numbers, never rounded, per product decision; the Total
+ * column floors the true summed minutes rather than summing the already-floored group
+ * cells, so it can occasionally read 1h higher than its visible group cells add up to.
  *
  * Cached in Redis (see getHoursReport wrapper below) — this is the expensive part: a
- * Position/User table scan plus a live Sling API call, on every distinct range.
+ * Position/User table scan plus the range query on `shifts`, on every distinct range.
  */
 async function computeHoursReport({ start, end, groupByLocation }) {
   const rangeStart = new Date(start);
   const rangeEnd = new Date(Math.min(new Date(end).getTime(), endOfToday().getTime()));
   // The whole range sits in the future — nothing has been worked yet, so there is no
-  // report to build (and no reason to hit Mongo or Sling for it).
+  // report to build (and no reason to hit Mongo for it).
   if (!(rangeEnd > rangeStart)) return [];
   const effectiveEnd = rangeEnd.toISOString();
   const classify = await buildClassifier();
@@ -166,11 +166,8 @@ async function computeHoursReport({ start, end, groupByLocation }) {
   const positions = await Position.find().select("name").lean();
   const positionNameById = new Map(positions.map((p) => [String(p._id), p.name]));
 
-  const users = await User.find().select("clerkId email firstName lastName").lean();
+  const users = await User.find().select("clerkId firstName lastName").lean();
   const userByClerkId = new Map(users.map((u) => [u.clerkId, u]));
-  const userByEmail = new Map(
-    users.filter((u) => u.email).map((u) => [u.email.toLowerCase(), u]),
-  );
 
   const rowsByKey = new Map(); // key -> { key, label, minutes }
   function addMinutes(key, label, group, minutes) {
@@ -181,11 +178,10 @@ async function computeHoursReport({ start, end, groupByLocation }) {
     rowsByKey.get(key).minutes[group] += minutes;
   }
 
-  // Native shifts. A shift whose userId matches no `users` doc is skipped outright rather
-  // than reported under its raw clerk id: `Shift` is one shared collection while `User`
-  // is env-split into `dev-users`/`users` (see models/UserModel.js), so a local dev run
-  // against the same cluster writes real rows into production `shifts` keyed by a
-  // dev-only clerk id. Those, plus shifts left behind by deleted accounts, are the only
+  // A shift whose userId matches no `users` doc is skipped outright rather than reported
+  // under its raw clerk id: `Shift` is one shared collection while `User` is env-split
+  // into `dev-users`/`users` (see models/UserModel.js), so a local dev run against the
+  // same cluster writes real rows into production `shifts` keyed by a dev-only clerk id. Those, plus shifts left behind by deleted accounts, are the only
   // way this lookup can miss — a current agent always has a `users` doc — so dropping
   // them keeps dev data out without touching any active roster member's hours.
   const nativeShifts = await shiftService.findShiftsByRange(rangeStart, rangeEnd);
@@ -205,31 +201,6 @@ async function computeHoursReport({ start, end, groupByLocation }) {
   if (skippedUnmatched > 0) {
     console.log(
       `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${effectiveEnd}`,
-    );
-  }
-
-  // Sling shifts — never let a Sling outage (or its eventual removal) fail the report.
-  try {
-    const slingBlocks = await slingController.getCalendar(`${start}/${effectiveEnd}`);
-    for (const block of slingBlocks || []) {
-      const email = block?.email ? String(block.email).toLowerCase() : "";
-      const user = email ? userByEmail.get(email) : null;
-      // Unmatched Sling agents (no agendo User with that email) still count, keyed by
-      // their Sling identity, so the hours aren't silently dropped.
-      const key = user ? user.clerkId : `sling:${email || block?.id}`;
-      const label = user
-        ? `${user.firstName} ${user.lastName}`.trim()
-        : block?.name || block?.legalName || "Unknown";
-      for (const shift of block?.shifts || []) {
-        const minutes = clampedMinutes(shift.dtstart, shift.dtend, rangeStart, rangeEnd);
-        if (minutes <= 0) continue;
-        const group = classify(shift.position?.name);
-        addMinutes(key, label, group, minutes);
-      }
-    }
-  } catch (err) {
-    console.error(
-      `[reports] Sling fetch failed, continuing with native shifts only: ${err.message}`,
     );
   }
 
@@ -289,7 +260,11 @@ const CURRENT_RANGE_TTL_SECONDS = 10 * 60; // still accumulating shifts — refr
  * degrades to computing fresh every time — never fails the report.
  */
 async function getHoursReport({ start, end, groupByLocation, refresh = false }) {
-  const cacheKey = `reports:hours:${start}:${end}:${groupByLocation}`;
+  // `agendo-only` marks entries computed without Sling. Entries under the old key still
+  // hold Sling-merged totals, which double-count the shifts copied into agendo, and a
+  // past range's entry lives for PAST_RANGE_TTL_SECONDS — a new key keeps them from being
+  // served after the switch, and they expire on their own.
+  const cacheKey = `reports:hours:agendo-only:${start}:${end}:${groupByLocation}`;
 
   // `refresh` skips the read and lets the write below overwrite the entry. It is a
   // bypass rather than a delete, and shared rather than per-caller, because nothing

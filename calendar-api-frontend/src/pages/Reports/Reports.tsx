@@ -113,11 +113,13 @@ function SortableHead({
 
 /**
  * Admin-only "agent hours" report: total hours worked per agent over a date range,
- * broken into Tickets/Chats/Other. Location grouping is temporarily off — with the
- * current Sling data most agents resolve to "Unassigned" (Sling shifts that don't match
- * an agendo user by email never join a Location), so it's more confusing than useful
- * until Sling is retired; the backend still supports groupByLocation for when that's
- * revisited.
+ * broken into Tickets/Chats/Other, from agendo shifts only (the backend stopped reading
+ * Sling once its history was copied into agendo — see the backend's
+ * src/reports/README.md). Location
+ * grouping is off: it was hidden while the report still merged in Sling, whose shifts
+ * that didn't match an agendo user by email never joined a Location and left most
+ * agents under "Unassigned". That cause is gone, but the toggle hasn't been brought
+ * back; the backend still supports groupByLocation for when it is.
  */
 export default function Reports() {
   usePageTitle("Reports");
