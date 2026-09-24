@@ -28,8 +28,10 @@ const normalize = (name: string) => name.trim().toLowerCase();
 
 /**
  * Searchable add-control for one group: pick a known position name, or type one that
- * isn't in the list (Sling sometimes uses a position name with no matching agendo
- * Position doc). Typing the exact name of something already in the *other* group
+ * isn't in the list. Free text dates from when the report also counted Sling shifts,
+ * whose position names didn't always have a matching agendo Position doc; the report
+ * reads agendo shifts only now, so a typed name counts only once a Position by that
+ * name exists. Typing the exact name of something already in the *other* group
  * re-adds it here too — ReportGroups' addToGroup then moves it, since a name can't
  * count toward both.
  */

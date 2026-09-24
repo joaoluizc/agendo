@@ -5,10 +5,11 @@ const { Schema } = mongoose;
 
 /**
  * A report group: "Tickets" or "Chats", holding the plain shift/position NAME strings
- * (not Position._id) that count toward it. Names, not ids, because this has to classify
- * both agendo-native shifts (which resolve a Position._id -> name) and Sling-sourced
- * shifts (which only ever carry a raw position name string, never agendo's Mongo id) —
- * see src/reports/README.md for why this deliberately differs from CoverageMeterModel's
+ * (not Position._id) that count toward it; a shift's Position._id is resolved to its name
+ * and matched against these. Names, not ids, because the report used to classify
+ * Sling-sourced shifts too, which only ever carried a raw position name string, never
+ * agendo's Mongo id. The report reads agendo shifts only now, but the shape stays — see
+ * src/reports/README.md for why this deliberately differs from CoverageMeterModel's
  * positionIds:[ObjectId] shape.
  *
  * Exactly two documents ever exist ("Tickets", "Chats") — "Other" is never stored, it's
