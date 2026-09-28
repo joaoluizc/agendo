@@ -9,4 +9,5 @@ teammates. Keep entries tight and skimmable; one topic per file.
 - [Calendar sync paths](agendo-sync-paths.md) — the two ways shifts reach Google Calendar, and the position id-space gotcha
 - [Shift drafts](shift-drafts.md) — the draft/published lifecycle, what drafts are excluded from, the one filter rule that matters, bulk selection, coverage focus, and keeping bulk work inside the proxy timeout
 - [Schedule screens & date handling](frontend-schedule-date.md) — the two schedule screens, the URL `?date=` convention, clock times (24-hour or AM/PM), hiding Google events, the pinned hour rows, zoom, row order, and the date footguns
+- [User preferences](user-preferences.md) — managers' notes on agents: admin-only by `select: false` plus response allowlists, the Settings → Users page, the name hover card, and the lazy-loaded editor
 - [Frontend build & lint](frontend-build-and-lint.md) — what gates a build, and why ESLint is noisy

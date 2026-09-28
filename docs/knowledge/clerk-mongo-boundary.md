@@ -27,7 +27,8 @@ rule.**
 ### Mongo owns everything else
 
 `type`, `slingId`, `positionsToSync`, `timezone`, `skills`, `workHours`,
-`dailyMaxLimit`, `weeklyMaxLimit`, `defaultEventColorId`.
+`dailyMaxLimit`, `weeklyMaxLimit`, `defaultEventColorId`, and the admin-only
+`preferences` (`select: false` — see [user preferences](user-preferences.md)).
 
 ## How to resolve a caller
 

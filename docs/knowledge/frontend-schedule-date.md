@@ -2,7 +2,7 @@
 
 _The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows and their scrollbars, zoom, row order, and the date footguns._
 
-_Last updated: 2026-09-23_
+_Last updated: 2026-09-24_
 
 The frontend (`calendar-api-frontend`) has **two schedule screens**, one per
 shift source (see [agendo overview](agendo-overview.md) for why both exist):
@@ -144,6 +144,14 @@ While the page scrolls, the hour row and the coverage rows stay pinned under the
   whichever of the four scrollers moved into the other three; writing the value a scroller
   already holds fires no scroll event, so there's no feedback loop. Rails only render when
   the track is wider than the view.
+- **Coverage rows go compact while pinned.** Once the block is stuck under the header, each
+  `CoverageRow` drops from 52px to 30px: flatter bars, smaller counts, and the name without
+  its summary line (the slot tooltips still carry every number). Heights animate. A
+  zero-height sentinel at the top of the grid card marks where the block starts, read on
+  scroll: compact once it passes under the header, full again only once it is clear by as
+  much as the rows saved. That hysteresis matters: shrinking shortens the page, so on a
+  short roster the browser clamps the scroll and pulls the sentinel back down — expanding
+  at the same line would loop grow/shrink.
 
 ## Zoom
 
