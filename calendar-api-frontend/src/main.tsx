@@ -10,6 +10,7 @@ import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
 import AdminRoute from "./routes/AdminRoute.tsx";
 import Settings from "./pages/Settings/Settings.tsx";
+import SettingsLayout from "./pages/Settings/SettingsLayout.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import RootLayout from "./layouts/root-layout.tsx";
 import TermsOfService from "./pages/TermsOfService/TermsOfService.tsx";
@@ -20,6 +21,7 @@ import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 import JiraBacklog from "./pages/JiraBacklog/JiraBacklog.tsx";
 import Tasks from "./pages/Tasks/Tasks.tsx";
 import Reports from "./pages/Reports/Reports.tsx";
+import Users from "./pages/Settings/Users/Users.tsx";
 
 const router = createBrowserRouter([
   {
@@ -38,7 +40,18 @@ const router = createBrowserRouter([
         children: [
           { path: "/app/sling-schedule", element: <SlingSchedule /> },
           { path: "/app/schedule", element: <Schedule /> },
-          { path: "/app/settings", element: <Settings /> },
+          // Every settings page shares SettingsLayout's sidebar. Users is admin-only.
+          {
+            path: "/app/settings",
+            element: <SettingsLayout />,
+            children: [
+              { index: true, element: <Settings /> },
+              {
+                element: <AdminRoute />,
+                children: [{ path: "/app/settings/users", element: <Users /> }],
+              },
+            ],
+          },
           {
             element: <AdminRoute />,
             children: [

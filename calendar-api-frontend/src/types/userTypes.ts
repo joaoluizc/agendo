@@ -21,4 +21,12 @@ export type UserSafeInfo = {
     /** Admin-only. Absent for non-admin callers. Never gate UI on this - use
      *  `useUserSettings().type`, which comes from `/user/info`. */
     type?: string;
+    /** Admin-only. Managers' notes on how this agent likes to be scheduled, as HTML
+     *  from Settings → Users; "" when there are none. Absent for non-admin callers.
+     *  Render with `PreferencesContent`, never as raw HTML. */
+    preferences?: string;
+    /** Admin-only. ISO time `preferences` was last saved, or null. */
+    preferencesUpdatedAt?: string | null;
+    /** Admin-only. Clerk id of the admin who last saved `preferences`, or null. */
+    preferencesUpdatedBy?: string | null;
 };

@@ -29,6 +29,11 @@ import { cn } from "@/lib/utils";
 import { useSchedule } from "@/providers/useSchedule";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useTimeFormat } from "@/utils/timeFormat";
+import PreferencesHoverCard from "@/components/UserPreferences/PreferencesHoverCard";
+import {
+  PreferencesIcon,
+  hasPreferences,
+} from "@/components/UserPreferences/PreferencesContent";
 import CreateShiftDialog from "../shift-dialogs/CreateShiftDialog";
 import {
   DAY_HOURS,
@@ -117,6 +122,7 @@ const AgentRow = ({
 
   const { type: userType } = useUserSettings();
   const { clock } = useTimeFormat();
+  const showPreferences = userType === "admin" && hasPreferences(user);
 
   /** The range being drawn by a press-and-drag on empty space, while the pointer is down. */
   const [createDrag, setCreateDrag] = useState<HourRange | null>(null);
@@ -368,32 +374,46 @@ const AgentRow = ({
         )}
         style={{ height: rowHeight }}
       >
-        <Avatar className="shrink-0">
-          <AvatarImage
-            src={user.imageUrl}
-            className="h-[22px] w-[22px] rounded-full"
-          />
-          <AvatarFallback className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[10.5px] font-semibold text-foreground">
-            {`${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          {/* First name plus a last initial. The label column gave up 84px so the day
-              could fit a 1425px screen without scrolling sideways, and the name is what
-              can afford it — "Alexandre B." identifies an agent on a team of 19 as well as
-              the full name does. The title carries the whole name for the ambiguous case. */}
-          <div
-            className="truncate text-[11.5px] font-semibold leading-tight"
-            title={`${user.firstName} ${user.lastName}`}
-          >
-            {shortName(user.firstName, user.lastName)}
+        {/* Avatar and name are one hover target: for a manager, an agent with scheduling
+            preferences shows them on hover (PreferencesHoverCard is a no-op otherwise). */}
+        <PreferencesHoverCard user={user}>
+          <div className="flex min-w-0 items-center gap-[9px]">
+            <Avatar className="shrink-0">
+              <AvatarImage
+                src={user.imageUrl}
+                className="h-[22px] w-[22px] rounded-full"
+              />
+              <AvatarFallback className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[10.5px] font-semibold text-foreground">
+                {`${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              {/* First name plus a last initial. The label column gave up 84px so the day
+                  could fit a 1425px screen without scrolling sideways, and the name is what
+                  can afford it — "Alexandre B." identifies an agent on a team of 19 as well
+                  as the full name does. The title carries the whole name for the ambiguous
+                  case, unless a preferences card is there to show it instead. */}
+              <div className="flex min-w-0 items-center gap-1">
+                <div
+                  className="truncate text-[11.5px] font-semibold leading-tight"
+                  title={
+                    showPreferences
+                      ? undefined
+                      : `${user.firstName} ${user.lastName}`
+                  }
+                >
+                  {shortName(user.firstName, user.lastName)}
+                </div>
+                {showPreferences && <PreferencesIcon />}
+              </div>
+              <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
+                {totalHours > 0
+                  ? `${formatHours(totalHours)}h scheduled`
+                  : "unavailable"}
+              </div>
+            </div>
           </div>
-          <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
-            {totalHours > 0
-              ? `${formatHours(totalHours)}h scheduled`
-              : "unavailable"}
-          </div>
-        </div>
+        </PreferencesHoverCard>
 
         {/* Sits at the trailing edge rather than before the avatar so entering select mode
             does not shove the name and hours sideways. Hidden on a row with nothing to

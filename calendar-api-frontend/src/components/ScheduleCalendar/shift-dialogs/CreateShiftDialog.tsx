@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import PreferencesHoverCard from "@/components/UserPreferences/PreferencesHoverCard";
+import {
+  PreferencesIcon,
+  hasPreferences,
+} from "@/components/UserPreferences/PreferencesContent";
 import {
   Tooltip,
   TooltipContent,
@@ -872,6 +877,8 @@ const AgentPickRow = ({
   onResolve,
 }: AgentPickRowProps) => {
   const { clock } = useTimeFormat();
+  const { type } = useUserSettings();
+  const showPreferences = type === "admin" && hasPreferences(agent.user);
   const options = resolutionOptions(status.kind);
   const showResolve = isSelected && status.kind !== "clear";
 
@@ -908,33 +915,39 @@ const AgentPickRow = ({
           {isSelected ? "✓" : ""}
         </span>
 
-        <Avatar className="shrink-0">
-          <AvatarImage
-            src={agent.user.imageUrl}
-            className="h-6 w-6 rounded-full"
-          />
-          <AvatarFallback className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[10.5px] font-semibold text-muted-foreground">
-            {agent.initials}
-          </AvatarFallback>
-        </Avatar>
+        {/* Hover-only, so a click on the name still toggles the row. */}
+        <PreferencesHoverCard user={agent.user}>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <Avatar className="shrink-0">
+              <AvatarImage
+                src={agent.user.imageUrl}
+                className="h-6 w-6 rounded-full"
+              />
+              <AvatarFallback className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[10.5px] font-semibold text-muted-foreground">
+                {agent.initials}
+              </AvatarFallback>
+            </Avatar>
 
-        <div className="w-[124px] min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[12.5px] font-semibold leading-tight">
-              {agent.name}
-            </span>
-            {location && (
-              <span title={location.label} className="flex shrink-0">
-                <location.Flag className="h-[9px] w-[13px] rounded-[1.5px] ring-1 ring-inset ring-foreground/25" />
-              </span>
-            )}
+            <div className="w-[124px] min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[12.5px] font-semibold leading-tight">
+                  {agent.name}
+                </span>
+                {showPreferences && <PreferencesIcon />}
+                {location && (
+                  <span title={location.label} className="flex shrink-0">
+                    <location.Flag className="h-[9px] w-[13px] rounded-[1.5px] ring-1 ring-inset ring-foreground/25" />
+                  </span>
+                )}
+              </div>
+              <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
+                {agent.scheduledHours > 0
+                  ? `${formatHourTotal(agent.scheduledHours)}h scheduled`
+                  : "nothing scheduled"}
+              </div>
+            </div>
           </div>
-          <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
-            {agent.scheduledHours > 0
-              ? `${formatHourTotal(agent.scheduledHours)}h scheduled`
-              : "nothing scheduled"}
-          </div>
-        </div>
+        </PreferencesHoverCard>
 
         <span
           className={cn(

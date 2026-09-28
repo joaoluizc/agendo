@@ -151,7 +151,8 @@ const newClerkUser = async (req, res) => {
 // avatar. But `type`, `slingId` and `email` are admin-only: previously they were
 // sourced from Clerk publicMetadata and came back empty, so nothing was exposed. Now
 // they carry real values, and without this filter any signed-in employee could
-// enumerate exactly who the admins are.
+// enumerate exactly who the admins are. `preferences` (and who/when last saved them) are
+// admin-only too: they are managers' notes about agents, never shown to the agents.
 const getAllUsers = async (req, res) => {
   try {
     const { isAdmin } = await resolveUser(req.auth?.userId);
@@ -172,8 +173,55 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+// A long note is still well under this; the cap only stops a runaway paste.
+const PREFERENCES_MAX_LENGTH = 20000;
+
+// Markup with no text in it - what the editor sends for a cleared note, e.g. "<p></p>".
+const isEmptyMarkup = (html) =>
+  html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim() === "";
+
+// Admin-only (route-gated): save one agent's scheduling preferences. The body is
+// `{ preferences }`, HTML from the Settings → Users editor; it is rendered through
+// interweave on the way out, which strips anything unsafe.
+const setUserPreferences = async (req, res) => {
+  const { clerkId } = req.params;
+  const { preferences } = req.body ?? {};
+
+  if (typeof preferences !== "string") {
+    return res.status(400).json({ message: "preferences must be a string" });
+  }
+  if (preferences.length > PREFERENCES_MAX_LENGTH) {
+    return res.status(400).json({
+      message: `preferences can be at most ${PREFERENCES_MAX_LENGTH} characters`,
+    });
+  }
+
+  const value = isEmptyMarkup(preferences) ? "" : preferences.trim();
+
+  try {
+    const saved = await userService.setUserPreferences(
+      clerkId,
+      value,
+      req.auth.userId,
+    );
+    console.log(
+      `[${req.requestId}]: setUserPreferences - ${req.auth.userId} saved preferences for ${clerkId} (${value.length} chars)`,
+    );
+    return res.status(200).json(saved);
+  } catch (err) {
+    if (err.message === "User not found") {
+      return res.status(404).json({ message: err.message });
+    }
+    console.error(
+      `[${req.requestId}]: setUserPreferences - failed for ${clerkId}: ${err.message}`,
+    );
+    return res.status(500).json({ message: `caught error: ${err.message}` });
+  }
+};
+
 export default {
   getMyProfile,
   newClerkUser,
   getAllUsers,
+  setUserPreferences,
 };

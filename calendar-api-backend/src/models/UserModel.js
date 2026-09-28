@@ -172,6 +172,28 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
+  // Manager-only notes on how this agent likes to be scheduled ("mornings only", "no
+  // Fridays after 3pm"), as HTML from Settings → Users. Admins alone may read or write
+  // it: `select: false` keeps it out of every query that doesn't ask for it by name, so
+  // a full-document log line or a future `res.json(user)` cannot leak it. The only
+  // reader is the admin shape of /user/all. See docs/knowledge/user-preferences.md.
+  preferences: {
+    type: String,
+    required: false,
+    default: "",
+    select: false,
+  },
+  preferencesUpdatedAt: {
+    type: Date,
+    required: false,
+    default: null,
+  },
+  // Clerk id of the admin who last saved `preferences`.
+  preferencesUpdatedBy: {
+    type: String,
+    required: false,
+    default: null,
+  },
   clerkId: {
     type: String,
     required: false,
