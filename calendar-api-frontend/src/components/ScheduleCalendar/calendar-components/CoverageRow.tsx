@@ -31,6 +31,8 @@ type CoverageRowProps = {
   dimmed: boolean;
   /** Focus this meter's shifts on the grid, or clear the focus if it already is. */
   onToggleFocus: () => void;
+  /** Pinned under the header: draw the short form, without the summary line. */
+  compact?: boolean;
 };
 
 /** Names past this many collapse into "+N more", so a busy slot's card stays readable. */
@@ -93,10 +95,26 @@ const SlotDetails = ({
   );
 };
 
-const ROW_HEIGHT = 52;
-const COUNT_HEIGHT = 13;
-const CELL_PADDING_Y = 4;
-const TRACK_HEIGHT = ROW_HEIGHT - COUNT_HEIGHT - CELL_PADDING_Y * 2;
+/**
+ * Row geometry, full and compact. Compact is what the rows shrink to once the page has
+ * scrolled and they are pinned under the header: the same numbers and bars, flatter, so
+ * more of the roster fits below them. Every bar, hatch and tick is computed from
+ * `track`, so they rescale with it.
+ */
+const geometryOf = (row: number, count: number, paddingY: number) => ({
+  row,
+  count,
+  paddingY,
+  track: row - count - paddingY * 2,
+});
+const FULL = geometryOf(52, 13, 4);
+const COMPACT = geometryOf(30, 10, 3);
+
+/** How much shorter one row gets in compact form — ScheduleCalendar's hysteresis needs it. */
+export const COMPACT_SAVING_PX = FULL.row - COMPACT.row;
+
+/** Heights animate between the two, so the switch doesn't jump the grid. */
+const GROW = "transition-[height,bottom,padding] duration-150 ease-out";
 
 /**
  * One histogram row per configured meter: how many agents are on the meter's
@@ -120,8 +138,11 @@ const CoverageRow = ({
   focused,
   dimmed,
   onToggleFocus,
+  compact = false,
 }: CoverageRowProps) => {
   const { clock } = useTimeFormat();
+  const geometry = compact ? COMPACT : FULL;
+  const trackHeight = geometry.track;
   const series = useMemo(
     () => buildCoverageSeries(meter, roster, shifts, selectedDate, clock),
     [meter, roster, shifts, selectedDate, clock],
@@ -152,6 +173,7 @@ const CoverageRow = ({
           }
           className={cn(
             "sticky left-0 z-[3] flex flex-col justify-center border-r border-border px-3.5 text-left outline-none",
+            GROW,
             "hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             focused
               ? "bg-muted shadow-[inset_3px_0_0_0_var(--meter-color)]"
@@ -159,7 +181,7 @@ const CoverageRow = ({
           )}
           style={
             {
-              height: ROW_HEIGHT,
+              height: geometry.row,
               "--meter-color": meter.color,
             } as React.CSSProperties
           }
@@ -171,7 +193,8 @@ const CoverageRow = ({
             />
             <span
               className={cn(
-                "truncate text-[11.5px] font-semibold",
+                "truncate font-semibold",
+                compact ? "text-[10.5px]" : "text-[11.5px]",
                 focused && "underline decoration-2 underline-offset-2",
               )}
               style={focused ? { textDecorationColor: meter.color } : undefined}
@@ -179,14 +202,17 @@ const CoverageRow = ({
               {meter.name}
             </span>
           </div>
-          <div
-            className={cn(
-              "ml-[15px] truncate text-[10.5px]",
-              isShort ? "text-warn" : "text-muted-foreground",
-            )}
-          >
-            {series.summary}
-          </div>
+          {/* Compact drops the summary; the numbers are still in every slot's tooltip. */}
+          {!compact && (
+            <div
+              className={cn(
+                "ml-[15px] truncate text-[10.5px]",
+                isShort ? "text-warn" : "text-muted-foreground",
+              )}
+            >
+              {series.summary}
+            </div>
+          )}
         </button>
 
         {Array.from({ length: SLOTS_PER_DAY }, (_, slot) => {
@@ -197,13 +223,13 @@ const CoverageRow = ({
 
           // Scale each segment off the same peak, then take the cap as the difference, so
           // the two never round to a total taller or shorter than the whole bar.
-          const barHeight = Math.round((count / series.peak) * TRACK_HEIGHT);
+          const barHeight = Math.round((count / series.peak) * trackHeight);
           const publishedHeight = Math.round(
-            ((count - draftCount) / series.peak) * TRACK_HEIGHT,
+            ((count - draftCount) / series.peak) * trackHeight,
           );
           const draftHeight = barHeight - publishedHeight;
           const tickBottom =
-            Math.round((target / series.peak) * TRACK_HEIGHT) - 1;
+            Math.round((target / series.peak) * trackHeight) - 1;
 
           /**
            * The bar is always the meter's own colour — published solid, draft striped.
@@ -220,25 +246,35 @@ const CoverageRow = ({
               <TooltipTrigger asChild>
                 <div
                   className={cn(
-                    "flex flex-col justify-end px-[1.5px] py-1",
+                    "flex flex-col justify-end px-[1.5px]",
+                    GROW,
                     below && "bg-warn-bg",
                   )}
+                  style={{
+                    paddingTop: geometry.paddingY,
+                    paddingBottom: geometry.paddingY,
+                  }}
                 >
                   <div
                     className={cn(
-                      "text-center text-[9px] font-bold leading-none tabular-nums",
+                      "text-center font-bold leading-none tabular-nums",
+                      GROW,
+                      compact ? "text-[8px]" : "text-[9px]",
                       below ? "text-warn" : "text-muted-foreground",
                     )}
-                    style={{ height: COUNT_HEIGHT }}
+                    style={{ height: geometry.count }}
                   >
                     {count > 0 ? count : ""}
                   </div>
                   <div
-                    className="relative rounded-[2px] border-b border-border-subtle"
-                    style={{ height: TRACK_HEIGHT }}
+                    className={cn(
+                      "relative rounded-[2px] border-b border-border-subtle",
+                      GROW,
+                    )}
+                    style={{ height: trackHeight }}
                   >
                     <div
-                      className="absolute bottom-0 left-0 right-0"
+                      className={cn("absolute bottom-0 left-0 right-0", GROW)}
                       style={{
                         height: publishedHeight,
                         backgroundColor: fill,
@@ -254,7 +290,10 @@ const CoverageRow = ({
                   backdrop, in either theme. */}
                     {draftHeight > 0 && (
                       <div
-                        className="absolute left-0 right-0 rounded-t-[2px] border-t-2 border-dotted"
+                        className={cn(
+                          "absolute left-0 right-0 rounded-t-[2px] border-t-2 border-dotted",
+                          GROW,
+                        )}
                         style={{
                           bottom: publishedHeight,
                           height: draftHeight,
@@ -265,7 +304,10 @@ const CoverageRow = ({
                     )}
                     {showTargets && target > 0 && (
                       <div
-                        className="absolute left-0 right-0 h-[2px] bg-muted-foreground/50"
+                        className={cn(
+                          "absolute left-0 right-0 h-[2px] bg-muted-foreground/50",
+                          GROW,
+                        )}
                         style={{ bottom: Math.max(0, tickBottom) }}
                       />
                     )}
