@@ -38,7 +38,13 @@ const findAllUsers = async () => {
   // Sorted so the roster order is stable. Clerk's getUserList (the previous source for
   // /user/all) returned newest-first; Mongo's natural order is insertion order, so
   // without this the schedule grid would silently reorder.
-  let users = await User.find().sort({ firstName: 1, lastName: 1 });
+  //
+  // `preferences` is `select: false` on the schema, so it has to be asked for by name.
+  // This loader only feeds the roster (getAllUsersSafeInfo), and userController.getAllUsers
+  // drops the field for non-admins along with the other admin-only fields.
+  let users = await User.find()
+    .select("+preferences")
+    .sort({ firstName: 1, lastName: 1 });
   return users;
 };
 
@@ -112,6 +118,9 @@ async function getAllUsersSafeInfo() {
       hasImage: avatar?.hasImage || false,
       slingId: user.slingId || "",
       type: user.type || "normal",
+      preferences: user.preferences || "",
+      preferencesUpdatedAt: user.preferencesUpdatedAt || null,
+      preferencesUpdatedBy: user.preferencesUpdatedBy || null,
     };
   });
 }
@@ -174,6 +183,27 @@ async function getUsersWithGoogleTokens() {
   return usersWithTokens;
 }
 
+/**
+ * Write one agent's manager-only scheduling preferences (HTML), stamped with who saved
+ * them and when. Admin-gated at the route. Last write wins: two managers editing the same
+ * agent at once overwrite each other, which is acceptable for a short note.
+ */
+const setUserPreferences = async (clerkId, preferences, updatedBy) => {
+  const user = await findUserByClerkId(clerkId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  user.preferences = preferences;
+  user.preferencesUpdatedAt = new Date();
+  user.preferencesUpdatedBy = updatedBy;
+  await user.save();
+  return {
+    preferences: user.preferences,
+    preferencesUpdatedAt: user.preferencesUpdatedAt,
+    preferencesUpdatedBy: user.preferencesUpdatedBy,
+  };
+};
+
 const getGapiToken = async (email) => {
   let user = await findUserByEmail(email);
   if (!user.gapitoken) {
@@ -190,6 +220,7 @@ export default {
   getSlingIdByClerkId,
   getGapiToken,
   getAllUsersSafeInfo,
+  setUserPreferences,
   // Clerk-backed. These are the only functions that may talk to Clerk.
   getClerkUserById,
   getGoogleOAuthTokenByClerkId,

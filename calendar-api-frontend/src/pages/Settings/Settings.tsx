@@ -1,4 +1,4 @@
-import { Blocker, useBlocker } from "react-router-dom";
+import { Blocker, useBlocker, useLocation } from "react-router-dom";
 // import GoogleIntegration from "./GoogleIntegration/GoogleIntegration.tsx";
 import ShiftsToAddToCal from "./ShiftsToAddToCal/ShiftsToAddToCal.tsx";
 import { useUserSettings } from "@/providers/useUserSettings.tsx";
@@ -12,20 +12,9 @@ import ReportGroups from "./ReportGroups/ReportGroups.tsx";
 // import { useIntersectionObserver } from "../../hooks/useIntersectionObserver.tsx";
 
 /**
- * The side nav, in the order the sections render. Each `id` must match the section card's
- * own `id` — a link with no target silently does nothing, which is how "Manage Locations"
- * went dead and "Positions" never got a link at all. `adminOnly` mirrors the section's own
- * gate below, so a normal user is not offered links to cards they cannot see.
+ * Settings → General: the account and admin sections. The page frame and the sidebar that
+ * links to each section come from SettingsLayout / SettingsNav.
  */
-const SECTIONS = [
-  { id: "shifts-to-add-to-cal", label: "Synced shifts", adminOnly: false },
-  { id: "generate-api-token", label: "API Token", adminOnly: true },
-  { id: "manage-locations", label: "Locations", adminOnly: true },
-  { id: "manage-positions", label: "Positions", adminOnly: true },
-  { id: "coverage-targets", label: "Coverage targets", adminOnly: true },
-  { id: "report-groups", label: "Report groups", adminOnly: true },
-] as const;
-
 export default function Settings() {
   const {
     positionsToSync,
@@ -84,41 +73,32 @@ export default function Settings() {
     if (blocker.proceed) blocker.proceed();
   };
 
+  // The sidebar's section links are `/app/settings#id`, followed from any settings page.
+  // React Router doesn't scroll to a hash after navigating, so do it once the cards exist.
+  // Keyed on the navigation, not just the hash, so clicking the same section again after
+  // scrolling away still jumps back. Admin cards render only once `type` has loaded, hence
+  // that dependency too.
+  const { hash, key } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+  }, [hash, key, type]);
+
   return (
-    <div className="flex min-h-screen w-full flex-col">
-      <main className="flex min-h-[calc(100vh_-_theme(spacing.16))] flex-1 flex-col gap-4 bg-muted/40 p-4 md:gap-8 md:p-10">
-        <div className="mx-auto grid w-full max-w-6xl gap-2">
-          <h1 className="text-3xl font-semibold">Settings</h1>
-        </div>
-        <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
-          <nav className="grid gap-4 text-sm text-muted-foreground sticky top-20">
-            {SECTIONS.filter(
-              (section) => !section.adminOnly || type === "admin"
-            ).map((section) => (
-              <a
-                key={section.id}
-                href={`#${section.id}`}
-                className={"font-semibold text-primary"}
-              >
-                {section.label}
-              </a>
-            ))}
-          </nav>
-          <div className="grid gap-6" id="settings-wrapper">
-            {/* <GoogleIntegration></GoogleIntegration> */}
-            <ShiftsToAddToCal />
-            {type === "admin" && (
-              <div className="grid gap-6">
-                <GenerateAPIToken />
-                <ManageLocations />
-                <ManagePositions />
-                <CoverageTargets />
-                <ReportGroups />
-              </div>
-            )}
+    <>
+      <div className="grid gap-6" id="settings-wrapper">
+        {/* <GoogleIntegration></GoogleIntegration> */}
+        <ShiftsToAddToCal />
+        {type === "admin" && (
+          <div className="grid gap-6">
+            <GenerateAPIToken />
+            <ManageLocations />
+            <ManagePositions />
+            <CoverageTargets />
+            <ReportGroups />
           </div>
-        </div>
-      </main>
+        )}
+      </div>
       {blocker.state === "blocked" ? (
         <ProceedWithUnsavedChanges
           title="Are you sure you want to leave?"
@@ -130,6 +110,6 @@ export default function Settings() {
           // blocker={blocker}
         />
       ) : null}
-    </div>
+    </>
   );
 }

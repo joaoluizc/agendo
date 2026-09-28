@@ -45,6 +45,11 @@ import {
 } from "./shiftPlanning";
 import { applyShiftChanges, deleteShift, updateShift } from "./shiftRequests";
 import { useAgentSyncRules } from "./useAgentSyncRules";
+import PreferencesHoverCard from "@/components/UserPreferences/PreferencesHoverCard";
+import {
+  PreferencesIcon,
+  hasPreferences,
+} from "@/components/UserPreferences/PreferencesContent";
 
 type EditShiftDialogProps = {
   shift: Shift;
@@ -81,7 +86,7 @@ const EditShiftDialog = ({
   onOpenChange,
   reloadScheduleCalendar,
 }: EditShiftDialogProps) => {
-  const { allUsers, allPositions, coverageMeters, markPositionUsed } =
+  const { allUsers, allPositions, coverageMeters, markPositionUsed, type } =
     useUserSettings();
   const { shifts, events, setShifts, setEvents } = useSchedule();
   const { clock } = useTimeFormat();
@@ -161,6 +166,7 @@ const EditShiftDialog = ({
   // Drives the status line in the footer; the toggle beside it carries the live choice.
   const draft = isDraft(shift);
   const agent = roster.find((entry) => entry.id === String(shift.userId));
+  const showPreferences = type === "admin" && hasPreferences(agent?.user);
   const positionRecord = positionsById.get(positionId);
   const position = positionDisplay(positionRecord);
   const originalPositionRecord = positionsById.get(original.positionId);
@@ -529,20 +535,29 @@ const EditShiftDialog = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="flex max-h-[92vh] w-[calc(100vw-32px)] max-w-[760px] flex-col gap-0 overflow-hidden rounded-[14px] p-0">
           <div className="flex items-center gap-3 border-b border-border px-5 py-[15px]">
-            <Avatar className="shrink-0">
-              <AvatarImage
-                src={agent?.user.imageUrl}
-                className="h-[34px] w-[34px] rounded-full"
-              />
-              <AvatarFallback className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-muted text-[12.5px] font-semibold text-muted-foreground">
-                {agent?.initials}
-              </AvatarFallback>
-            </Avatar>
+            <PreferencesHoverCard user={agent?.user} side="bottom">
+              <span className="flex shrink-0">
+                <Avatar className="shrink-0">
+                  <AvatarImage
+                    src={agent?.user.imageUrl}
+                    className="h-[34px] w-[34px] rounded-full"
+                  />
+                  <AvatarFallback className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-muted text-[12.5px] font-semibold text-muted-foreground">
+                    {agent?.initials}
+                  </AvatarFallback>
+                </Avatar>
+              </span>
+            </PreferencesHoverCard>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <DialogTitle className="whitespace-nowrap text-[16px] font-semibold tracking-[-0.01em]">
-                  {agent?.name ?? "Unknown agent"}
-                </DialogTitle>
+                <PreferencesHoverCard user={agent?.user} side="bottom">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <DialogTitle className="whitespace-nowrap text-[16px] font-semibold tracking-[-0.01em]">
+                      {agent?.name ?? "Unknown agent"}
+                    </DialogTitle>
+                    {showPreferences && <PreferencesIcon className="h-3.5 w-3.5" />}
+                  </span>
+                </PreferencesHoverCard>
                 <span
                   className="flex h-[21px] shrink-0 items-center rounded-md px-2.5 text-[11px] font-semibold"
                   style={toneStyle(position)}

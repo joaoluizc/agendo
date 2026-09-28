@@ -17,7 +17,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import ScheduleToolbar from "./calendar-components/ScheduleToolbar.tsx";
 import AgentRow from "./calendar-components/AgentRow.tsx";
-import CoverageRow from "./calendar-components/CoverageRow.tsx";
+import CoverageRow, {
+  COMPACT_SAVING_PX,
+} from "./calendar-components/CoverageRow.tsx";
 import ScrollRail from "./calendar-components/ScrollRail.tsx";
 import PublishDraftsBar from "./calendar-components/PublishDraftsBar.tsx";
 import PendingChangePrompt from "./calendar-components/PendingChangePrompt.tsx";
@@ -212,6 +214,51 @@ const Schedule = () => {
     startOfLocalDay(new Date()).getTime();
 
   const [showTargets] = useState(true);
+
+  /**
+   * Compact coverage rows while the pinned block is stuck under the header, so the page
+   * scrolled down into the roster shows more agents under the same meters.
+   *
+   * The sentinel sits at the top of the grid card, where the pinned block starts; once it
+   * passes under the header (`top-16`, 64px) the block is stuck. Read on scroll rather
+   * than with an IntersectionObserver because the switch needs hysteresis: shrinking the
+   * rows shortens the page, and on a short roster the browser then clamps the scroll —
+   * which moves the sentinel back down by up to what the rows saved. Expanding at the same
+   * line would unstick, grow, re-stick and shrink in a loop, so it only expands once the
+   * sentinel is that far clear.
+   */
+  const pinSentinelRef = useRef<HTMLDivElement>(null);
+  const [coverageCompact, setCoverageCompact] = useState(false);
+  const compactSaving = isAdmin ? coverageMeters.length * COMPACT_SAVING_PX : 0;
+
+  useEffect(() => {
+    if (compactSaving === 0) {
+      setCoverageCompact(false);
+      return;
+    }
+    const HEADER_PX = 64;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const sentinel = pinSentinelRef.current;
+      if (!sentinel) return;
+      const top = sentinel.getBoundingClientRect().top;
+      setCoverageCompact((compact) =>
+        compact ? top < HEADER_PX + compactSaving : top < HEADER_PX
+      );
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [compactSaving]);
 
   /** Google Calendar events keyed by user, ready for the under-lane. */
   const eventsByUser = useMemo(() => {
@@ -487,6 +534,8 @@ const Schedule = () => {
           the agent column (sticky inside each) and the hours stay aligned. `relative` sits
           on each inner track, so each NowLine measures its own and scrolls with it. */}
       <div className="mx-5 mb-6 overflow-clip rounded-xl border border-border bg-card shadow-sm">
+        {/* Marks where the pinned block starts; see coverageCompact. */}
+        <div ref={pinSentinelRef} aria-hidden />
         {!scheduleIsLoading && (
           // top-16 is the site header's h-16, which is sticky itself. z-[6] clears the
           // rows' sticky agent column (z-[3]) and their now-line (z-[5]).
@@ -521,6 +570,7 @@ const Schedule = () => {
                     showTargets={showTargets}
                     focused={meter._id === focusedMeterId}
                     dimmed={focusedMeterId !== null && meter._id !== focusedMeterId}
+                    compact={coverageCompact}
                     onToggleFocus={() =>
                       setFocusedMeterId((current) =>
                         current === meter._id ? null : meter._id
