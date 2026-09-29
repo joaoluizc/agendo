@@ -549,7 +549,9 @@ const EditShiftDialog = ({
               </span>
             </PreferencesHoverCard>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              {/* Wraps so a long name pushes the position chip onto its own line on a
+                  phone, rather than out past the close button. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <PreferencesHoverCard user={agent?.user} side="bottom">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <DialogTitle className="whitespace-nowrap text-[16px] font-semibold tracking-[-0.01em]">
@@ -825,7 +827,10 @@ const EditShiftDialog = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 border-t border-border bg-band px-[18px] py-3">
+          {/* On a phone the status message takes a line of its own above the buttons, and
+              Cancel goes — the close button and a tap outside do the same, and without it
+              Delete, Published and Save fit one row of a 343px dialog. */}
+          <div className="flex flex-wrap items-center gap-2.5 border-t border-border bg-band px-[18px] py-3">
             {/* Full-strength destructive border and text: at 40% opacity this read as a
                 disabled control, which is the wrong signal for the one irreversible
                 action in the dialog. */}
@@ -842,6 +847,7 @@ const EditShiftDialog = ({
             <div
               className={cn(
                 "min-w-0 flex-1 truncate pr-1 text-right text-[11.5px]",
+                "max-sm:order-first max-sm:basis-full max-sm:whitespace-normal max-sm:text-left max-sm:empty:hidden",
                 unpublishedByRetime ? "text-warn" : "text-muted-foreground"
               )}
             >
@@ -858,7 +864,7 @@ const EditShiftDialog = ({
             {/* The status as a control rather than a one-way "Publish" button, which is
                 what made un-publishing impossible. Unchecking it and saving takes the
                 shift back to draft and removes its calendar event. */}
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 pr-1 text-[12.5px] text-muted-foreground">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 pr-1 text-[12.5px] text-muted-foreground max-sm:ml-auto">
               <Checkbox
                 id="edit-published"
                 checked={published}
@@ -868,7 +874,7 @@ const EditShiftDialog = ({
             </label>
             <Button
               variant="outline"
-              className="h-[34px] rounded-lg px-3 text-[13px] font-medium"
+              className="h-[34px] rounded-lg px-3 text-[13px] font-medium max-sm:hidden"
               onClick={() => onOpenChange(false)}
             >
               Cancel

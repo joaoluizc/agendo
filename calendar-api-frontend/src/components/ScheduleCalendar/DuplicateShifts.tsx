@@ -23,10 +23,12 @@ const DuplicateShifts = ({
     <>
       <Button
         variant="outline"
-        className="flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px]"
+        className="flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px] max-md:px-2.5"
+        title="Duplicate day"
         onClick={() => setOpen(true)}
       >
-        <Copy size={16} /> Duplicate day
+        {/* Icon-only on a phone; the label stays for screen readers. */}
+        <Copy size={16} /> <span className="max-md:sr-only">Duplicate day</span>
       </Button>
       {open && (
         <DuplicateDayDialog

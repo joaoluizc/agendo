@@ -28,7 +28,10 @@ const CalendarEventsToggle = ({
     }
   >
     <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    Google Calendar
+    {/* "Cal. events" on a phone, so the switch fits beside the location filter down to a
+        360px screen — "Calendar events" in full wraps below about 370. */}
+    <span className="max-md:hidden">Google Calendar</span>
+    <span className="md:hidden">Cal. events</span>
   </label>
 );
 

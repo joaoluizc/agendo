@@ -49,9 +49,9 @@ export interface ShiftInDrag {
  * A grid gesture waiting on the user's answer.
  *
  * Dragging a shift to a new time, resizing it by an edge, or shrinking it out of existence
- * all produce one of these. The gesture itself is unambiguous; what it cannot say is
- * whether the result should reach the agent's calendar — so it is parked here and a single
- * prompt asks. See `calendar-components/PendingChangePrompt`.
+ * all produce one of these, parked here for one place to save it: a retime is saved as a
+ * draft straight away (with an undo toast), and only a delete stops to ask. See
+ * `calendar-components/PendingChangePrompt`.
  */
 export type PendingShiftChange = {
   /** `"delete"` when the shift was shrunk past its own minimum. */
@@ -62,7 +62,7 @@ export type PendingShiftChange = {
   endTime: string;
   /** Differs from `shift.userId` when the shift was dragged onto another agent. */
   userId: string;
-  /** What the gesture did, e.g. `Chats · 09:00–13:00 → 09:00–12:45`. Shown in the prompt. */
+  /** What the gesture did, e.g. `Chats · 09:00–13:00 → 09:00–12:45`. Shown in the delete prompt. */
   summary: string;
   /**
    * A second line for a change the summary cannot carry without becoming a paragraph —

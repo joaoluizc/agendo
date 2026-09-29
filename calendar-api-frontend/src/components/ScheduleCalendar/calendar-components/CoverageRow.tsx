@@ -172,7 +172,7 @@ const CoverageRow = ({
               : `Highlight ${meter.name} shifts on the grid`
           }
           className={cn(
-            "sticky left-0 z-[3] flex flex-col justify-center border-r border-border px-3.5 text-left outline-none",
+            "sticky left-0 z-[3] flex flex-col justify-center border-r border-border px-2 text-left outline-none md:px-3.5",
             GROW,
             "hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             focused

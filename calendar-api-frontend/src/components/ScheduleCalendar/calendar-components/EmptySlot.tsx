@@ -57,7 +57,7 @@ function EmptySlot(props: EmptySlotProps) {
   };
 
   /**
-   * Names for the prompt. Looked up on demand inside the drop handler rather than memoised
+   * Names for the change's summary. Looked up on demand inside the drop handler rather than memoised
    * per cell: there are 384 of these on a full roster and only the one being dropped on
    * ever needs a name.
    */
@@ -103,10 +103,10 @@ function EmptySlot(props: EmptySlotProps) {
   /**
    * Land a dragged shift on this hour, for this agent.
    *
-   * The move is not written here. It asks the same question a resize does — commit this, or
-   * keep it a plan? — so it is parked on `pendingChange` and one shared prompt asks, then
-   * saves. The first version of this posted the update itself and forced the result to
-   * draft silently, which was safe and completely unexplained.
+   * The move is not written here. Like a resize, it is parked on `pendingChange`, and
+   * `PendingChangePrompt` saves it — always as a draft, with a toast that says so and can
+   * undo it. The first version of this posted the update itself and forced the result to
+   * draft silently, which was safe and completely unexplained; the toast is the fix.
    */
   const handleDrop = (event: React.DragEvent) => {
     const dragged = shiftInDrag?.data;
@@ -119,9 +119,9 @@ function EmptySlot(props: EmptySlotProps) {
     const { startTime, endTime } = landing(pointerHour(event));
 
     // Dropping a shift back where it already is is not a change, so it does not get a
-    // prompt or a write. Without this, picking a shift up and putting it down asked whether
-    // to publish a change that did not exist — and answering would have re-timed it to
-    // identical values and, if published, deleted and recreated its calendar event.
+    // write. Without this, picking a shift up and putting it down would re-time it to
+    // identical values — and, if it was published, pull it back to draft and take its
+    // event off the agent's calendar over a change that did not exist.
     const sameSlot =
       String(dragged.userId) === userId &&
       new Date(dragged.startTime).getTime() === new Date(startTime).getTime();

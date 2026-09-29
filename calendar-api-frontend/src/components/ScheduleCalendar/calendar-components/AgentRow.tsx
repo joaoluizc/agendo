@@ -369,7 +369,7 @@ const AgentRow = ({
     >
       <div
         className={cn(
-          "sticky left-0 z-[3] flex items-center gap-[9px] border-r border-border px-3.5",
+          "sticky left-0 z-[3] flex items-center gap-[9px] border-r border-border px-2 md:px-3.5",
           isVisitor ? "bg-me-tint" : "bg-card"
         )}
         style={{ height: rowHeight }}
@@ -378,7 +378,8 @@ const AgentRow = ({
             preferences shows them on hover (PreferencesHoverCard is a no-op otherwise). */}
         <PreferencesHoverCard user={user}>
           <div className="flex min-w-0 items-center gap-[9px]">
-            <Avatar className="shrink-0">
+            {/* A phone's 104px column is the name's; the avatar is what goes. */}
+            <Avatar className="shrink-0 max-md:hidden">
               <AvatarImage
                 src={user.imageUrl}
                 className="h-[22px] w-[22px] rounded-full"
@@ -407,9 +408,16 @@ const AgentRow = ({
                 {showPreferences && <PreferencesIcon />}
               </div>
               <div className="truncate text-[10.5px] leading-tight text-muted-foreground">
-                {totalHours > 0
-                  ? `${formatHours(totalHours)}h scheduled`
-                  : "unavailable"}
+                {/* Just "7.5h" in a phone's narrower column, which also has to fit the
+                    select-mode checkbox. */}
+                {totalHours > 0 ? (
+                  <>
+                    {formatHours(totalHours)}h
+                    <span className="max-md:hidden"> scheduled</span>
+                  </>
+                ) : (
+                  "unavailable"
+                )}
               </div>
             </div>
           </div>

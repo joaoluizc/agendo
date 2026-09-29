@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import utils from "../../utils/utils.ts";
 // import { User } from '../../types/slingTypes.ts';
 import { Shift, SortedCalendar } from "../../types/shiftTypes.ts";
@@ -161,14 +162,7 @@ export const getGCalendarEvents = async (
  */
 export const isDraft = (shift: Shift) => shift.status === "draft";
 
-/** How many of a day's shifts are still unpublished. Drives the toolbar's commit prompt. */
-export const countDrafts = (shifts: SortedCalendar) =>
-  Object.values(shifts).reduce(
-    (total, userShifts) => total + userShifts.filter(isDraft).length,
-    0
-  );
-
-/** Every unpublished shift in a day, in no particular order. */
+/** Every unpublished shift in a day, in no particular order. Drives the drafts bar. */
 export const collectDrafts = (shifts: SortedCalendar): Shift[] =>
   Object.values(shifts).flatMap((userShifts) => userShifts.filter(isDraft));
 
@@ -194,10 +188,41 @@ export const SLOTS_PER_DAY = 48;
  * narrower screen, and at 1425px `1fr` still stretches each column to the same 25px it
  * would otherwise have been. What it buys is ~48px of headroom for whatever the browser
  * takes that this arithmetic did not predict.
+ *
+ * A phone gets its own numbers. At 375px the desktop column alone took half the screen and
+ * the 1320px minimum track left zoom with nothing to do, so a phone's label column is 104
+ * (the name without its avatar) and its slot floor 10 — 20px an hour, which lets a phone
+ * zoom out to about 12 hours before the floor binds.
+ *
+ * The components read these through two CSS variables that `ScheduleCalendar` sets on the
+ * grid card from `gridGeometry`, so one decision, made once, still reaches all four.
  */
-export const LABEL_COLUMN_PX = 168;
-export const SLOT_MIN_PX = 24;
-export const TRACK_MIN_PX = LABEL_COLUMN_PX + SLOTS_PER_DAY * SLOT_MIN_PX;
+export type GridGeometry = {
+  /** The sticky agent column. */
+  labelPx: number;
+  /** The narrowest a half-hour column may get before the track scrolls instead. */
+  slotMinPx: number;
+};
+
+export const DESKTOP_GRID: GridGeometry = { labelPx: 168, slotMinPx: 24 };
+export const MOBILE_GRID: GridGeometry = { labelPx: 104, slotMinPx: 10 };
+
+export const gridGeometry = (isMobile: boolean): GridGeometry =>
+  isMobile ? MOBILE_GRID : DESKTOP_GRID;
+
+/** The narrowest the whole track may get: the label column plus every slot at its floor. */
+export const trackMinPx = ({ labelPx, slotMinPx }: GridGeometry) =>
+  labelPx + SLOTS_PER_DAY * slotMinPx;
+
+/** The label column's width, for a `calc()` or a `gridTemplateColumns`. */
+export const LABEL_COLUMN = `var(--schedule-label-col, ${DESKTOP_GRID.labelPx}px)`;
+
+/** The CSS variables `ScheduleCalendar` puts on the grid card. */
+export const gridVariables = ({ labelPx, slotMinPx }: GridGeometry) =>
+  ({
+    "--schedule-label-col": `${labelPx}px`,
+    "--schedule-slot-min": `${slotMinPx}px`,
+  }) as CSSProperties;
 
 /**
  * "Alexandre Back" -> "Alexandre B." for the grid's label column.
@@ -214,9 +239,9 @@ export const shortName = (firstName?: string, lastName?: string): string => {
   return initial ? `${first} ${initial}.` : first;
 };
 /** Half-hour columns alone — for the lane grid inside a row, which has no label cell. */
-export const SLOT_COLUMNS = `repeat(${SLOTS_PER_DAY}, minmax(${SLOT_MIN_PX}px, 1fr))`;
+export const SLOT_COLUMNS = `repeat(${SLOTS_PER_DAY}, minmax(var(--schedule-slot-min, ${DESKTOP_GRID.slotMinPx}px), 1fr))`;
 /** The full row: sticky label column, then the day. */
-export const GRID_COLUMNS = `${LABEL_COLUMN_PX}px ${SLOT_COLUMNS}`;
+export const GRID_COLUMNS = `${LABEL_COLUMN} ${SLOT_COLUMNS}`;
 
 /** A span in fractional local hours since the selected day's midnight, 0..24. */
 export type DaySpan = {

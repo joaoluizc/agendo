@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useSchedule } from "@/providers/useSchedule";
+import { useUserSettings } from "@/providers/useUserSettings";
 import { Shift } from "@/types/shiftTypes";
 import { isDraft } from "../scheduleUtils";
 import {
@@ -17,27 +18,25 @@ import {
   deleteShift,
   updateShift,
 } from "../shift-dialogs/shiftRequests";
+import { showUndoToast } from "../undoToast";
 
 /**
- * The one question a grid gesture cannot answer: does this change reach the agent's
- * calendar, or stay a plan?
+ * Where a grid gesture — dragging a shift to a new time, resizing it by an edge — gets
+ * saved, and the one gesture that still asks first.
  *
- * Dragging a shift to a new time and resizing it by an edge are both unambiguous about
- * *what* they did and silent about whether it is committed. Rather than guessing — the
- * first attempt forced every drag to draft with no explanation — the gesture parks itself
- * on `pendingChange` and this asks.
+ * **A retime always saves as a draft, straight away.** This used to ask "Publish this
+ * change?" whenever the shift was already published. Now every edit made on the grid is a
+ * plan until someone publishes it, from the drafts bar or a selection, so there is nothing
+ * left to ask. What the prompt's Cancel used to offer — a way back from a drag that went
+ * wrong — is the toast's Undo (and Ctrl/Cmd+Z while it shows), which puts back the old
+ * time *and* the old status.
  *
- * **It only asks about a shift that is already published.** Re-timing a draft has nothing
- * at stake — it stays a draft, nothing syncs — so it saves straight away and says so in a
- * toast. See `autoKeepDraft`.
+ * For a published shift that has a cost worth saying out loud: going back to draft takes
+ * the shift's event off the agent's Google Calendar (the server removes it on any update
+ * to draft), and it stays off until the day is published again. The toast says so.
  *
- * **Dismissing saves as a draft.** The gesture already happened and the user meant it; the
- * only open question is commitment, and a draft touches no calendar, so the quiet outcome
- * is the safe one.
- *
- * **A delete is the exact opposite: dismissing cancels.** Shrinking a shift out of
- * existence is a plausible accident, and the safe outcome there is to keep the shift. The
- * asymmetry is deliberate — in both cases dismissal is the reversible option.
+ * **A delete still asks.** Shrinking a shift past its opposite edge is taken as wanting it
+ * gone, which is a plausible accident and cannot be undone.
  *
  * Rendered once by ScheduleCalendar, not per shift: there are 384 EmptySlots on a full
  * roster and any of them can raise one of these.
@@ -50,31 +49,18 @@ const PendingChangePrompt = () => {
     events,
     setShifts,
     setEvents,
+    reloadSchedule,
   } = useSchedule();
+  const { allUsers } = useUserSettings();
   const [busy, setBusy] = useState(false);
 
   /**
-   * Guards against resolving twice. Both buttons close the dialog, and closing is itself
-   * the "keep as draft" path — without this, clicking the draft button would save once for
-   * the click and again for the close it causes.
+   * Guards against resolving twice: the delete button closes the dialog, and closing is
+   * itself the cancel path.
    */
   const resolved = useRef(false);
 
   const isDelete = pendingChange?.intent === "delete";
-
-  /**
-   * Re-timing a shift that is *already* a draft needs no question.
-   *
-   * The prompt exists to ask whether a change reaches the agent's calendar. For a draft the
-   * answer is already no — it stays a draft, nothing syncs, and asking "publish or keep as
-   * draft?" turns every nudge of an unpublished day into a dialog. Only a *published* shift
-   * has something at stake, because re-timing it either moves the agent's calendar event or
-   * quietly pulls it back to draft.
-   *
-   * Deleting still asks, whatever the status: that one is irreversible.
-   */
-  const autoKeepDraft =
-    !!pendingChange && !isDelete && isDraft(pendingChange.shift);
 
   const finish = () => {
     setBusy(false);
@@ -87,10 +73,11 @@ const PendingChangePrompt = () => {
     setEvents(next.events);
   };
 
-  const saveRetime = async (status: "draft" | "published") => {
+  const saveAsDraft = async () => {
     if (!pendingChange || resolved.current) return;
     resolved.current = true;
-    const { shift, startTime, endTime, userId } = pendingChange;
+    const { shift, startTime, endTime, userId, detail } = pendingChange;
+    const wasPublished = !isDraft(shift);
     setBusy(true);
     try {
       const updated = await updateShift(shift._id, {
@@ -98,23 +85,38 @@ const PendingChangePrompt = () => {
         endTime,
         userId,
         positionId: String(shift.positionId),
-        status,
+        status: "draft",
       });
       // The response carries the fresh sync state, so swapping the whole shift keeps the
       // Google Calendar under-lane honest.
       patchGrid(
         [shift],
-        [updated ?? { ...shift, startTime, endTime, userId, status }]
+        [updated ?? { ...shift, startTime, endTime, userId, status: "draft" }]
       );
-      toast.success(
-        status === "published" ? "Change published" : "Saved as draft",
-        // A draft retime saves without a dialog, so the toast is the only place left to
-        // mention what the prompt would have — that the shift now crosses midnight, or
-        // moved to a different agent.
-        autoKeepDraft && pendingChange.detail
-          ? { description: pendingChange.detail }
-          : undefined
-      );
+
+      const agent = allUsers.find((user) => String(user.id) === String(userId));
+      const publishHint = wasPublished
+        ? `Publish to send the new time to ${agent?.firstName ?? "the agent"}'s calendar.`
+        : undefined;
+      showUndoToast({
+        message: "Saved as draft",
+        // A draft retime says nothing more than it used to, apart from what the drag did
+        // that the grid cannot show — a new agent, or crossing midnight.
+        description: [publishHint, detail].filter(Boolean).join(" ") || undefined,
+        // Puts back exactly what the gesture replaced — time, agent and status, so a
+        // published shift is published (and synced) again. Refetches rather than patching:
+        // the day on screen may no longer be the one this change was made on.
+        undo: async () => {
+          await updateShift(shift._id, {
+            startTime: shift.startTime,
+            endTime: shift.endTime,
+            userId: String(shift.userId),
+            positionId: String(shift.positionId),
+            status: wasPublished ? "published" : "draft",
+          });
+          reloadSchedule();
+        },
+      });
     } catch (error) {
       console.error("Error saving shift change:", error);
       toast.error("Could not save the change", {
@@ -145,16 +147,10 @@ const PendingChangePrompt = () => {
   };
 
   /**
-   * Throw the gesture away — Cancel, Escape, or a click outside.
+   * Keep the shift — the button, Escape, or a click outside.
    *
    * Nothing has been written at this point: the block is holding its dragged shape locally
    * and clearing the pending change releases it, so it snaps back to its stored times.
-   *
-   * Dismissing used to save as a draft, on the reasoning that the drag had already happened
-   * and was meant. That made sense while "keep as draft" was the *only* alternative to
-   * publishing. Now that Cancel is a button in its own right, a dialog whose Escape key
-   * does something different from its Cancel button is just a trap — so both discard, and
-   * "Keep as draft" is the explicit way to save without publishing.
    */
   const onCancel = () => {
     if (busy) return;
@@ -166,14 +162,14 @@ const PendingChangePrompt = () => {
     if (pendingChange) resolved.current = false;
   }, [pendingChange]);
 
-  // Declared after saveRetime so it can call it, and after the reset above so the guard is
-  // already cleared for this change. Saves without ever showing the dialog.
+  // Declared after the reset above so the guard is already cleared for this change.
+  // A retime saves without ever showing the dialog.
   useEffect(() => {
-    if (!autoKeepDraft) return;
-    void saveRetime("draft");
-  }, [autoKeepDraft, pendingChange]);
+    if (!pendingChange || isDelete) return;
+    void saveAsDraft();
+  }, [pendingChange, isDelete]);
 
-  if (!pendingChange || autoKeepDraft) return null;
+  if (!pendingChange || !isDelete) return null;
 
   const { summary, detail } = pendingChange;
 
@@ -186,17 +182,10 @@ const PendingChangePrompt = () => {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {isDelete ? "Delete this shift?" : "Publish this change?"}
-          </AlertDialogTitle>
-          {/* "Might", not "will": whether an event actually appears depends on the agent
-              having that position switched on in their sync settings, or an admin having
-              enforced it. Publishing a position an agent has disabled succeeds and creates
-              nothing, which is correct and would otherwise read as a failure. */}
+          <AlertDialogTitle>Delete this shift?</AlertDialogTitle>
           <AlertDialogDescription>
-            {isDelete
-              ? "You shrank the shift past its minimum length, which is taken as wanting it gone. This cannot be undone."
-              : "Cancel to undo the change. Publishing might also update the agent's Google Calendar, depending on their sync settings."}
+            You shrank the shift past its minimum length, which is taken as wanting it
+            gone. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -212,43 +201,22 @@ const PendingChangePrompt = () => {
         </div>
 
         <AlertDialogFooter>
-          {/* Three ways out of a retime: undo it, save it unpublished, or publish it.
-              Cancel sits leftmost and quietest — it is the one that throws work away. */}
+          {/* Keep sits leftmost and quietest; it is also what Escape does. */}
           <Button
             variant="ghost"
             className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium text-muted-foreground"
             disabled={busy}
             onClick={onCancel}
           >
-            {isDelete ? "Keep shift" : "Cancel"}
+            Keep shift
           </Button>
-          {!isDelete && (
-            <Button
-              variant="outline"
-              className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium"
-              disabled={busy}
-              onClick={() => saveRetime("draft")}
-            >
-              {busy ? "Saving…" : "Keep as draft"}
-            </Button>
-          )}
-          {isDelete ? (
-            <Button
-              className="h-[34px] rounded-lg bg-destructive px-3.5 text-[13px] font-semibold text-destructive-foreground hover:bg-destructive/90"
-              disabled={busy}
-              onClick={confirmDelete}
-            >
-              {busy ? "Deleting…" : "Delete shift"}
-            </Button>
-          ) : (
-            <Button
-              className="h-[34px] rounded-lg px-3.5 text-[13px] font-semibold"
-              disabled={busy}
-              onClick={() => saveRetime("published")}
-            >
-              {busy ? "Saving…" : "Publish change"}
-            </Button>
-          )}
+          <Button
+            className="h-[34px] rounded-lg bg-destructive px-3.5 text-[13px] font-semibold text-destructive-foreground hover:bg-destructive/90"
+            disabled={busy}
+            onClick={confirmDelete}
+          >
+            {busy ? "Deleting…" : "Delete shift"}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

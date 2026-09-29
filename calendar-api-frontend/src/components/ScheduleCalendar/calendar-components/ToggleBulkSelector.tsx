@@ -26,7 +26,8 @@ function ToggleBulkSelector() {
     <div className="flex items-center gap-2">
       <Button
         variant={isBulkSelectorActive ? "secondary" : "outline"}
-        className="h-[34px] gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px]"
+        className="h-[34px] gap-[7px] whitespace-nowrap rounded-lg px-3 text-[13px] max-md:px-2.5"
+        title={isBulkSelectorActive ? "Done selecting" : "Select shifts"}
         // Leaving the mode drops the selection rather than keeping it. Once the checkboxes
         // are gone a retained selection is invisible and undeselectable — the exact state
         // that let a stale cross-day selection delete two days of shifts.
@@ -35,7 +36,10 @@ function ToggleBulkSelector() {
         }
       >
         <ListChecks size={16} />
-        {isBulkSelectorActive ? "Done selecting" : "Select shifts"}
+        {/* Icon-only on a phone; the label stays for screen readers. */}
+        <span className="max-md:sr-only">
+          {isBulkSelectorActive ? "Done selecting" : "Select shifts"}
+        </span>
       </Button>
 
       {isBulkSelectorActive && (

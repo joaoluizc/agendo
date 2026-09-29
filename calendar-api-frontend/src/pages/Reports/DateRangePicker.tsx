@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export type DateRangeValue = { start: Date; end: Date };
 export type PresetKey =
@@ -105,6 +106,7 @@ type DateRangePickerProps = {
  */
 export default function DateRangePicker({ value, preset, onChange }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [draft, setDraft] = useState<DateRange | undefined>({ from: value.start, to: value.end });
   /** The next click starts a fresh range rather than editing the one on screen. */
   const [awaitingStart, setAwaitingStart] = useState(true);
@@ -172,8 +174,13 @@ export default function DateRangePicker({ value, preset, onChange }: DateRangePi
           {label}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[80] flex w-auto p-0">
-        <div className="flex flex-col gap-1 border-r p-2">
+      {/* On a phone the presets wrap into a strip above a single month. Beside two months
+          the popover came to about 420px, wider than the screen it opened on. */}
+      <PopoverContent
+        align="start"
+        className="z-[80] flex w-auto max-w-[calc(100vw-1rem)] flex-col p-0 sm:flex-row"
+      >
+        <div className="flex flex-row flex-wrap gap-1 border-b p-2 sm:flex-col sm:flex-nowrap sm:border-b-0 sm:border-r">
           {PRESETS.map((p) => (
             <button
               key={p.key}
@@ -197,7 +204,7 @@ export default function DateRangePicker({ value, preset, onChange }: DateRangePi
             autoFocus
             selected={draft}
             onSelect={handleCustomSelect}
-            numberOfMonths={2}
+            numberOfMonths={isMobile ? 1 : 2}
             defaultMonth={value.start}
             classNames={{
               range_start:

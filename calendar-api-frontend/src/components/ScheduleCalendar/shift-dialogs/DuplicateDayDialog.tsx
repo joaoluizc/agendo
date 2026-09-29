@@ -865,8 +865,9 @@ const DuplicateDayDialog = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3.5 border-t border-border bg-band px-[18px] py-[13px]">
-          <div className="min-w-0 flex-1">
+        {/* The summary takes its own line on a phone, with both buttons under it. */}
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-t border-border bg-band px-[18px] py-[13px]">
+          <div className="min-w-0 flex-1 max-sm:basis-full">
             <div className="truncate text-[13px] font-semibold">
               {created === 0
                 ? "Nothing to copy"
@@ -890,7 +891,7 @@ const DuplicateDayDialog = ({
           </div>
           <Button
             variant="outline"
-            className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium"
+            className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium max-sm:ml-auto"
             onClick={() => onOpenChange(false)}
           >
             Cancel

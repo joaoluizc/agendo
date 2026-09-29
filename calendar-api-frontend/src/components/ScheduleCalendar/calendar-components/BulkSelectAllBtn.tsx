@@ -37,7 +37,7 @@ function BulkSelectAllBtn() {
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            className="h-5 w-fit"
+            className="h-5 w-fit max-md:px-2.5"
             disabled={total === 0 || allSelected}
             onClick={selectAll}
             aria-label="Select all shifts on this day"

@@ -156,7 +156,7 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            className="h-5 w-fit"
+            className="h-5 w-fit max-md:px-2.5"
             disabled={busy || applicable.length === 0}
             onClick={run}
           >

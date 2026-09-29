@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTimeFormat } from "@/utils/timeFormat";
-import { LABEL_COLUMN_PX } from "../scheduleUtils";
+import { LABEL_COLUMN } from "../scheduleUtils";
 
 type NowLineProps = {
   /** Only drawn when the grid is showing today. */
@@ -19,10 +19,11 @@ type NowLineProps = {
  * fixed pixel offset, so it stays correct when the track stretches past its 1500px
  * minimum to fill a wide screen.
  *
- * The offset is the grid's own `LABEL_COLUMN_PX`, not a copy of it. This used to be a
- * hardcoded 252px left over from a wider agent column; once the column shrank to 168px
- * the line drew every minute as if the hours started 84px further right — about 45px
- * (35+ minutes) late by mid-morning.
+ * The offset is the grid's own label column (`LABEL_COLUMN`), not a copy of it. This used
+ * to be a hardcoded 252px left over from a wider agent column; once the column shrank to
+ * 168px the line drew every minute as if the hours started 84px further right — about
+ * 45px (35+ minutes) late by mid-morning. It is a CSS variable now because the column is
+ * narrower again on a phone.
  */
 const NowLine = ({ isToday, showLabel = true }: NowLineProps) => {
   const [now, setNow] = useState(() => new Date());
@@ -42,7 +43,7 @@ const NowLine = ({ isToday, showLabel = true }: NowLineProps) => {
     <div
       className="pointer-events-none absolute bottom-0 top-0 z-[5] w-[2px] bg-warn"
       style={{
-        left: `calc(${LABEL_COLUMN_PX}px + (100% - ${LABEL_COLUMN_PX}px) * ${fractionOfDay})`,
+        left: `calc(${LABEL_COLUMN} + (100% - ${LABEL_COLUMN}) * ${fractionOfDay})`,
       }}
     >
       {/* Centred by its own width rather than a fixed offset, since `10:56 AM` is half as

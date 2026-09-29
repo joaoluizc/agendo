@@ -3,12 +3,13 @@ import "air-datepicker/air-datepicker.css";
 import localeEn from "air-datepicker/locale/en";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  LABEL_COLUMN_PX,
-  TRACK_MIN_PX,
   firstShiftStart,
   getShifts,
   getGCalendarEvents,
+  gridGeometry,
+  gridVariables,
   startOfLocalDay,
+  trackMinPx,
 } from "./scheduleUtils.ts";
 import { formatDateParam } from "@/utils/utils.ts";
 import { CalendarUser, GCalEventWithGrid } from "@/types/gCalendarTypes.ts";
@@ -31,6 +32,8 @@ import { useSchedule } from "@/providers/useSchedule.tsx";
 import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
 import { useAgentLocations } from "@/hooks/useAgentLocations.ts";
 import { useSelectShortcuts } from "@/hooks/useSelectShortcuts.ts";
+import { isMobileNow, useIsMobile } from "@/hooks/useMediaQuery.ts";
+import { useUndoShortcut } from "./undoToast.ts";
 import { FILTERABLE_LOCATIONS } from "./calendar-components/LocationFilter.tsx";
 
 /** Row height of a single-lane agent row — the skeleton matches it so nothing jumps. */
@@ -59,8 +62,14 @@ const storeShowCalendarEvents = (show: boolean) => {
   }
 };
 
-/** Deepest zoom: 8 hours on screen (08–15), eight steps in. */
-const MAX_ZOOM = 8;
+/** Deepest zoom: 2 hours on screen, eleven steps in. */
+const MAX_ZOOM = 11;
+
+/** Where a phone opens: 4 hours on screen, enough to read a shift's label at a glance. */
+const MOBILE_START_ZOOM = 10;
+
+/** Local hours since midnight, fractional: 14:30 is 14.5. */
+const hourOfDay = (date: Date) => date.getHours() + date.getMinutes() / 60;
 
 const Schedule = () => {
   const {
@@ -209,6 +218,8 @@ const Schedule = () => {
 
   const isAdmin = type === "admin";
   useSelectShortcuts(isAdmin);
+  useUndoShortcut(isAdmin);
+  const isMobile = useIsMobile();
   const isToday =
     startOfLocalDay(selectedDate).getTime() ===
     startOfLocalDay(new Date()).getTime();
@@ -431,15 +442,23 @@ const Schedule = () => {
   // The pinned block remounts after every loading skeleton; start it where the rows are.
   useLayoutEffect(syncPinnedScroll, [scheduleIsLoading]);
 
+  /** The grid's geometry for this screen — see `gridGeometry`. */
+  const geometry = gridGeometry(isMobile);
+  const { labelPx } = geometry;
+
   /**
-   * Zoom: each step drops one hour off each edge of the view — 00 and 23 first, then 01
-   * and 22 — by widening the track so the hours left fill the scroller. The dropped hours
-   * are still there, a sideways scroll away. Level 0 is the whole day, exactly as before.
+   * Zoom: each step takes two hours off the view — 24 hours at level 0, 22, 20, … down to
+   * 2 at `MAX_ZOOM` — by widening the track so the hours left fill the scroller. The
+   * others are still there, a sideways scroll away.
    *
    * Nothing inside the track needs to know: rows, the now line, drops and drag-to-create
    * all position as fractions of the track's width.
+   *
+   * A phone opens at 4 hours: on a screen that narrow, the whole day is shifts too thin to
+   * read, let alone tap. Only the starting level differs — turning the phone or resizing the
+   * window keeps whatever zoom the user chose.
    */
-  const [zoom, setZoom] = useState(0);
+  const [zoom, setZoom] = useState(() => (isMobileNow() ? MOBILE_START_ZOOM : 0));
   const [scrollerWidth, setScrollerWidth] = useState(0);
 
   useLayoutEffect(() => {
@@ -452,18 +471,87 @@ const Schedule = () => {
     return () => observer.disconnect();
   }, []);
 
-  const hourPx =
-    Math.max(0, scrollerWidth - LABEL_COLUMN_PX) / (24 - 2 * zoom);
-  const trackWidth = Math.max(TRACK_MIN_PX, LABEL_COLUMN_PX + hourPx * 24);
+  /**
+   * The widest the view can usefully get on this screen. Past it the slot floor binds and
+   * the track stops shrinking, so a step out would change nothing on screen — which on a
+   * phone was every step from the whole day to about 5 hours. Zoom levels below this are
+   * read as this one, and the zoom-out button stops here.
+   */
+  const available = Math.max(0, scrollerWidth - labelPx);
+  const minZoom =
+    available > 0
+      ? Math.min(
+          MAX_ZOOM,
+          Math.max(0, Math.ceil((24 - available / (2 * geometry.slotMinPx)) / 2))
+        )
+      : 0;
+  const effectiveZoom = Math.max(zoom, minZoom);
+  const visibleHours = 24 - 2 * effectiveZoom;
+
+  const trackWidth = Math.max(
+    trackMinPx(geometry),
+    labelPx + (available / visibleHours) * 24
+  );
+  /**
+   * The width of an hour as drawn. Measured off the track rather than the zoom, since the
+   * track's floor can make it wider than the zoom asked for — scrolling by the asked-for
+   * width is what used to land each step short of its hour.
+   */
+  const hourPx = (trackWidth - labelPx) / 24;
   /** Only draw the scrollbars when there is somewhere to scroll to. */
   const overflows = scrollerWidth > 0 && trackWidth > scrollerWidth + 1;
 
-  // Land each zoom step on the hours it keeps, with the dropped ones off either edge.
-  useLayoutEffect(() => {
-    if (!rowsScrollerRef.current) return;
-    rowsScrollerRef.current.scrollLeft = zoom * hourPx;
+  /**
+   * The hour at the middle of the visible timeline, which zooming keeps where it is.
+   *
+   * Zoom used to close in on midday, whatever was on screen: at 2 hours that is always
+   * 11:00–13:00, so looking at the evening and zooming in threw you to lunchtime. Now the
+   * hour you are looking at stays put, the way zoom works in anything else.
+   *
+   * Held in a ref and updated from the user's own scrolling, not derived from the scroll
+   * position on each render: the loading skeleton is narrower than the track and snaps the
+   * scroll to 0, and a scroll we set ourselves can be clamped at either end of the day —
+   * reading the centre back from either would move it somewhere nobody put it.
+   *
+   * A phone opening on today starts on the current time; anything else starts on midday.
+   */
+  const [initialCenterHour] = useState(() =>
+    isMobileNow() && isToday ? hourOfDay(new Date()) : 12
+  );
+  const centerHourRef = useRef(initialCenterHour);
+  /**
+   * The `scrollLeft` we last set ourselves. A scroll event that finds the rows still there
+   * is our own write arriving, not the user.
+   *
+   * Compared by position rather than counted as "skip the next event": a write does not
+   * always produce exactly one event — a hidden tab delivers none, and a user scroll in the
+   * same frame merges with it — and a skip-next flag then swallowed the user's next real
+   * scroll, so the following zoom snapped back to wherever the centre was before.
+   */
+  const programmaticLeft = useRef<number | null>(null);
+
+  const onRowsScroll = () => {
     syncPinnedScroll();
-  }, [zoom, scheduleIsLoading, overflows]);
+    const scroller = rowsScrollerRef.current;
+    if (!scroller || scheduleIsLoading || !overflows) return;
+    if (scroller.scrollLeft === programmaticLeft.current) return;
+    centerHourRef.current =
+      (scroller.scrollLeft + (scroller.clientWidth - labelPx) / 2) / hourPx;
+  };
+
+  // Keep the centre hour in the middle through every zoom step, day change (the skeleton
+  // has reset the scroll by then) and resize.
+  useLayoutEffect(() => {
+    const scroller = rowsScrollerRef.current;
+    if (!scroller || scheduleIsLoading) return;
+    const target =
+      centerHourRef.current * hourPx - (scroller.clientWidth - labelPx) / 2;
+    scroller.scrollLeft = Math.max(0, target);
+    // Read back rather than kept from the assignment: the browser clamps it to the track
+    // and may round it, and that applied value is what its scroll event will carry.
+    programmaticLeft.current = scroller.scrollLeft;
+    syncPinnedScroll();
+  }, [effectiveZoom, scheduleIsLoading, overflows, scrollerWidth, labelPx]);
 
   return (
     <div>
@@ -478,9 +566,11 @@ const Schedule = () => {
         canShowCalendarEvents={isAdmin}
         showCalendarEvents={showCalendarEvents}
         onShowCalendarEventsChange={changeShowCalendarEvents}
-        zoom={zoom}
+        zoom={effectiveZoom}
+        minZoom={minZoom}
         maxZoom={MAX_ZOOM}
         onZoomChange={setZoom}
+        compact={isMobile}
       />
 
       {/* Creating a shift no longer syncs it, so the day needs somewhere that says
@@ -496,7 +586,7 @@ const Schedule = () => {
       {/* Says out loud that the grid is dimmed on purpose, and how to undo it — a grid
           that is mostly faded with no explanation reads as broken. */}
       {focusedMeter && (
-        <div className="mx-5 mb-3 flex items-center gap-2.5 rounded-lg border border-border bg-band px-3.5 py-2 text-[12.5px]">
+        <div className="mx-3 mb-3 flex flex-wrap items-center gap-2.5 rounded-lg border border-border bg-band px-3.5 py-2 text-[12.5px] md:mx-5">
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
             style={{ backgroundColor: focusedMeter.color }}
@@ -533,23 +623,24 @@ const Schedule = () => {
           The rows' scroller owns the sideways scroll and the pinned block follows it, so
           the agent column (sticky inside each) and the hours stay aligned. `relative` sits
           on each inner track, so each NowLine measures its own and scrolls with it. */}
-      <div className="mx-5 mb-6 overflow-clip rounded-xl border border-border bg-card shadow-sm">
+      <div
+        className="mx-3 mb-6 overflow-clip rounded-xl border border-border bg-card shadow-sm md:mx-5"
+        style={gridVariables(geometry)}
+      >
         {/* Marks where the pinned block starts; see coverageCompact. */}
         <div ref={pinSentinelRef} aria-hidden />
         {!scheduleIsLoading && (
           // top-16 is the site header's h-16, which is sticky itself. z-[6] clears the
           // rows' sticky agent column (z-[3]) and their now-line (z-[5]).
           <div className="sticky top-16 z-[6] bg-card">
+          {/* A scroller of its own, with its bar hidden, so a finger swiped along the hours
+              moves the grid the same way a trackpad does — the four scrollers keep each
+              other in step. It used to be `overflow-hidden` and forward wheel events, which
+              no touch screen sends. */}
           <div
             ref={pinnedRef}
-            className="overflow-hidden"
-            // A sideways trackpad swipe over the hours scrolls the grid, as it would have
-            // when they were part of it.
-            onWheel={(event) => {
-              if (event.deltaX && rowsScrollerRef.current) {
-                rowsScrollerRef.current.scrollLeft += event.deltaX;
-              }
-            }}
+            className="schedule-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+            onScroll={() => syncScrollFrom(pinnedRef.current)}
           >
             <div className="relative" style={{ width: trackWidth }}>
               <CalendarHeader
@@ -570,7 +661,7 @@ const Schedule = () => {
                     showTargets={showTargets}
                     focused={meter._id === focusedMeterId}
                     dimmed={focusedMeterId !== null && meter._id !== focusedMeterId}
-                    compact={coverageCompact}
+                    compact={coverageCompact || isMobile}
                     onToggleFocus={() =>
                       setFocusedMeterId((current) =>
                         current === meter._id ? null : meter._id
@@ -587,6 +678,7 @@ const Schedule = () => {
             <ScrollRail
               ref={topRailRef}
               trackWidth={trackWidth}
+              labelPx={labelPx}
               onScroll={() => syncScrollFrom(topRailRef.current)}
             />
           )}
@@ -598,7 +690,7 @@ const Schedule = () => {
         <div
           ref={rowsScrollerRef}
           className="schedule-scrollbar-hidden overflow-x-auto"
-          onScroll={syncPinnedScroll}
+          onScroll={onRowsScroll}
         >
           {scheduleIsLoading ? (
             <div className="p-3">
@@ -647,6 +739,7 @@ const Schedule = () => {
           <ScrollRail
             ref={bottomRailRef}
             trackWidth={trackWidth}
+            labelPx={labelPx}
             onScroll={() => syncScrollFrom(bottomRailRef.current)}
           />
         )}
@@ -656,8 +749,9 @@ const Schedule = () => {
           showEvents={isAdmin && showCalendarEvents}
         />
 
-        {/* One prompt for every grid gesture — a resize or a drop — rendered here rather
-            than per shift, since any of the 384 EmptySlots can raise one. */}
+        {/* Saves every grid gesture — a resize or a drop — as a draft, and asks only
+            before a delete. Rendered here rather than per shift, since any of the 384
+            EmptySlots can raise one. */}
         {isAdmin && <PendingChangePrompt />}
       </div>
     </div>

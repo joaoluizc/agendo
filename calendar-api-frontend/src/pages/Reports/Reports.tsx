@@ -66,25 +66,42 @@ function columnValue(row: HoursReportRow, key: ColumnKey): string | number {
  * not "12h" strings — one per line, so pasting into Google Sheets drops them straight
  * into a single column ready for SUM/AVERAGE.
  */
+/**
+ * The Agent column on a phone: held at the left edge, so the names stay put if the numbers
+ * ever need to scroll sideways on a screen narrower than the table.
+ *
+ * A sticky cell needs a background of its own or the scrolled cells show through it, and a
+ * plain one would erase the row's stripe. The inset shadow paints the stripe back over it.
+ * Phone-only: the table fits a desktop card outright, so there it stays an ordinary cell.
+ */
+const STICKY_AGENT = "max-sm:sticky max-sm:left-0 max-sm:z-[1] max-sm:bg-card";
+const STICKY_STRIPE = "max-sm:shadow-[inset_0_0_0_999px_hsl(var(--muted)/0.2)]";
+
 function SortableHead({
   columnKey,
   sort,
   onSort,
   onCopy,
   align = "left",
+  className,
 }: {
   columnKey: ColumnKey;
   sort: SortState;
   onSort: (key: ColumnKey) => void;
   onCopy: (key: ColumnKey) => void;
   align?: "left" | "right";
+  className?: string;
 }) {
   const label = COLUMN_LABELS[columnKey];
   const active = sort?.key === columnKey;
   const SortIcon = active ? (sort!.direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
-    <TableHead className={align === "right" ? "text-right" : undefined}>
+    <TableHead className={cn(align === "right" && "text-right", className)}>
       <div className={cn("inline-flex items-center gap-2", align === "right" && "w-full justify-end")}>
+        {/* On a phone only the column actually sorted shows its arrow, and the copy button
+            goes: those icons are most of what made five headers wider than the screen. The
+            header itself still sorts on a tap, and copying a column is for pasting into
+            Sheets, which happens at a desk. */}
         <button
           type="button"
           onClick={() => onSort(columnKey)}
@@ -95,14 +112,14 @@ function SortableHead({
           )}
         >
           {label}
-          <SortIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <SortIcon className={cn("h-3.5 w-3.5 shrink-0 opacity-70", !active && "max-sm:hidden")} />
         </button>
         <button
           type="button"
           onClick={() => onCopy(columnKey)}
           aria-label={`Copy ${label} column`}
           title={`Copy ${label} column`}
-          className="text-muted-foreground opacity-70 hover:text-foreground hover:opacity-100"
+          className="text-muted-foreground opacity-70 hover:text-foreground hover:opacity-100 max-md:hidden"
         >
           <Copy className="h-3.5 w-3.5" />
         </button>
@@ -262,15 +279,24 @@ export default function Reports() {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <main className="flex min-h-[calc(100vh_-_theme(spacing.16))] flex-1 flex-col gap-4 bg-muted/40 p-4 md:gap-8 md:p-10">
-        <div className="mx-auto grid w-full max-w-5xl gap-2">
-          <h1 className="text-3xl font-semibold">Reports</h1>
+      {/* Tighter all round on a phone, where the page and card paddings alone took 80px of
+          a 375px screen before the table got any. */}
+      <main className="flex min-h-[calc(100vh_-_theme(spacing.16))] flex-1 flex-col gap-3 bg-muted/40 p-2 sm:gap-4 sm:p-4 md:gap-8 md:p-10">
+        <div className="mx-auto grid w-full max-w-5xl gap-2 max-sm:px-1">
+          <h1 className="text-2xl font-semibold sm:text-3xl">Reports</h1>
         </div>
         <div className="mx-auto w-full max-w-5xl">
           <Card>
-            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardHeader className="flex flex-col gap-4 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div className="grid gap-1.5">
                 <CardTitle>Agent hours</CardTitle>
+                {/* The refresh tooltip's "calculated at", for a phone, where a tooltip
+                    never opens. */}
+                {computedAt && (
+                  <p className="text-xs text-muted-foreground sm:hidden">
+                    Calculated at {clock.time(computedAt)} · tap ↻ to recalculate
+                  </p>
+                )}
                 {rangeRunsPastToday && (
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Info className="h-3.5 w-3.5 shrink-0" />
@@ -358,14 +384,23 @@ export default function Reports() {
                 </TooltipProvider>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : (
-                <Table>
+                <Table className="max-sm:text-xs max-sm:[&_td]:px-1.5 max-sm:[&_th]:px-1.5">
                   <TableHeader>
                     <TableRow className="bg-muted/40">
-                      <SortableHead columnKey="name" sort={sort} onSort={(k) => setSort(nextSort(sort, k))} onCopy={copyColumn} />
+                      <SortableHead
+                        columnKey="name"
+                        sort={sort}
+                        onSort={(k) => setSort(nextSort(sort, k))}
+                        onCopy={copyColumn}
+                        className={cn(
+                          STICKY_AGENT,
+                          "max-sm:shadow-[inset_0_0_0_999px_hsl(var(--muted)/0.4)]",
+                        )}
+                      />
                       <SortableHead
                         columnKey="Tickets"
                         sort={sort}
@@ -412,7 +447,18 @@ export default function Reports() {
                     ) : (
                       sortedRows.map((row, i) => (
                         <TableRow key={row.id} className={i % 2 === 1 ? "bg-muted/20" : undefined}>
-                          <TableCell className="font-medium">{row.name}</TableCell>
+                          {/* Capped on a phone so the name, not the hours, is what gives. */}
+                          <TableCell
+                            className={cn(
+                              "font-medium",
+                              STICKY_AGENT,
+                              i % 2 === 1 && STICKY_STRIPE,
+                            )}
+                            title={row.name}
+                          >
+                            {/* On the inner div: browsers ignore max-width on a table cell. */}
+                            <div className="max-sm:max-w-[6rem] max-sm:truncate">{row.name}</div>
+                          </TableCell>
                           <TableCell
                             className={cn(
                               "text-right tabular-nums",
