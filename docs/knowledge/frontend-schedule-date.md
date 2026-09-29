@@ -1,8 +1,8 @@
 # Schedule screens & date handling (frontend)
 
-_The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows and their scrollbars, zoom, row order, and the date footguns._
+_The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows and their scrollbars, zoom, the phone layout, row order, and the date footguns._
 
-_Last updated: 2026-09-24_
+_Last updated: 2026-09-28_
 
 The frontend (`calendar-api-frontend`) has **two schedule screens**, one per
 shift source (see [agendo overview](agendo-overview.md) for why both exist):
@@ -128,10 +128,11 @@ While the page scrolls, the hour row and the coverage rows stay pinned under the
 
 - **They can't be a sticky row inside the grid's scroller.** An `overflow-x` element is a
   scroll container in both axes, so a sticky child sticks to it — and it never scrolls
-  vertically. So the grid card holds two scrollers: the pinned block (`overflow-hidden`),
-  and the agent rows (`overflow-x-auto`, which owns the sideways scroll). The rows'
-  `onScroll` copies `scrollLeft` into the pinned block, and a sideways wheel over the pinned
-  block is forwarded to the rows.
+  vertically. So the grid card holds two scrollers: the pinned block and the agent rows,
+  both `overflow-x-auto` with their bars hidden, kept in step by `syncScrollFrom` (below).
+  The pinned block used to be `overflow-hidden` with sideways wheel events forwarded to the
+  rows, which meant a finger swiped along the hours did nothing — touch sends no wheel
+  events.
 - **The card is `overflow-clip`, not `overflow-hidden`.** Hidden would make the card a
   scroll container too and capture the pinned block; clip still rounds the corners without
   that.
@@ -155,17 +156,65 @@ While the page scrolls, the hour row and the coverage rows stay pinned under the
 
 ## Zoom
 
-The toolbar's zoom buttons drop one hour off **each** edge of the view per step (00 and 23,
-then 01 and 22, …) down to 8 hours (08–15, `MAX_ZOOM = 8`). Zoom out restores the last pair
-and does nothing on the whole day.
+Each step of the toolbar's zoom buttons takes two hours off the view: 24, 22, … down to 2
+(`MAX_ZOOM = 11`). Both ends stay clickable and do nothing.
 
-- It only sets the track's width: `LABEL_COLUMN_PX + 24 × (scroller width − label) / (24 −
-  2 × zoom)`, never below `TRACK_MIN_PX`. Everything inside the track — rows, `NowLine`, the
-  drop ghost, drag-to-create — already positions as a fraction of that width, so nothing
-  else needed to change. Keep it that way: a fixed pixel offset inside the track breaks zoom.
-- Each step scrolls to `zoom × hourPx`, so the kept hours fill the view and the dropped ones
-  sit off either edge. Any sideways scroll the user had done is lost on a zoom.
+- It only sets the track's width: `labelPx + 24 × (scroller width − labelPx) / visible
+  hours`, never below `trackMinPx(geometry)`. Everything inside the track — rows, `NowLine`,
+  the drop ghost, drag-to-create — already positions as a fraction of that width, so nothing
+  else needs to know. Keep it that way: a fixed pixel offset inside the track breaks zoom.
+- **Zoom keeps the hour in the middle of the view where it is.** `centerHourRef` records it
+  from the user's own scrolling, and each step, day change and resize scrolls it back to
+  the middle. It is a ref rather than read off the scroll position because two scrolls are
+  not the user's: the loading skeleton is narrower than the track and snaps the scroll to 0,
+  and our own write can be clamped at either end of the day. A scroll event that finds the
+  rows where we last put them is ours and is skipped (`programmaticLeft`). Compare by
+  position, not "skip the next event": a write does not always fire exactly one event (a
+  hidden tab fires none, and a user scroll in the same frame merges with it), and a
+  skip-next flag then swallowed the user's next real scroll. This replaced zooming toward
+  midday, which at 2 hours always showed 11:00–13:00 whatever you had been looking at.
+- **The widest level depends on the screen.** `minZoom` is the smallest level whose hours
+  are still at least the slot floor wide (`2 × slotMinPx` per hour). Wider than that, the
+  floor binds and the track stops shrinking, so a zoom-out step would change nothing on
+  screen — which on a phone used to be every step from the whole day to about 5 hours.
+  Lower levels are read as `minZoom` and zoom-out stops there.
+- The scroll uses the hour width as drawn, `(trackWidth − labelPx) / 24`. Using the width
+  the zoom asked for landed each step short of its hour whenever the floor was binding.
+- The tooltip says how much is on screen (`8h on screen`), not which hours — that depends
+  on where the grid is scrolled.
 - The zoom level is component state: it resets on reload and isn't in the URL.
+
+## On phones
+
+Below Tailwind's `md` (768px, `useIsMobile` in `hooks/useMediaQuery.ts`, written as
+Tailwind's own `max-md` query so JS and CSS switch at the same pixel) the grid uses
+`MOBILE_GRID` instead of `DESKTOP_GRID` (`scheduleUtils.ts`):
+
+- **Label column 104px (desktop 168), slot floor 10px (desktop 24).** Both reach the rows,
+  the ruler, the coverage rows and `NowLine` through two CSS variables that
+  `ScheduleCalendar` sets on the grid card — `--schedule-label-col` and
+  `--schedule-slot-min`, read by `GRID_COLUMNS`/`SLOT_COLUMNS`/`LABEL_COLUMN` — so the
+  geometry is still decided in one place. The label cell drops its avatar, tightens its
+  padding and shortens "7.5h scheduled" to "7.5h".
+- **It opens at 4 hours** (`MOBILE_START_ZOOM = 10`), centred on the current time when the
+  day is today and on midday otherwise. Zoom runs from about 12 hours (where the 10px floor
+  binds at 375px) down to 2. Only the starting level is phone-specific: rotating or
+  resizing keeps whatever zoom the user chose.
+- **Coverage rows are always compact**, not only while pinned — the pinned block would
+  otherwise take a third of the screen.
+- **The toolbar fits three lines down to 360px**: day stepper, date (without its year) and
+  zoom, with slightly narrower buttons; then the location filter and the events switch
+  (labelled "Cal. events"); then the actions on a full-width line of their own —
+  Duplicate and Select icon-only at the start, New shift at the end, leaving room for
+  select mode's buttons. `max-md:order-1`/`order-2` do the reordering, and an agent, who
+  has no actions, gets no third line.
+- **The header** keeps the avatar and theme menu at the right edge, with the localhost
+  badge centred.
+- Margins drop from `mx-5` to `mx-3`, and the drafts bar drops its explanation after the
+  count.
+
+Resizing and moving shifts are decided by **pointer type, not width** — see
+[shift drafts](shift-drafts.md).
 
 ## Row order
 

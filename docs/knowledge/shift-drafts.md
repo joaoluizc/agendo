@@ -1,8 +1,8 @@
 # Shift drafts
 
-_The draft/published lifecycle: what a draft is excluded from, and the one filter rule that matters._
+_The draft/published lifecycle: what a draft is excluded from, the one filter rule that matters, grid gestures and their undo, touch screens, and bulk publishing._
 
-_Last updated: 2026-09-23_
+_Last updated: 2026-09-28_
 
 An agendo shift is a **draft** until an admin publishes it. Creating one no longer syncs
 it to anybody's calendar — publishing does. This is the first real step toward agendo
@@ -53,28 +53,38 @@ changed.
 
 Omitting `status` leaves it untouched, so callers that don't care are unaffected.
 
-## Grid gestures ask, they don't decide
+## Grid gestures save a draft, with undo
 
-Resizing a shift by an edge and dragging one to a new time or agent both end in the same
-prompt: *publish this change, or keep it a draft?*
+Resizing a shift by an edge and dragging one to a new time or agent both **save the result
+as a draft, straight away**, published shift or not. Publishing is then the drafts bar's
+job, or a selection's.
 
 - Raised by parking a `PendingShiftChange` on the schedule provider; `PendingChangePrompt`
   is rendered **once** by `ScheduleCalendar` and does the write. It lives there rather than
   in the components because a drop is raised by `EmptySlot`, of which there are 384 on a
   full roster.
-- **Only a published shift is asked about.** Re-timing a *draft* has nothing at stake — it
-  stays a draft, nothing syncs — so it saves immediately and reports in a toast, which also
-  carries what the prompt would have said (crosses midnight, moved to another agent). See
-  `autoKeepDraft`.
-- **Three ways out of the prompt:** Cancel (throw the gesture away), Keep as draft, or
-  Publish change. Escape and an outside click both mean Cancel — dismissal used to save as
-  a draft, which was right while that was the only alternative to publishing, but a dialog
-  whose Escape does something other than its own Cancel button is a trap.
-- **A delete always asks**, draft or not, because it is the one irreversible option.
-- The block holds its dragged size until the prompt is answered, so the dialog is never
-  describing a change the grid has already snapped back from.
-- The prompt says publishing *might* update the calendar, not that it will — whether an
-  event appears depends on the agent's per-position sync settings.
+- **This used to ask** "publish this change, or keep it a draft?" whenever the shift was
+  published (drafts already saved without asking). Every edit on the grid being a plan
+  until published made the question redundant, and answering it on every nudge of a
+  published day was the friction.
+- **The cost for a published shift is said out loud.** Going back to draft deletes its
+  calendar event (the server does that on any update to draft), so the agent loses it until
+  the day is published again. The toast says "Publish to send the new time to Ana's
+  calendar", plus whatever the grid cannot show (moved to another agent, now crosses
+  midnight).
+- **Undo replaces the prompt's Cancel**, the one way back from a drag that went wrong. The
+  toast (`undoToast.ts`, about 8 seconds) has an Undo button, and **Ctrl/Cmd+Z** undoes the
+  newest undo toast still showing — twice walks back two changes. Undo writes back the
+  snapshot from before the gesture: time, agent *and* status, so a published shift is
+  re-published and re-synced. It then refetches the day on screen rather than patching,
+  since the user may have moved to another day by then. Ctrl+Z stands down while typing in a
+  field (its own undo) and while a dialog is open, and does nothing when no undo toast is up.
+- **A delete still asks**, because it is the one irreversible option. That is the only thing
+  `PendingChangePrompt` still renders.
+- The block holds its dragged size until the save lands, so the grid never snaps back and
+  forward again.
+- **The edit dialog is unchanged**: re-timing there still unticks Published once, and it can
+  be re-ticked to publish on purpose (see above).
 
 Resize specifics: 15-minute steps (`HOUR_STEP`, the same increment the dialog's steppers
 use), one axis, right edge moves the end and left edge moves the start. Scale comes from the
@@ -107,10 +117,27 @@ and **both the preview and the drop call it**, which is what stops them disagree
 Rounding happens on the absolute hour rather than on the fraction, so the far right of the
 09:00 cell resolves to 10:00 instead of being pinned to 09:45.
 
-Dropping a shift back where it already is writes nothing and raises no prompt. Before that
-check, picking a shift up and putting it down asked whether to publish a change that did not
-exist — and answering would have re-timed it to identical values and, if published, deleted
-and recreated its calendar event for no reason.
+Dropping a shift back where it already is writes nothing. Before that check, picking a
+shift up and putting it down re-timed it to identical values — which now would also pull a
+published shift back to draft and take its event off the agent's calendar, over a change
+that did not exist.
+
+### Touch screens: tap, don't drag
+
+On a device whose main pointer is a finger (`useIsCoarsePointer`, `(pointer: coarse)`),
+shifts **cannot be resized or dragged**: the handles are not rendered and the block is not
+`draggable`. The same fingers pinch-zoom and scroll the page, and a pinch that started on a
+shift's edge used to reshape it. A long press can also start an HTML5 drag on iOS and
+Android. A tap opens the edit dialog, which does both.
+
+It is decided by pointer, not screen width: a phone in landscape or a tablet is wider than
+the phone breakpoint and still has no mouse. On a touchscreen laptop the handles still show
+for the mouse, and `beginResize` ignores any pointer that isn't one (`pointerType !==
+"mouse"`, as drag-to-create already did).
+
+**Agents (non-admins) get a details popover on tap or click**: position, time, the second
+day of an overnight shift, draft status, notes. That used to be only in the hover title,
+which never shows on a phone, and a click did nothing.
 
 ### Drag on empty space to draw a new shift
 
@@ -371,6 +398,18 @@ Select-shifts mode has five actions: select all (`ctrl A`), clear, publish (`p`)
 (`u`), delete (`delete`). Publish and unpublish send only the applicable half of the selection — drafts
 to publish, published shifts to unpublish — so a mixed selection does the sensible thing,
 and each button disables when the selection holds nothing of its kind.
+
+**The drafts bar follows the selection.** With drafts selected it reads "10 of 86
+unpublished shifts selected" and its button becomes **Publish selected**, sending only
+those. Otherwise it stays "86 unpublished shifts" / Publish all, including when the
+selection holds only published shifts. The selected drafts are read off `visibleShifts`
+through `selectedShiftIds` rather than from the selection itself, which holds each shift as
+it was when clicked, so statuses are current and filtered-out agents stay out. The ids are
+fixed at the click: the counter runs "Publishing 3 of 10…" whatever happens to the selection
+meanwhile, and the run ends select mode like every other bulk action. The bar keeps its
+progress up until the refetch lands. Clearing it first used to show the old "86 unpublished"
+with a live Publish all button, over a day that had just been published, for as long as the
+refetch took.
 
 Two rules, both learned the hard way:
 
