@@ -16,6 +16,12 @@ import EditShiftDialog from "./shift-dialogs/EditShiftDialog";
 import { useSchedule } from "@/providers/useSchedule";
 import { cn } from "@/lib/utils";
 import { useTimeFormat } from "@/utils/timeFormat";
+import { useIsCoarsePointer } from "@/hooks/useMediaQuery";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type ShiftProps = {
   shift: Shift;
@@ -55,6 +61,13 @@ export function Shift(props: ShiftProps) {
   } = useSchedule();
   const { allPositions, type: userType } = useUserSettings();
   const { clock } = useTimeFormat();
+  /**
+   * The screen's main pointer is a finger. Then a shift cannot be dragged to move it or
+   * resized by its edges: on a phone the same fingers pinch-zoom and scroll the grid, and
+   * a pinch that happened to start on a shift used to reshape it. A tap opens the edit
+   * dialog instead, which does both.
+   */
+  const coarsePointer = useIsCoarsePointer();
   const [isOpen, setIsOpen] = useState(false);
   // Read straight off the provider's id set. This used to be local state synced by an
   // effect that scanned the whole selection, which made select-all quadratic and painted
@@ -66,7 +79,7 @@ export function Shift(props: ShiftProps) {
 
   /**
    * Live edge-drag state: non-null while a resize is in progress, and held past release
-   * until the prompt it raised is answered.
+   * until the change it raised is saved (or, for a delete, answered).
    */
   const [resizing, setResizing] = useState<{
     start: number;
@@ -77,7 +90,7 @@ export function Shift(props: ShiftProps) {
   /** True between raising a pending change and it being resolved. */
   const awaitingPrompt = useRef(false);
 
-  // Drop the held preview once the prompt closes. A saved change arrives as new stored
+  // Drop the held preview once the change is resolved. A saved change arrives as new stored
   // times, so the block lands on them; a cancelled delete snaps back to where it was.
   useEffect(() => {
     if (pendingChange || !awaitingPrompt.current) return;
@@ -133,6 +146,9 @@ export function Shift(props: ShiftProps) {
   const beginResize =
     (edge: "start" | "end") => (event: React.PointerEvent<HTMLDivElement>) => {
       if (userType !== "admin" || isBulkSelectorActive) return;
+      // Mouse only, like drag-to-create. On a touch-and-mouse laptop the handles still
+      // show, and a finger landing on one does nothing rather than resizing.
+      if (event.pointerType !== "mouse") return;
       event.preventDefault();
       event.stopPropagation();
 
@@ -187,8 +203,9 @@ export function Shift(props: ShiftProps) {
           return;
         }
 
-        // Hold the preview until the prompt is answered. Snapping back on release would
-        // have the dialog describing a change the grid no longer shows.
+        // Hold the preview until the change is saved. Snapping back on release would flash
+        // the old times until the save lands, and have the delete dialog describing a
+        // change the grid no longer shows.
         awaitingPrompt.current = true;
 
         const next = rangeToIso(selectedDate, {
@@ -360,7 +377,8 @@ export function Shift(props: ShiftProps) {
       ? `${place.insetRightPct}%`
       : `calc(${place.insetRightPct}% + 2px)`,
     borderRadius: radius,
-    cursor: userType === "admin" ? "pointer" : "default",
+    // Everyone can click one: an admin opens the editor, an agent the details.
+    cursor: "pointer",
     ...toneStyle,
     // A draft keeps its position colour, so the block still reads as coverage at a
     // glance, but washed out and dashed: an uncommitted shift must never be mistaken for
@@ -395,21 +413,22 @@ export function Shift(props: ShiftProps) {
       : {}),
   };
 
+  const dayLabel = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  /** `Sat, Sep 27 → Sun, Sep 28` for a shift that crosses midnight. */
+  const twoDays = spansTwoDays
+    ? `${dayLabel(shift.startTime)} → ${dayLabel(shift.endTime)}`
+    : null;
+
   const title = `${position.name} · ${clock.range(
     shift.startTime,
     shift.endTime
   )}${draft ? " · draft (unpublished)" : ""}${
-    spansTwoDays
-      ? ` · spans two days (${new Date(shift.startTime).toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        })} → ${new Date(shift.endTime).toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        })}) — edit its times in the dialog`
-      : ""
+    twoDays ? ` · spans two days (${twoDays}) — edit its times in the dialog` : ""
   }`;
 
   const body =
@@ -450,36 +469,34 @@ export function Shift(props: ShiftProps) {
     resizing && "brightness-110"
   );
 
-  return isBulkSelectorActive ? (
+  const block = (
     <div
-      onClick={toggleSelected}
+      ref={blockRef}
+      // Dragging the body moves the shift; dragging an edge resizes it. Turning DnD off
+      // mid-resize stops the browser starting a move from the same gesture, and it is off
+      // on a touch screen for the reason `coarsePointer` gives: iOS and Android both start
+      // an HTML5 drag from a long press.
+      draggable={userType === "admin" && !resizing && !coarsePointer}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       title={title}
       className={blockClass}
       style={blockStyle}
+      onClick={handleClick}
     >
       {body}
-    </div>
-  ) : (
-    <>
-      <div
-        ref={blockRef}
-        // Dragging the body moves the shift; dragging an edge resizes it. Turning DnD off
-        // mid-resize stops the browser starting a move from the same gesture.
-        draggable={userType === "admin" && !resizing}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        title={title}
-        className={blockClass}
-        style={blockStyle}
-        onClick={handleClick}
-      >
-        {body}
-        {/* Edge handles, and none at all on a shift that crosses midnight.
-            A resize works on this day's clamped span, which cannot express "past
-            midnight" — dragging either edge of an overnight shift would write back only
-            the visible part and silently drop the rest. The edit dialog handles those,
-            anchored on the shift's own start day. */}
-        {userType === "admin" && !isBulkSelectorActive && !spansTwoDays && (
+      {/* Edge handles, and none at all on a shift that crosses midnight.
+          A resize works on this day's clamped span, which cannot express "past
+          midnight" — dragging either edge of an overnight shift would write back only
+          the visible part and silently drop the rest. The edit dialog handles those,
+          anchored on the shift's own start day.
+
+          None on a touch screen either. Their `touch-none` strips would swallow a pinch
+          or a scroll that happened to start on a shift's edge. */}
+      {userType === "admin" &&
+        !isBulkSelectorActive &&
+        !spansTwoDays &&
+        !coarsePointer && (
           <>
             {!span.clippedStart && (
               <div
@@ -501,7 +518,58 @@ export function Shift(props: ShiftProps) {
             )}
           </>
         )}
-      </div>
+    </div>
+  );
+
+  return isBulkSelectorActive ? (
+    <div
+      onClick={toggleSelected}
+      title={title}
+      className={blockClass}
+      style={blockStyle}
+    >
+      {body}
+    </div>
+  ) : (
+    <>
+      {userType === "admin" ? (
+        block
+      ) : (
+        // An agent's tap shows what the hover title does. Hover never happens on a phone,
+        // and before this a click did nothing at all — an agent had no way to read a shift
+        // too narrow to print its own times.
+        <Popover>
+          <PopoverTrigger asChild>{block}</PopoverTrigger>
+          <PopoverContent
+            side="top"
+            className="w-auto max-w-[260px] px-3 py-2.5 text-[12px]"
+          >
+            <div className="flex items-center gap-2 font-semibold">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                style={{ backgroundColor: position.color }}
+              />
+              {position.name}
+            </div>
+            <div className="mt-1 tabular-nums">
+              {clock.range(shift.startTime, shift.endTime)}
+            </div>
+            {twoDays && (
+              <div className="mt-0.5 text-muted-foreground">{twoDays}</div>
+            )}
+            {draft && (
+              <div className="mt-0.5 text-muted-foreground">
+                Draft — not published yet
+              </div>
+            )}
+            {shift.notes && (
+              <div className="mt-1.5 whitespace-pre-wrap text-muted-foreground">
+                {shift.notes}
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
       {/* Mounted only once opened: the dialog derives the whole roster's day and the
           coverage series on render, and a full day is around a hundred of these blocks. */}
       {isOpen && userType === "admin" && (

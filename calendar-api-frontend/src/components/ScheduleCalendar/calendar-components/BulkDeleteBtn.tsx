@@ -138,7 +138,7 @@ function BulkDeleteBtn() {
                   the trigger opened a confirmation dialog for deleting nothing. */}
               <Button
                 variant="ghost"
-                className="h-5 w-fit"
+                className="h-5 w-fit max-md:px-2.5"
                 disabled={bulkSelectedShifts.length === 0}
               >
                 <Trash2 style={{ height: "0.9rem", width: "0.9rem" }} />

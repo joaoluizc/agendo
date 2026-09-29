@@ -569,7 +569,7 @@ const CreateShiftDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[720px] max-h-[92vh] w-[calc(100vw-32px)] max-w-[980px] flex-col gap-0 overflow-hidden rounded-[14px] p-0">
+      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-32px)] max-w-[980px] flex-col gap-0 overflow-hidden rounded-[14px] p-0 md:h-[720px]">
         <div className="flex items-start gap-3 border-b border-border px-5 pb-[15px] pt-[17px]">
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-[17px] font-semibold tracking-[-0.01em]">
@@ -596,8 +596,11 @@ const CreateShiftDialog = ({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[344px_minmax(0,1fr)]">
-          <div className="flex min-h-0 flex-col gap-[17px] overflow-y-auto border-b border-border px-[18px] pb-[18px] pt-4 md:border-b-0 md:border-r">
+        {/* Side by side, each pane scrolling on its own, from `md`. Below it the panes stack
+            and the whole body scrolls as one: two stacked scrollers splitting a phone's
+            height left the agent list a few rows tall. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 max-md:overflow-y-auto md:grid-cols-[344px_minmax(0,1fr)]">
+          <div className="flex flex-col gap-[17px] border-b border-border px-[18px] pb-[18px] pt-4 md:min-h-0 md:overflow-y-auto md:border-b-0 md:border-r">
             <div className="flex flex-col gap-[9px]">
               <div className="text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
                 Time
@@ -665,9 +668,9 @@ const CreateShiftDialog = ({
             </div>
           </div>
 
-          <div className="flex min-h-0 min-w-0 flex-col">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-[13px]">
-              <div className="relative min-w-0 flex-1">
+          <div className="flex min-w-0 flex-col md:min-h-0">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-[13px]">
+              <div className="relative min-w-0 flex-1 max-sm:basis-full">
                 <Search
                   size={13}
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -776,7 +779,7 @@ const CreateShiftDialog = ({
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
               {visible.length === 0 && (
                 <div className="px-4 py-6 text-[12.5px] text-muted-foreground">
                   No agent matches that search.
@@ -805,8 +808,8 @@ const CreateShiftDialog = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 border-t border-border bg-band px-[18px] py-[13px]">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-border bg-band px-[18px] py-[13px]">
+          <div className="min-w-0 flex-1 max-sm:basis-full">
             <div className="truncate text-[13px] font-semibold">
               {creating.length === 0
                 ? "No shifts to create"
@@ -829,7 +832,9 @@ const CreateShiftDialog = ({
               the same request. Sits next to the create button because it changes what that
               button does, and its label spells out the consequence — "publish now" alone
               would not tell you a calendar event is about to appear. */}
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 pr-1 text-[12.5px] text-muted-foreground">
+          {/* On a phone the summary above takes its own line and Cancel goes, as in the
+              edit dialog: the close button does the same, and the rest then fits a row. */}
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 pr-1 text-[12.5px] text-muted-foreground max-sm:ml-auto">
             <Checkbox
               id="publish-now"
               checked={publishNow}
@@ -839,7 +844,7 @@ const CreateShiftDialog = ({
           </label>
           <Button
             variant="outline"
-            className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium"
+            className="h-[34px] rounded-lg px-3.5 text-[13px] font-medium max-sm:hidden"
             onClick={() => onOpenChange(false)}
           >
             Cancel

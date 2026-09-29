@@ -15,7 +15,22 @@ type UserSettingsProviderState = {
   lastName: string;
   email: string;
   slingId: string;
+  /**
+   * The role the UI renders for: `"admin"` or `"user"`. Normally the server's answer; on
+   * localhost an admin can switch it to `"user"` to preview the agent's view — see
+   * `viewAsAgent`. Gate UI on this.
+   */
   type: string;
+  /** What the server says, whatever `viewAsAgent` is doing to `type`. */
+  realType: string;
+  /**
+   * Local development only: an admin is previewing the app as an agent. Purely a UI
+   * switch — the server still knows you as an admin, so anything a screen asks for still
+   * succeeds; what changes is everything that renders (or fetches) behind `type`.
+   */
+  viewAsAgent: boolean;
+  /** Stored per browser and applied by reloading, so every screen starts from the new role. */
+  setViewAsAgent: (value: boolean) => void;
   userInfoLoaded: boolean;
   timeZone: number;
   allPositions: Position[];
@@ -61,12 +76,42 @@ export const UserSettingsContext = createContext<
   UserSettingsProviderState | undefined
 >(undefined);
 
+const VIEW_AS_AGENT_KEY = "agendo.viewAsAgent";
+
+/** Only ever on in a dev build: production ignores whatever the key holds. */
+const readViewAsAgent = () => {
+  if (!import.meta.env.DEV) return false;
+  try {
+    return localStorage.getItem(VIEW_AS_AGENT_KEY) === "on";
+  } catch {
+    return false;
+  }
+};
+
+const storeViewAsAgent = (on: boolean) => {
+  try {
+    if (on) localStorage.setItem(VIEW_AS_AGENT_KEY, "on");
+    else localStorage.removeItem(VIEW_AS_AGENT_KEY);
+  } catch {
+    // Blocked storage: the reload below then simply comes back in the old role.
+  }
+};
+
 export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [slingId, setSlingId] = useState("");
   const [type, setType] = useState("");
+  const [viewAsAgent] = useState(readViewAsAgent);
+  // Only an admin can be previewing an agent: anyone else is one already.
+  const effectiveType = viewAsAgent && type === "admin" ? "user" : type;
+  const setViewAsAgent = (on: boolean) => {
+    storeViewAsAgent(on);
+    // A reload rather than a state flip: the admin-only data already loaded (coverage
+    // meters, calendar events) would otherwise stay on screen in the agent's view.
+    window.location.reload();
+  };
   const [userInfoLoaded, setUserInfoLoaded] = useState(false);
   const [timeZone, setTimeZone] = useState(0);
   const [allPositions, setAllPositions] = useState<Position[]>([]);
@@ -199,7 +244,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   // `originalCoverageMeters` is the baseline the Settings card diffs against for
   // its dirty state and Reset, mirroring positionsToSync.
   useEffect(() => {
-    if (!userInfoLoaded || type !== "admin") return;
+    if (!userInfoLoaded || effectiveType !== "admin") return;
 
     const loadCoverageMeters = async () => {
       try {
@@ -211,14 +256,17 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
     };
     loadCoverageMeters();
-  }, [userInfoLoaded, type]);
+  }, [userInfoLoaded, effectiveType]);
 
   const value = {
     firstName,
     lastName,
     email,
     slingId,
-    type,
+    type: effectiveType,
+    realType: type,
+    viewAsAgent,
+    setViewAsAgent,
     userInfoLoaded,
     timeZone,
     allPositions,

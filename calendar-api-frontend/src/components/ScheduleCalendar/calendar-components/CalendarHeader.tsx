@@ -49,7 +49,7 @@ const CalendarHeader = ({
       className="grid border-b border-border"
       style={{ gridTemplateColumns: GRID_COLUMNS }}
     >
-      <div className="sticky left-0 z-[3] flex items-center border-r border-border bg-card px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+      <div className="sticky left-0 z-[3] flex items-center border-r border-border bg-card px-2 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground md:px-3.5">
         {agentCount} {agentCount === 1 ? "agent" : "agents"}
       </div>
 

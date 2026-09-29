@@ -1,9 +1,10 @@
 import { forwardRef } from "react";
-import { LABEL_COLUMN_PX } from "../scheduleUtils";
 
 type ScrollRailProps = {
   /** The grid track's full width, agent column included. */
   trackWidth: number;
+  /** The agent column's width, which the rail starts after. */
+  labelPx: number;
   onScroll: () => void;
 };
 
@@ -18,14 +19,14 @@ type ScrollRailProps = {
  * `scrollLeft` copies across one to one.
  */
 const ScrollRail = forwardRef<HTMLDivElement, ScrollRailProps>(
-  ({ trackWidth, onScroll }, ref) => (
+  ({ trackWidth, labelPx, onScroll }, ref) => (
     <div
       ref={ref}
       className="schedule-scrollbar overflow-x-auto overflow-y-hidden"
-      style={{ marginLeft: LABEL_COLUMN_PX }}
+      style={{ marginLeft: labelPx }}
       onScroll={onScroll}
     >
-      <div style={{ width: trackWidth - LABEL_COLUMN_PX, height: 1 }} />
+      <div style={{ width: trackWidth - labelPx, height: 1 }} />
     </div>
   )
 );

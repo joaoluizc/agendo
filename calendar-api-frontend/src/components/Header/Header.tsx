@@ -38,15 +38,48 @@ const TIME_FORMATS: { value: TimeFormatPreference; label: string }[] = [
   { value: "12h", label: "12-hour (AM/PM)" },
 ];
 
+/**
+ * A link in the mobile menu: closes the menu on the way, and marks the current page.
+ *
+ * Closes through `onNavigate` rather than a `SheetClose asChild` wrapper: Radix's Slot
+ * merges `className` as a string, so NavLink's function form — the thing that marks the
+ * current page — came out as the function's source text instead of a class.
+ */
+const MobileNavLink = ({
+  to,
+  onNavigate,
+  children,
+}: {
+  to: string;
+  onNavigate: () => void;
+  children: React.ReactNode;
+}) => (
+  <NavLink
+    to={to}
+    onClick={onNavigate}
+    className={({ isActive }) =>
+      cn(
+        "transition-colors hover:text-foreground",
+        isActive ? "text-foreground" : "text-muted-foreground"
+      )
+    }
+  >
+    {children}
+  </NavLink>
+);
+
 const Header = () => {
   const { setTheme, theme } = useTheme();
-  const { type } = useUserSettings();
+  const { type, realType, viewAsAgent, setViewAsAgent } = useUserSettings();
   const {
     preference: timeFormat,
     setPreference: setTimeFormat,
     browserHour12,
   } = useTimeFormat();
   const logoRef = useRef(null);
+  /** The mobile menu, held here so picking a page can close it. */
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
   const [nrOfLogoClicks, setNrOfLogoClicks] = useState<number>(0);
 
   const setSiteTheme = (theme: string) => {
@@ -214,7 +247,7 @@ const Header = () => {
             </SignedIn>
           </NavigationMenuList>
         </NavigationMenu>
-        <Sheet>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <Button
               variant="outline"
@@ -226,6 +259,9 @@ const Header = () => {
             </Button>
           </SheetTrigger>
           <SheetContent side="left">
+            {/* Picking a page closes the menu. The header never unmounts, so the sheet
+                used to stay open over the page you had just asked for. The current page
+                reads as active, as on desktop. */}
             <nav className="grid gap-6 text-lg font-medium">
               <NavLink
                 to="#"
@@ -236,50 +272,67 @@ const Header = () => {
                 />
                 <span className="sr-only">Agendo</span>
               </NavLink>
-              <NavLink
-                to="/"
-                className="text-muted-foreground hover:text-foreground"
-              >
+              <MobileNavLink to="/" onNavigate={closeMenu}>
                 Home
-              </NavLink>
-              <NavLink
-                to="/app/sling-schedule"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Sling Schedule
-              </NavLink>
+              </MobileNavLink>
+              {/* agendo's own schedule first: the Sling one is on its way out, so it is
+                  the second place to look rather than the first. */}
               <SignedIn>
-                <NavLink
-                  to="/app/schedule"
-                  className="text-muted-foreground hover:text-foreground"
-                >
+                <MobileNavLink to="/app/schedule" onNavigate={closeMenu}>
                   Schedule
-                </NavLink>
-                <NavLink to="/app/settings" className="hover:text-foreground">
+                </MobileNavLink>
+              </SignedIn>
+              <MobileNavLink to="/app/sling-schedule" onNavigate={closeMenu}>
+                Sling Schedule
+              </MobileNavLink>
+              <SignedIn>
+                <MobileNavLink to="/app/settings" onNavigate={closeMenu}>
                   Settings
-                </NavLink>
+                </MobileNavLink>
                 {type === "admin" && (
                   <>
-                    <NavLink to="/app/jira-backlog" className="text-muted-foreground hover:text-foreground">
+                    <MobileNavLink to="/app/jira-backlog" onNavigate={closeMenu}>
                       Bug Tracker
-                    </NavLink>
-                    <NavLink to="/app/tasks" className="text-muted-foreground hover:text-foreground">
+                    </MobileNavLink>
+                    <MobileNavLink to="/app/tasks" onNavigate={closeMenu}>
                       Bug Tasks
-                    </NavLink>
-                    <NavLink to="/app/reports" className="text-muted-foreground hover:text-foreground">
+                    </MobileNavLink>
+                    <MobileNavLink to="/app/reports" onNavigate={closeMenu}>
                       Reports
-                    </NavLink>
+                    </MobileNavLink>
                   </>
                 )}
               </SignedIn>
             </nav>
           </SheetContent>
         </Sheet>
-        <div className="flex w-fit items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+        {/* Pushed to the right edge at every width. On a phone it used to sit straight
+            after the hamburger, which left the avatar and the theme menu mid-header. */}
+        <div className="ml-auto flex w-fit items-center gap-4 md:gap-2 lg:gap-4">
+          {/* Doubles as the switch between your own admin view and an agent's, for
+              checking what a screen looks like to someone who cannot edit. Centred in the
+              header on a phone, where the right side has no room for it. */}
           {IS_LOCALHOST && (
-            <span className="rounded-md bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-red-700 shadow-sm dark:bg-black dark:text-red-300">
+            <button
+              type="button"
+              disabled={realType !== "admin"}
+              onClick={() => setViewAsAgent(!viewAsAgent)}
+              title={
+                viewAsAgent
+                  ? "Viewing as an agent — click to switch back to admin"
+                  : realType === "admin"
+                    ? "Click to preview this screen as an agent (non-admin)"
+                    : undefined
+              }
+              className="whitespace-nowrap rounded-md bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-red-700 shadow-sm enabled:hover:opacity-90 dark:bg-black dark:text-red-300 max-md:absolute max-md:left-1/2 max-md:-translate-x-1/2"
+            >
               localhost
-            </span>
+              {viewAsAgent && (
+                <>
+                  {" "}· agent<span className="max-md:hidden"> view</span>
+                </>
+              )}
+            </button>
           )}
           <SignedIn>
             <UserButton />
@@ -297,8 +350,11 @@ const Header = () => {
           {/* How the app looks, which now includes how it writes a clock time — both are
               this browser's own display preferences, so they share one menu. The clock on
               the icon is what says the time format lives here too. */}
-          <div id="theme-toggle" className="ml-auto">
-            <DropdownMenu>
+          <div id="theme-toggle">
+            {/* Not modal: a modal menu locks the page's scroll, and the lock pads the body
+                by the scrollbar's width while it is open — a band of empty space that
+                appeared beside the button on every click. */}
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="relative">
                   <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

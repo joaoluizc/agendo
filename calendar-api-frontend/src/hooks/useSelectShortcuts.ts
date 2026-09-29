@@ -12,7 +12,7 @@ const PEEK_DELAY_MS = 200;
 const isModifierKey = (key: string) => key === "Control" || key === "Meta";
 
 /** Typing somewhere: every shortcut here stands down so text editing behaves normally. */
-const isEditableTarget = (target: EventTarget | null) => {
+export const isEditableTarget = (target: EventTarget | null) => {
   const element = target as HTMLElement | null;
   return (
     !!element &&
@@ -22,7 +22,7 @@ const isEditableTarget = (target: EventTarget | null) => {
 };
 
 /** A dialog owns the keyboard while it is open (and Ctrl+A inside one selects its text). */
-const isDialogOpen = () =>
+export const isDialogOpen = () =>
   document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
 
 /**
