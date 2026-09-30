@@ -28,6 +28,7 @@ import CalendarHeader from "./calendar-components/CalendarHeader.tsx";
 import SyncWithGCalBtn from "./calendar-components/SyncWithGCalBtn.tsx";
 import SyncMyGCalBtn from "./calendar-components/SyncMyGCalBtn.tsx";
 import SyncUserGCalBtn from "./calendar-components/SyncUserGCalBtn.tsx";
+import SlingSunsetBanner from "./calendar-components/SlingSunsetBanner.tsx";
 import { useUser } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils.ts";
 import { useScheduleDateParam } from "@/hooks/useScheduleDateParam.ts";
@@ -130,6 +131,7 @@ const SlingSchedule = () => {
         <SyncWithGCalBtn selectedDate={selectedDate} />
         <SyncMyGCalBtn selectedDate={selectedDate} />
       </div>
+      <SlingSunsetBanner dateKey={dateKey} />
       {!isLoading ? (
         <div className="flex flex-col">
           <CalendarHeader />
