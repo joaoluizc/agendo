@@ -2,7 +2,7 @@
 
 _The two ways shifts reach Google Calendar, plus the position id-space gotcha._
 
-_Last updated: 2026-08-25_
+_Last updated: 2026-09-29_
 
 Agendo syncs shifts to each user's Google Calendar through **two distinct paths**
 in `calendar-api-backend/src/services/gCalendarService.js`. Anyone changing sync
@@ -64,8 +64,42 @@ re-sync deletes tracked events first, then re-adds — a flow that has previousl
 caused an intermittent "shifts wiped from Google Calendar" bug, so treat the
 delete-then-add ordering and its error handling carefully.
 
+## Each path only deletes its own events
+
+Both paths write to that one tracking collection, and nothing in it says which path
+made which event. The rule that keeps them apart:
+
+- **An event is agendo's when a shift holds it as its `syncedEvent`.** Only the agendo
+  path writes that field, and it is on every event published before the rule existed,
+  so no migration or tag was needed. `shiftService.findSyncedEventIds` asks the question
+  (indexed on `syncedEvent.id`).
+- **Sling sync deletes only what is left.** Both Sling entry points read the day's
+  tracked events through `gCalendarService.findSlingEventsByDate`, which drops every
+  agendo-owned one before the delete-then-re-add runs. If that lookup fails, the sync
+  stops before deleting anything; falling back to the full list would bring the wipe back.
+- **The agendo path needed no change.** Every delete it makes (edit, unpublish, delete,
+  duplicate-day replace) targets the one event its own shift points at, so it cannot
+  reach an event Sling made.
+
+Before this, Sling sync deleted the whole day's tracked list. In Sept 2026 a day built
+and published in agendo was then synced from the Sling screen: those agents had nothing
+in Sling, so every agendo event of the day was deleted and nothing was put back. The
+shifts still claimed `isSynced`.
+
+Side effects worth knowing:
+
+- A tracked event whose shift is gone (deleted, unpublished, re-timed) is owned by no
+  shift, so a Sling sync treats it as its own and deletes it: Google answers "already
+  deleted" and the stale tracking row is cleared. That is the only cleanup those rows
+  get; the agendo path deletes the event but leaves its tracking row.
+- If the same shift exists in both Sling and agendo, the agent now gets **both** events.
+  Before, the Sling sync happened to delete agendo's copy.
+- An agendo shift whose event went missing is repaired by unpublishing and publishing it
+  again. No day re-sync covers agendo shifts.
+
 ## Working with sync
 
 When changing sync behavior, account for **both** paths (bulk Sling + per-shift
 agendo) and **both** position id-spaces — and remember bulk sync is
-manual/admin-triggered, never scheduled.
+manual/admin-triggered, never scheduled. Anything new that deletes tracked events
+by date has to go through `findSlingEventsByDate`, or it will delete agendo's.
