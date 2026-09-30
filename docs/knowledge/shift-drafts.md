@@ -2,7 +2,7 @@
 
 _The draft/published lifecycle: what a draft is excluded from, the one filter rule that matters, grid gestures and their undo, touch screens, and bulk publishing._
 
-_Last updated: 2026-09-28_
+_Last updated: 2026-09-30_
 
 An agendo shift is a **draft** until an admin publishes it. Creating one no longer syncs
 it to anybody's calendar — publishing does. This is the first real step toward agendo
@@ -16,6 +16,8 @@ commit it.
 create (UI, or a copied day)  ->  status: "draft"     nothing synced, nothing reported
 POST /shift/publish           ->  status: "published" (+ a calendar event, if the agent
                                   has that position's sync on)
+POST /shift/publish (again)   ->  no status change; the calendar event is checked with
+                                  Google and put back if it is gone
 PUT  /shift/ (status: draft)  ->  status: "draft", calendar event deleted
 delete                        ->  gone
 ```
@@ -28,6 +30,33 @@ rather than falling back to draft: silently ignoring it would let a client belie
 published something it had not. Both paths share `syncPublishedShift`, so the sync, the
 "no event because the agent switched this position off" case, and the failure handling
 exist once.
+
+## Publishing a published shift puts its event back
+
+An agent who deletes an agendo event from their own calendar can't bring it back, and
+`isSynced` still says it's there. The repair is to **publish the shift again**. There is
+no separate re-sync control, by decision: it is part of what publish means.
+
+`publishShifts` hands already-published shifts to `restorePublishedShiftEvent`, which:
+
+- asks Google for the stored event (`gCalendarService.isEventOnCalendar`). Still there →
+  left alone, even if the agent moved it. `cancelled`, 404 or 410 → gone.
+- if gone, or if the shift never had an event, syncs it as a first publish would. That
+  also covers an earlier sync failure, or a position enforced since.
+- if gone and the agent no longer syncs the position, clears `isSynced`/`syncedEvent`, so
+  the shift stops claiming an event.
+- on any other Google error (revoked token, rate limit), reports it and creates nothing.
+  "Couldn't check" read as "gone" would duplicate an event that is there.
+
+**Why it used to be skipped, and what replaced that.** Two publishes of the same shift
+(a double-click, two tabs) could both find no event and both create one. Every event
+publish attaches now goes through `shiftService.replaceSyncedEvent`, a write matched on
+the event id the caller read. The first write wins; the other gets `null` and deletes its
+own copy (`attachSyncedEvent` in the controller), so the agent keeps exactly one. First
+publishes go through it too, since one can race a re-publish.
+
+The response's `restored` counts events put back; the toast reads e.g. "2 shifts
+published, 1 calendar event put back", or "Already published, no calendar events missing".
 
 ## Un-publishing, and the re-time safety rule
 
@@ -395,9 +424,11 @@ Both keys are accepted rather than sniffing the platform: Ctrl is the multi-sele
 on Windows and Linux, Cmd is on macOS, and Ctrl there also raises the context menu.
 
 Select-shifts mode has five actions: select all (`ctrl A`), clear, publish (`p`), unpublish
-(`u`), delete (`delete`). Publish and unpublish send only the applicable half of the selection — drafts
-to publish, published shifts to unpublish — so a mixed selection does the sensible thing,
-and each button disables when the selection holds nothing of its kind.
+(`u`), delete (`delete`). Publish sends the whole selection: drafts are published and
+published shifts get their calendar event checked (see above), so selecting a shift and
+pressing `p` is how one missing event is put back. Unpublish sends only the published
+half, so a mixed selection does the sensible thing, and it disables when the selection
+holds nothing published.
 
 **The drafts bar follows the selection.** With drafts selected it reads "10 of 86
 unpublished shifts selected" and its button becomes **Publish selected**, sending only

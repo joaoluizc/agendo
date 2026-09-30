@@ -27,7 +27,8 @@ exist but are unwired/dead.)
 
 ## 2. Agendo sync (per-shift)
 
-Publishing a draft (`POST /shift/publish`) is what syncs an agendo-native shift. Creating,
+Publishing a draft (`POST /shift/publish`) is what syncs an agendo-native shift, and
+publishing an already-published one puts its event back if it is gone. Creating,
 editing or duplicating one does **not** — a new shift is a draft, and a draft never reaches
 a calendar (see [shift drafts](shift-drafts.md)). Editing or moving an already-published
 shift still re-syncs it as it always did.
@@ -94,8 +95,10 @@ Side effects worth knowing:
   get; the agendo path deletes the event but leaves its tracking row.
 - If the same shift exists in both Sling and agendo, the agent now gets **both** events.
   Before, the Sling sync happened to delete agendo's copy.
-- An agendo shift whose event went missing is repaired by unpublishing and publishing it
-  again. No day re-sync covers agendo shifts.
+- An agendo shift whose event went missing is repaired by publishing it again, which
+  checks the event with Google and puts it back (see
+  [shift drafts](shift-drafts.md#publishing-a-published-shift-puts-its-event-back)). No
+  day re-sync covers agendo shifts.
 
 ## Working with sync
 
