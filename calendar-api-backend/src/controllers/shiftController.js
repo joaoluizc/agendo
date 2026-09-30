@@ -883,9 +883,10 @@ async function duplicateShiftsFromDay(req, res) {
  *
  * A shift that was already published is counted and left alone rather than treated as an
  * error, so a double-click or a retry after a partial failure is harmless. It is
- * deliberately *not* re-synced: repairing a published shift whose event is missing is what
- * the day-resync flow (`addDaysShiftsToGcal_cl`) is for, and retrying it here would race
- * a concurrent publish into creating the event twice.
+ * deliberately *not* re-synced: retrying it here would race a concurrent publish into
+ * creating the event twice. A published shift whose event is missing is repaired by
+ * unpublishing and publishing it again — the day re-sync (`addDaysShiftsToGcal_cl`) only
+ * ever puts Sling's shifts on a calendar, never agendo's.
  */
 async function publishShifts(req, res) {
   const { userId } = req.auth;

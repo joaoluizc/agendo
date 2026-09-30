@@ -351,6 +351,26 @@ async function unpublishShifts(shiftIds) {
   return { unpublished, alreadyDraft, notFound };
 }
 
+/**
+ * Which of these Google Calendar event ids an agendo shift currently holds as its event.
+ *
+ * Both sync paths record the events they create in the same tracking collection
+ * (`addedGCalEventsService`), and nothing there says which path made which. A shift's
+ * `syncedEvent` does: only the agendo path writes it, and it is already on every event
+ * published before anyone needed to ask. See gCalendarService.findSlingEventsByDate.
+ *
+ * @param {string[]} eventIds
+ * @returns {Promise<Set<string>>}
+ */
+async function findSyncedEventIds(eventIds) {
+  if (!eventIds.length) return new Set();
+  const shifts = await Shift.find(
+    { "syncedEvent.id": { $in: eventIds } },
+    { "syncedEvent.id": 1 }
+  ).lean();
+  return new Set(shifts.map((shift) => shift.syncedEvent.id));
+}
+
 export default {
   createShift,
   getShift,
@@ -361,4 +381,5 @@ export default {
   findShiftsByRange,
   publishShifts,
   unpublishShifts,
+  findSyncedEventIds,
 };
