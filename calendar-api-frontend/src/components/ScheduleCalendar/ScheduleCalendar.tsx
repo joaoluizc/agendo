@@ -514,6 +514,7 @@ const Schedule = () => {
    * reading the centre back from either would move it somewhere nobody put it.
    *
    * A phone opening on today starts on the current time; anything else starts on midday.
+   * Zooming on today can move it to the current time too — see `changeZoom`.
    */
   const [initialCenterHour] = useState(() =>
     isMobileNow() && isToday ? hourOfDay(new Date()) : 12
@@ -537,6 +538,29 @@ const Schedule = () => {
     if (scroller.scrollLeft === programmaticLeft.current) return;
     centerHourRef.current =
       (scroller.scrollLeft + (scroller.clientWidth - labelPx) / 2) / hourPx;
+  };
+
+  /**
+   * A zoom step on today closes in on the current time while the now line is in view: on
+   * today, now is what you are zooming to see, and from the whole day the middle of the
+   * screen is midday, not now. Once you have scrolled the line out of view to look at
+   * another part of the day, the step keeps your hour, the same as on any other day.
+   *
+   * Decided from the view before the step — after it, the line may well be off screen.
+   */
+  const changeZoom = (next: number) => {
+    if (next === effectiveZoom) return;
+    const scroller = rowsScrollerRef.current;
+    if (isToday && scroller) {
+      const nowHour = hourOfDay(new Date());
+      const firstHour = scroller.scrollLeft / hourPx;
+      const lastHour =
+        (scroller.scrollLeft + scroller.clientWidth - labelPx) / hourPx;
+      if (nowHour >= firstHour && nowHour <= lastHour) {
+        centerHourRef.current = nowHour;
+      }
+    }
+    setZoom(next);
   };
 
   // Keep the centre hour in the middle through every zoom step, day change (the skeleton
@@ -569,7 +593,7 @@ const Schedule = () => {
         zoom={effectiveZoom}
         minZoom={minZoom}
         maxZoom={MAX_ZOOM}
-        onZoomChange={setZoom}
+        onZoomChange={changeZoom}
         compact={isMobile}
       />
 
