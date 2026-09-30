@@ -44,6 +44,31 @@ async function loadSyncContext(clerkUserId, positionsById) {
 const SHIFT_STATUSES = ["draft", "published"];
 
 /**
+ * Record `event` (or no event) on a shift, unless another publish of it got there first.
+ *
+ * Two publishes of one shift can both create an event — see shiftService.replaceSyncedEvent.
+ * The loser deletes its own copy, so the agent keeps exactly one. Either way `shift` is
+ * left holding what the database now says, since callers send it back to the grid.
+ *
+ * @returns {Promise<boolean>} whether this call's write was the one that landed.
+ */
+async function attachSyncedEvent(shift, priorEventId, event, requestId) {
+  const updated = await shiftService.replaceSyncedEvent(shift._id, priorEventId, event);
+  if (!updated && event) {
+    console.log(
+      `[${requestId}] - Shift ${shift._id} got its event from another publish; deleting this copy`
+    );
+    await gCalendarService.deleteEvents_cl({ id: shift.userId }, [event], requestId);
+  }
+  const current = updated ?? (await shiftService.getShift(shift._id));
+  if (current) {
+    shift.isSynced = current.isSynced;
+    shift.syncedEvent = current.syncedEvent;
+  }
+  return Boolean(updated);
+}
+
+/**
  * Put a published shift on its agent's calendar and record the event on it.
  *
  * Shared by the two paths that can publish — creating a shift already published, and
@@ -74,9 +99,14 @@ async function syncPublishedShift(
     // No event is the normal outcome when the agent has this position's sync switched
     // off — the shift is still published, it just doesn't reach their calendar.
     if (addedEvent) {
-      shift.isSynced = true;
-      shift.syncedEvent = addedEvent;
-      await shift.save();
+      // A second publish of the same shift, arriving before this one attached its event,
+      // now finds none and adds its own; whichever attaches second deletes its copy.
+      await attachSyncedEvent(
+        shift,
+        shift.syncedEvent?.id ?? null,
+        addedEvent,
+        requestId
+      );
     }
     return null;
   } catch (err) {
@@ -84,6 +114,63 @@ async function syncPublishedShift(
       `[${requestId}] - Error syncing published shift ${shift._id}: ${err.message}`
     );
     return err.message;
+  }
+}
+
+/**
+ * Publish, again, a shift that already is: put its calendar event back if it is gone.
+ *
+ * This is how an event an agent deleted from their calendar comes back — publish the shift
+ * again. The event is checked with Google rather than trusted from `isSynced`, which only
+ * records what agendo last wrote, not what the agent has done since. An event still there
+ * is left alone, even one the agent moved.
+ *
+ * A shift with no event is synced as a first publish would, so one whose earlier sync
+ * failed, or whose position has since been enforced, gets its event too. And a stored
+ * event that is gone for an agent who no longer syncs the position is cleared, so the shift
+ * stops claiming it.
+ *
+ * @returns {Promise<{restored: boolean, error: string|null}>}
+ */
+async function restorePublishedShiftEvent(
+  shift,
+  requestId,
+  enforcedObjectIds,
+  context
+) {
+  const priorEventId = shift.syncedEvent?.id ?? null;
+  try {
+    if (
+      priorEventId &&
+      (await gCalendarService.isEventOnCalendar(
+        { id: shift.userId },
+        priorEventId,
+        requestId,
+        context.tokens
+      ))
+    ) {
+      return { restored: false, error: null };
+    }
+    const addedEvent = await gCalendarService.addEventForShift(
+      shift.userId,
+      shift,
+      requestId,
+      enforcedObjectIds,
+      { context, throwOnError: true }
+    );
+    if (!addedEvent && !priorEventId) return { restored: false, error: null };
+    const attached = await attachSyncedEvent(
+      shift,
+      priorEventId,
+      addedEvent ?? null,
+      requestId
+    );
+    return { restored: Boolean(addedEvent) && attached, error: null };
+  } catch (err) {
+    console.error(
+      `[${requestId}] - Error restoring the calendar event of shift ${shift._id}: ${err.message}`
+    );
+    return { restored: false, error: err.message };
   }
 }
 
@@ -881,12 +968,12 @@ async function duplicateShiftsFromDay(req, res) {
  * silently skipped. The cost is a moment where a published shift has no calendar event
  * yet, which is the same state a sync failure leaves behind and is reported the same way.
  *
- * A shift that was already published is counted and left alone rather than treated as an
- * error, so a double-click or a retry after a partial failure is harmless. It is
- * deliberately *not* re-synced: retrying it here would race a concurrent publish into
- * creating the event twice. A published shift whose event is missing is repaired by
- * unpublishing and publishing it again — the day re-sync (`addDaysShiftsToGcal_cl`) only
- * ever puts Sling's shifts on a calendar, never agendo's.
+ * A shift that was already published is not an error: publishing it again checks its
+ * calendar event and puts it back if it is gone (`restorePublishedShiftEvent`). That is the
+ * repair for an event an agent deleted by mistake — nothing else covers agendo shifts; the
+ * day re-sync (`addDaysShiftsToGcal_cl`) only ever puts Sling's on a calendar. It used to
+ * be skipped because a retry could race a concurrent publish into creating the event
+ * twice; `attachSyncedEvent` now settles that race, so a double-click stays harmless.
  */
 async function publishShifts(req, res) {
   const { userId } = req.auth;
@@ -916,6 +1003,12 @@ async function publishShifts(req, res) {
 
   const { published, alreadyPublished, notFound } = result;
   const errors = [];
+  let restored = 0;
+
+  // Both go to the calendar: a newly published shift gets its event, an already-published
+  // one gets it back if it has gone missing.
+  const toSync = [...published, ...alreadyPublished];
+  const republished = new Set(alreadyPublished.map((shift) => String(shift._id)));
 
   // Loaded once for the batch, not once per shift. Inside a try: this used to sit bare,
   // and on Express 4 a rejection here never became a response — the request just hung
@@ -927,7 +1020,7 @@ async function publishShifts(req, res) {
     ({ objectIds: enforcedObjectIds } =
       await positionService.getEnforcedPositionIds());
     const positions = await positionService.getPositionsByIds([
-      ...new Set(published.map((shift) => String(shift.positionId))),
+      ...new Set(toSync.map((shift) => String(shift.positionId))),
     ]);
     positionsById = new Map(
       positions.map((position) => [String(position._id), position])
@@ -941,7 +1034,7 @@ async function publishShifts(req, res) {
 
   if (lookupsFailed) {
     // The shifts are published either way; say plainly that none of them was synced.
-    published.forEach((shift) =>
+    toSync.forEach((shift) =>
       errors.push({
         shiftId: String(shift._id),
         message: `Published, but calendar sync was not attempted: ${lookupsFailed}`,
@@ -949,7 +1042,7 @@ async function publishShifts(req, res) {
     );
   } else {
     await mapWithConcurrency(
-      groupByUserId(published),
+      groupByUserId(toSync),
       SYNC_AGENT_CONCURRENCY,
       async ([agentId, agentShifts]) => {
         let context;
@@ -965,6 +1058,19 @@ async function publishShifts(req, res) {
           return;
         }
         for (const shift of agentShifts) {
+          if (republished.has(String(shift._id))) {
+            const outcome = await restorePublishedShiftEvent(
+              shift,
+              req.requestId,
+              enforcedObjectIds,
+              context
+            );
+            if (outcome.restored) restored++;
+            if (outcome.error) {
+              errors.push({ shiftId: String(shift._id), message: outcome.error });
+            }
+            continue;
+          }
           const syncError = await syncPublishedShift(
             shift,
             req.requestId,
@@ -979,13 +1085,24 @@ async function publishShifts(req, res) {
     );
   }
 
+  const plural = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+  const outcomes = [
+    published.length && `${plural(published.length, "shift")} published`,
+    restored && `${plural(restored, "calendar event")} put back`,
+  ].filter(Boolean);
+
   const payload = {
-    message: published.length
-      ? `${published.length} shift${published.length === 1 ? "" : "s"} published`
-      : "No shifts needed publishing",
+    message: outcomes.length
+      ? outcomes.join(", ")
+      : alreadyPublished.length
+        ? "Already published, no calendar events missing"
+        : "No shifts needed publishing",
     published: published.length,
     alreadyPublished: alreadyPublished.length,
-    data: published,
+    restored,
+    // Every shift this call touched, with its sync state as it now stands, so the grid can
+    // swap them in — including already-published ones whose event was just put back.
+    data: toSync,
   };
 
   if (notFound.length) {

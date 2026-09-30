@@ -101,6 +101,12 @@ export type PublishResult = {
   message: string;
   published: number;
   alreadyPublished: number;
+  /**
+   * Already-published shifts whose calendar event was gone and has been put back.
+   * Publishing a published shift checks its event rather than skipping it.
+   */
+  restored: number;
+  /** Every shift the call touched, with its current sync state. */
   data: Shift[];
   /** Shifts that published but whose calendar event failed. */
   errors?: { shiftId: string; message: string }[];
@@ -114,11 +120,14 @@ export type PublishResult = {
 };
 
 /**
- * Commit drafts.
+ * Commit drafts, and make sure published shifts are still on the calendar.
  *
  * The only call that puts a shift on an agent's real calendar — creating or editing one
  * no longer does — which is why it is a separate, explicit action rather than something
  * the save buttons do quietly.
+ *
+ * Already-published shifts may be sent too: the server checks each one's Google event and
+ * puts it back if the agent deleted it. That is how a missing event is repaired.
  */
 export const publishShifts = async (
   shiftIds: string[]
@@ -142,6 +151,7 @@ export const publishShifts = async (
     message: payload?.message ?? "",
     published: payload?.published ?? 0,
     alreadyPublished: payload?.alreadyPublished ?? 0,
+    restored: payload?.restored ?? 0,
     data: payload?.data ?? [],
     errors: payload?.errors,
     notFound: payload?.notFound,
@@ -283,11 +293,27 @@ export const publishShiftsInBatches = async (
 ): Promise<PublishResult> => {
   const { results, failed } = await runInBatches(shiftIds, publishShifts, onProgress);
   const published = results.reduce((sum, result) => sum + result.published, 0);
+  const alreadyPublished = results.reduce(
+    (sum, result) => sum + result.alreadyPublished,
+    0
+  );
+  const restored = results.reduce((sum, result) => sum + result.restored, 0);
   const errors = results.flatMap((result) => result.errors ?? []);
+  const plural = (count: number, noun: string) =>
+    `${count} ${noun}${count === 1 ? "" : "s"}`;
+  const outcomes = [
+    published > 0 && `${plural(published, "shift")} published`,
+    restored > 0 && `${plural(restored, "calendar event")} put back`,
+  ].filter(Boolean);
   return {
-    message: `${published} shift${published === 1 ? "" : "s"} published`,
+    message: outcomes.length
+      ? outcomes.join(", ")
+      : alreadyPublished > 0
+        ? "Already published, no calendar events missing"
+        : "No shifts needed publishing",
     published,
-    alreadyPublished: results.reduce((sum, result) => sum + result.alreadyPublished, 0),
+    alreadyPublished,
+    restored,
     data: results.flatMap((result) => result.data),
     errors: errors.length ? errors : undefined,
     notFound: results.flatMap((result) => result.notFound ?? []),

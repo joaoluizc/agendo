@@ -300,6 +300,43 @@ const findSlingEventsByDate = async (date, requestId = "req-id-nd") => {
     .filter((userEvents) => userEvents.events.length > 0);
 };
 
+/**
+ * Whether an event agendo created is still on the agent's calendar — how publishing an
+ * already-published shift decides to put its event back.
+ *
+ * Google keeps a deleted event for a while as `status: "cancelled"` and then answers
+ * 404/410, so all three mean gone. Anything else (a revoked token, a rate limit) throws:
+ * reading "could not check" as "gone" would add a second copy of an event that is there.
+ *
+ * @param {object} [preloadedTokens] As in `addEvent_cl`.
+ */
+const isEventOnCalendar = async (
+  user,
+  eventId,
+  requestId = "req-id-nd",
+  preloadedTokens = undefined,
+) => {
+  const tokens =
+    preloadedTokens === undefined
+      ? await userService.getGoogleOAuthTokenByClerkId(user.id)
+      : preloadedTokens;
+  const calendar = google.calendar({
+    version: "v3",
+    auth: getOAuth2Client(tokens),
+  });
+  try {
+    const { data } = await calendar.events.get({ calendarId: "primary", eventId });
+    return data.status !== "cancelled";
+  } catch (err) {
+    const status = err?.response?.status ?? Number(err?.code);
+    if (status === 404 || status === 410) return false;
+    console.error(
+      `[${requestId}] - Could not check event ${eventId} for user ${user.id}: ${err.message}`,
+    );
+    throw err;
+  }
+};
+
 const processBatch = async (users, batchSize, processor) => {
   for (let i = 0; i < users.length; i += batchSize) {
     const batch = users.slice(i, i + batchSize);
@@ -956,6 +993,7 @@ export default {
   deleteEvents,
   deleteEvents_cl,
   findSlingEventsByDate,
+  isEventOnCalendar,
   getAllUsersEvents_cl,
   getAllUsersEventsExcludingPlatform,
 };
