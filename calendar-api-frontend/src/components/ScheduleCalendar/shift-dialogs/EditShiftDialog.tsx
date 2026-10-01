@@ -43,7 +43,12 @@ import {
   rangeToIso,
   toneStyle,
 } from "./shiftPlanning";
-import { applyShiftChanges, deleteShift, updateShift } from "./shiftRequests";
+import {
+  applyShiftChanges,
+  deleteShift,
+  publishShifts,
+  updateShift,
+} from "./shiftRequests";
 import { useAgentSyncRules } from "./useAgentSyncRules";
 import PreferencesHoverCard from "@/components/UserPreferences/PreferencesHoverCard";
 import {
@@ -186,6 +191,14 @@ const EditShiftDialog = ({
     timeChanged ||
     positionId !== original.positionId ||
     published !== original.published;
+
+  /**
+   * A published shift with nothing changed: the save button republishes it instead of
+   * sitting disabled. Publishing again checks the agent's Google event and puts it back if
+   * it was deleted — the same publish the select-mode `p` sends — so an admin who opened
+   * the shift to see why it's missing from a calendar can fix it from right here.
+   */
+  const canRepublish = !dirty && removedIds.length === 0 && original.published;
 
   // Reset the toggle whenever the dialog is opened afresh — the instance outlives a single
   // use, same reason CreateShiftDialog resets on open.
@@ -504,6 +517,39 @@ const EditShiftDialog = ({
       }${removed.length > toUpdate.length ? ` · ${removedIds.length} removed` : ""}`,
     });
     onOpenChange(false);
+  };
+
+  const handleRepublish = async () => {
+    setSaving(true);
+    try {
+      const result = await publishShifts([shift._id]);
+      // The response carries the shift with its sync state as it now stands, which is
+      // what the Google Calendar under-lane renders.
+      if (result.data.length > 0) {
+        const next = applyShiftChanges({
+          shifts,
+          events,
+          removed: [shift],
+          created: result.data,
+        });
+        setShifts(next.shifts);
+        setEvents(next.events);
+      }
+      if (result.errors?.length) {
+        toast.warning("Could not check the calendar event", {
+          description: result.errors[0].message,
+        });
+        return;
+      }
+      toast.success(result.message);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Could not republish the shift", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -859,7 +905,9 @@ const EditShiftDialog = ({
                     ? "Unsaved changes"
                     : draft
                       ? shift.notes || "Draft — not on any calendar yet"
-                      : ""}
+                      : canRepublish
+                        ? "Republish puts back a deleted calendar event"
+                        : ""}
             </div>
             {/* The status as a control rather than a one-way "Publish" button, which is
                 what made un-publishing impossible. Unchecking it and saving takes the
@@ -881,14 +929,20 @@ const EditShiftDialog = ({
             </Button>
             <Button
               className="h-[34px] rounded-lg px-3.5 text-[13px] font-semibold"
-              disabled={saving || (!dirty && removedIds.length === 0)}
-              onClick={handleSave}
+              disabled={
+                saving || (!dirty && removedIds.length === 0 && !canRepublish)
+              }
+              onClick={canRepublish ? handleRepublish : handleSave}
             >
-              {saving
-                ? "Saving…"
-                : applyAll && others.length > 0
-                  ? `Save ${group.length} shifts`
-                  : "Save changes"}
+              {canRepublish
+                ? saving
+                  ? "Republishing…"
+                  : "Republish"
+                : saving
+                  ? "Saving…"
+                  : applyAll && others.length > 0
+                    ? `Save ${group.length} shifts`
+                    : "Save changes"}
             </Button>
           </div>
         </DialogContent>

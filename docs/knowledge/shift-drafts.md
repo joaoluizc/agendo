@@ -2,7 +2,7 @@
 
 _The draft/published lifecycle: what a draft is excluded from, the one filter rule that matters, grid gestures and their undo, touch screens, and bulk publishing._
 
-_Last updated: 2026-09-30_
+_Last updated: 2026-10-01_
 
 An agendo shift is a **draft** until an admin publishes it. Creating one no longer syncs
 it to anybody's calendar — publishing does. This is the first real step toward agendo
@@ -57,6 +57,18 @@ publishes go through it too, since one can race a re-publish.
 
 The response's `restored` counts events put back; the toast reads e.g. "2 shifts
 published, 1 calendar event put back", or "Already published, no calendar events missing".
+
+It is reachable two ways, both through the same `POST /shift/publish`:
+
+- **Select mode:** `p` sends the whole selection, published shifts included.
+- **The edit dialog:** on a published shift with nothing changed, the save button reads
+  **Republish** instead of sitting disabled, with "Republish puts back a deleted calendar
+  event" beside it. It republishes that one shift only, whatever the apply-to-slot box says
+  — there are no changes to apply. Any edit turns it back into Save changes.
+
+Every event agendo writes says so in its description ("event created by agendo on …",
+`utils.eventDescription`). The Sling path always did; the agendo path left it commented
+out until 2026-10-01, so its earlier events have none.
 
 ## Un-publishing, and the re-time safety rule
 
