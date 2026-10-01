@@ -18,10 +18,16 @@ const todayISO = (date) => {
   return `${startOfDayISO}/${endOfDayISO}`;
 };
 
+/**
+ * The description on every calendar event agendo writes, from either sync path, so an
+ * agent can tell agendo's events from their own whichever system the shift came from.
+ */
+const eventDescription = () => `event created by agendo on ${new Date().toString()}`;
+
 const shiftToEvent = (shift, colorId) => {
   const event = {
     summary: shift.position.name,
-    description: `event created by agendo on ${new Date().toString()}`,
+    description: eventDescription(),
     start: {
       dateTime: shift.dtstart,
       timeZone: "Brazil/East",
@@ -56,6 +62,7 @@ const getSlingIdByEmail = async (email) => {
 
 export default {
   todayISO,
+  eventDescription,
   shiftToEvent,
   getSlingIdByEmail,
 };

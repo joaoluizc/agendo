@@ -1,4 +1,5 @@
 import positionService from "../services/positionService.js";
+import utils from "./utils.js";
 
 /**
  * @param {object} [position] The shift's position doc, when the caller already has it —
@@ -11,7 +12,9 @@ export async function newShiftToEvent(shift, colorId, position = null) {
 
   const event = {
     summary: positionName.name,
-    // description: 'optional',
+    // The same text the Sling path writes. This was a commented-out placeholder, so agendo's
+    // own events were the only ones with no "created by agendo" line.
+    description: utils.eventDescription(),
     start: {
       dateTime: shift.startTime,
       timeZone: "GMT",
