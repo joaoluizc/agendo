@@ -7,6 +7,7 @@ import process from "process";
 import addedGCalEventsService from "./addedGCalEventsService.js";
 import { newShiftToEvent } from "../utils/newShiftToEvent.js";
 import positionService from "./positionService.js";
+import shiftService from "./shiftService.js";
 
 dotenv.config();
 
@@ -264,6 +265,78 @@ const deleteEvents_cl = async (user, events, requestId = "req-id-nd") => {
   return { deletedIds, failedIds };
 };
 
+/**
+ * The events a Sling sync of `date` may delete and re-add: everything tracked for the
+ * day except what an agendo shift owns. Same shape as `findEventsByDate`, users left with
+ * nothing dropped.
+ *
+ * Both paths track the events they create in one collection with no mark of which path
+ * made which, and Sling sync used to take the whole day's list. An agent whose shifts were
+ * published from agendo, with nothing in Sling, then had every one of those events deleted
+ * and nothing put back — every agendo event of the day at once (Sept 2026). The
+ * shift that owns an event is what tells them apart: see shiftService.findSyncedEventIds.
+ *
+ * The agendo path needs no mirror of this: it only ever deletes the one event its own
+ * shift points at, so it cannot touch an event Sling made.
+ *
+ * Lets a failed lookup throw. Returning the unfiltered list instead would put the wipe
+ * right back, so the sync has to stop before deleting anything.
+ */
+const findSlingEventsByDate = async (date, requestId = "req-id-nd") => {
+  const tracked = await addedGCalEventsService.findEventsByDate(date, requestId);
+  const agendoEventIds = await shiftService.findSyncedEventIds(
+    tracked.flatMap((userEvents) => userEvents.events.map((event) => event.id)),
+  );
+  if (agendoEventIds.size > 0) {
+    console.log(
+      `[${requestId}] - Leaving ${agendoEventIds.size} agendo-published event(s) on ${date} alone`,
+    );
+  }
+  return tracked
+    .map((userEvents) => ({
+      ...userEvents,
+      events: userEvents.events.filter((event) => !agendoEventIds.has(event.id)),
+    }))
+    .filter((userEvents) => userEvents.events.length > 0);
+};
+
+/**
+ * Whether an event agendo created is still on the agent's calendar — how publishing an
+ * already-published shift decides to put its event back.
+ *
+ * Google keeps a deleted event for a while as `status: "cancelled"` and then answers
+ * 404/410, so all three mean gone. Anything else (a revoked token, a rate limit) throws:
+ * reading "could not check" as "gone" would add a second copy of an event that is there.
+ *
+ * @param {object} [preloadedTokens] As in `addEvent_cl`.
+ */
+const isEventOnCalendar = async (
+  user,
+  eventId,
+  requestId = "req-id-nd",
+  preloadedTokens = undefined,
+) => {
+  const tokens =
+    preloadedTokens === undefined
+      ? await userService.getGoogleOAuthTokenByClerkId(user.id)
+      : preloadedTokens;
+  const calendar = google.calendar({
+    version: "v3",
+    auth: getOAuth2Client(tokens),
+  });
+  try {
+    const { data } = await calendar.events.get({ calendarId: "primary", eventId });
+    return data.status !== "cancelled";
+  } catch (err) {
+    const status = err?.response?.status ?? Number(err?.code);
+    if (status === 404 || status === 410) return false;
+    console.error(
+      `[${requestId}] - Could not check event ${eventId} for user ${user.id}: ${err.message}`,
+    );
+    throw err;
+  }
+};
+
 const processBatch = async (users, batchSize, processor) => {
   for (let i = 0; i < users.length; i += batchSize) {
     const batch = users.slice(i, i + batchSize);
@@ -317,8 +390,7 @@ const addDaysShiftsToGcal_cl = async (date, requestId = "req-id-nd") => {
     );
 
     console.time(`[${requestId}] prevAddedEventsByUsers`);
-    const prevAddedEventsByUsers =
-      await addedGCalEventsService.findEventsByDate(date, requestId);
+    const prevAddedEventsByUsers = await findSlingEventsByDate(date, requestId);
     console.timeEnd(`[${requestId}] prevAddedEventsByUsers`);
     console.log(
       `[${requestId}] - Found ${prevAddedEventsByUsers.length} users with events previously added for date ${date}`,
@@ -515,10 +587,9 @@ const addUsersDayShifts = async (user, date, requestId = "req-id-nd") => {
     // Delete previously-tracked events BEFORE checking whether the user has shifts today.
     // Without this ordering, syncing a day where all shifts were deleted would leave stale
     // GCal events behind (the !slingUser guard would return early and skip cleanup).
-    const prevAddedEventsByUsers =
-      await addedGCalEventsService.findEventsByDate(date, requestId);
+    const prevAddedEventsByUsers = await findSlingEventsByDate(date, requestId);
     console.log(
-      `[${requestId}] - findEventsByDate returned ${prevAddedEventsByUsers.length} users with events`,
+      `[${requestId}] - findSlingEventsByDate returned ${prevAddedEventsByUsers.length} users with events`,
     );
     const prevAddedEventsForUser = prevAddedEventsByUsers.find(
       (prevAddedEvent) => prevAddedEvent?.userId === user?.id,
@@ -921,6 +992,8 @@ export default {
   addDaysShiftsToGcal_cl,
   deleteEvents,
   deleteEvents_cl,
+  findSlingEventsByDate,
+  isEventOnCalendar,
   getAllUsersEvents_cl,
   getAllUsersEventsExcludingPlatform,
 };

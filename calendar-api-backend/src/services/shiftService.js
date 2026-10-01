@@ -254,8 +254,9 @@ async function findShiftsByRange(
  * refuses a draft, so a shift that hasn't flipped yet would be silently skipped.
  *
  * Kept separate from `updateShift` so that publishing is never a side effect of an edit.
- * Publishing an already-published shift is a no-op rather than an error, which is what
- * makes a retry safe after a partial failure.
+ * An already-published shift is not an error: its status is left alone here and handed
+ * back in `alreadyPublished`, and the controller checks that its calendar event is still
+ * there. That is what makes a retry safe, and what repairs an event an agent deleted.
  *
  * @returns {Promise<{published: object[], alreadyPublished: object[], notFound: string[]}>}
  */
@@ -351,6 +352,51 @@ async function unpublishShifts(shiftIds) {
   return { unpublished, alreadyDraft, notFound };
 }
 
+/**
+ * Point a published shift at a new calendar event (or at none) — only if it still holds the
+ * one the caller saw.
+ *
+ * Publishing a shift that is already published puts its event back when it is gone, so two
+ * publishes of the same shift can both find it missing and both create one. Matching on the
+ * prior event makes the first write win: the other gets `null` back and deletes its copy,
+ * and the agent keeps one event. Also refuses a shift unpublished in the meantime.
+ *
+ * @param {string|null} priorEventId The event id the caller read, or null for none.
+ * @param {object|null} event The new event, or null to record that there is none.
+ * @returns {Promise<object|null>} the updated shift, or null if the caller lost the race.
+ */
+async function replaceSyncedEvent(shiftId, priorEventId, event) {
+  return Shift.findOneAndUpdate(
+    {
+      _id: shiftId,
+      status: { $ne: "draft" },
+      "syncedEvent.id": priorEventId ?? { $exists: false },
+    },
+    { $set: { isSynced: Boolean(event), syncedEvent: event } },
+    { new: true }
+  );
+}
+
+/**
+ * Which of these Google Calendar event ids an agendo shift currently holds as its event.
+ *
+ * Both sync paths record the events they create in the same tracking collection
+ * (`addedGCalEventsService`), and nothing there says which path made which. A shift's
+ * `syncedEvent` does: only the agendo path writes it, and it is already on every event
+ * published before anyone needed to ask. See gCalendarService.findSlingEventsByDate.
+ *
+ * @param {string[]} eventIds
+ * @returns {Promise<Set<string>>}
+ */
+async function findSyncedEventIds(eventIds) {
+  if (!eventIds.length) return new Set();
+  const shifts = await Shift.find(
+    { "syncedEvent.id": { $in: eventIds } },
+    { "syncedEvent.id": 1 }
+  ).lean();
+  return new Set(shifts.map((shift) => shift.syncedEvent.id));
+}
+
 export default {
   createShift,
   getShift,
@@ -361,4 +407,6 @@ export default {
   findShiftsByRange,
   publishShifts,
   unpublishShifts,
+  replaceSyncedEvent,
+  findSyncedEventIds,
 };

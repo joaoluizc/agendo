@@ -2,7 +2,7 @@
 
 _The two schedule screens, how the selected day is driven by a URL param, how clock times are written, the Google-events switch, the pinned hour rows and their scrollbars, zoom, the phone layout, row order, and the date footguns._
 
-_Last updated: 2026-09-28_
+_Last updated: 2026-09-30_
 
 The frontend (`calendar-api-frontend`) has **two schedule screens**, one per
 shift source (see [agendo overview](agendo-overview.md) for why both exist):
@@ -10,7 +10,9 @@ shift source (see [agendo overview](agendo-overview.md) for why both exist):
 - **agendo view** — `src/components/ScheduleCalendar/ScheduleCalendar.tsx`,
   route `/app/schedule` (rendered via `pages/Schedule/Schedule.tsx`).
 - **Sling view** — `src/components/SlingSchedule/SlingSchedule.tsx`,
-  route `/app/sling-schedule`.
+  route `/app/sling-schedule`. Being retired: admins see `SlingSunsetBanner` above
+  the grid, asking them to schedule in agendo from 2026-10-01 (the link keeps the
+  `?date=`) and saying the Sling integration ends 2026-11-01. Agents don't see it.
 
 They are separate components with their own fetching, but they share the same
 date-navigation behaviour. Any change to how the day is selected should be made
@@ -173,6 +175,10 @@ Each step of the toolbar's zoom buttons takes two hours off the view: 24, 22, �
   hidden tab fires none, and a user scroll in the same frame merges with it), and a
   skip-next flag then swallowed the user's next real scroll. This replaced zooming toward
   midday, which at 2 hours always showed 11:00–13:00 whatever you had been looking at.
+- **On today, zoom centres on now while the now line is on screen.** `changeZoom` checks
+  the view *before* the step. If the line is in it, the current time becomes the centre
+  hour; if you have scrolled it out of view, the step keeps your hour as on any other day.
+  Without this, zooming in from the whole day closed in on midday rather than now.
 - **The widest level depends on the screen.** `minZoom` is the smallest level whose hours
   are still at least the slot floor wide (`2 × slotMinPx` per hour). Wider than that, the
   floor binds and the track stops shrinking, so a zoom-out step would change nothing on

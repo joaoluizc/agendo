@@ -27,10 +27,14 @@ type BulkStatusBtnProps = {
  * they apply to and which endpoint they call, and splitting them into two files would have
  * meant maintaining the same grid-patching and error handling twice.
  *
- * Only the applicable half of the selection is sent — drafts to publish, published shifts
- * to unpublish — so a mixed selection does the sensible thing instead of being refused. The
- * count in the tooltip is that half, not the whole selection, which is also why the button
- * disables when there is nothing of its own kind selected.
+ * Publish sends the whole selection: drafts are published, and already-published shifts
+ * have their Google event checked and put back if the agent deleted it. That is the repair
+ * for a missing event, so it has to be reachable by publishing a published shift — there
+ * is deliberately no separate "re-sync" control.
+ *
+ * Unpublish sends only the published half, so a mixed selection does the sensible thing
+ * instead of being refused. The tooltip counts what will be sent, which is also why the
+ * button disables when there is nothing for it.
  */
 const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
   const {
@@ -49,9 +53,9 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
 
   const applicable = useMemo(
     () =>
-      bulkSelectedShifts.filter((shift) =>
-        publishing ? isDraft(shift) : !isDraft(shift)
-      ),
+      publishing
+        ? bulkSelectedShifts
+        : bulkSelectedShifts.filter((shift) => !isDraft(shift)),
     [bulkSelectedShifts, publishing]
   );
 
@@ -138,7 +142,7 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
       if (applicable.length === 0) {
         toast.error(
           publishing
-            ? "Select at least one draft to publish."
+            ? "Select at least one shift to publish."
             : "Select at least one published shift to unpublish."
         );
         return;
@@ -173,7 +177,7 @@ const BulkStatusBtn = ({ mode }: BulkStatusBtnProps) => {
               <span className="text-zinc-400">
                 {applicable.length === 0
                   ? publishing
-                    ? "no drafts selected"
+                    ? "nothing selected"
                     : "no published selected"
                   : `${applicable.length} shift${applicable.length === 1 ? "" : "s"}`}
               </span>

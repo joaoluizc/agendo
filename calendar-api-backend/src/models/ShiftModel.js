@@ -130,6 +130,11 @@ ShiftSchema.index({ status: 1, startTime: 1 });
 // Listing or replacing one posted batch (chunk 2's ingest endpoint).
 ShiftSchema.index({ runId: 1 });
 
+// "Which of these calendar events belong to an agendo shift?" — asked by every Sling sync
+// before it deletes anything (shiftService.findSyncedEventIds). Sparse because a draft, or
+// a shift whose agent doesn't sync its position, has no event id to index.
+ShiftSchema.index({ "syncedEvent.id": 1 }, { sparse: true });
+
 const Shift = mongoose.model("Shift", ShiftSchema);
 
 export default Shift;

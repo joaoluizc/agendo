@@ -6,8 +6,8 @@ teammates. Keep entries tight and skimmable; one topic per file.
 
 - [Agendo overview](agendo-overview.md) — what agendo is, its relationship to Sling, and where it's headed
 - [Clerk / Mongo boundary](clerk-mongo-boundary.md) — which store owns which user field, the id spaces, and why `publicMetadata` is banned
-- [Calendar sync paths](agendo-sync-paths.md) — the two ways shifts reach Google Calendar, and the position id-space gotcha
-- [Shift drafts](shift-drafts.md) — the draft/published lifecycle, what drafts are excluded from, the one filter rule that matters, grid gestures saving drafts with undo, touch screens, bulk selection and publishing, coverage focus, and keeping bulk work inside the proxy timeout
+- [Calendar sync paths](agendo-sync-paths.md) — the two ways shifts reach Google Calendar, why each only deletes its own events, and the position id-space gotcha
+- [Shift drafts](shift-drafts.md) — the draft/published lifecycle, publishing again to put back a deleted calendar event, what drafts are excluded from, the one filter rule that matters, grid gestures saving drafts with undo, touch screens, bulk selection and publishing, coverage focus, and keeping bulk work inside the proxy timeout
 - [Schedule screens & date handling](frontend-schedule-date.md) — the two schedule screens, the URL `?date=` convention, clock times (24-hour or AM/PM), hiding Google events, the pinned hour rows, zoom, the phone layout, row order, and the date footguns
 - [User preferences](user-preferences.md) — managers' notes on agents: admin-only by `select: false` plus response allowlists, the Settings → Users page, the name hover card, and the lazy-loaded editor
 - [Frontend build & lint](frontend-build-and-lint.md) — what gates a build, why ESLint is noisy, and previewing the agent view on localhost
