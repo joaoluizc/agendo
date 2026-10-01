@@ -208,12 +208,9 @@ Tailwind's own `max-md` query so JS and CSS switch at the same pixel) the grid u
   resizing keeps whatever zoom the user chose.
 - **Coverage rows are always compact**, not only while pinned — the pinned block would
   otherwise take a third of the screen.
-- **The toolbar fits three lines down to 360px**: day stepper, date (without its year) and
-  zoom, with slightly narrower buttons; then the location filter and the events switch
-  (labelled "Cal. events"); then the actions on a full-width line of their own —
-  Duplicate and Select icon-only at the start, New shift at the end, leaving room for
-  select mode's buttons. `max-md:order-1`/`order-2` do the reordering, and an agent, who
-  has no actions, gets no third line.
+- **The toolbar's controls shrink**: the date drops its year, the buttons get slightly
+  narrower, Duplicate and Select go icon-only and the events switch reads "Cal. events".
+  Which *lines* they sit on is a separate question — see below.
 - **The header** keeps the avatar and theme menu at the right edge, with the localhost
   badge centred.
 - Margins drop from `mx-5` to `mx-3`, and the drafts bar drops its explanation after the
@@ -221,6 +218,35 @@ Tailwind's own `max-md` query so JS and CSS switch at the same pixel) the grid u
 
 Resizing and moving shifts are decided by **pointer type, not width** — see
 [shift drafts](shift-drafts.md).
+
+## The toolbar's layouts
+
+The toolbar has three groups — the day (stepper, date, zoom), the view (location filter,
+events switch) and the actions — and three ways to arrange them
+(`calendar-components/useToolbarLayout.ts`):
+
+- **One line**: day and view on the left, actions on the right.
+- **Two lines**: day left and actions right; then the view, filter left and switch right.
+- **Stacked**: a line per group. The switch and New shift sit at the right edge, with
+  Duplicate and Select at the start of the actions line so select mode's buttons have
+  room between them.
+
+**A phone is always stacked**, in either orientation. That is the device (`IS_PHONE` in
+`hooks/useMediaQuery.ts`: the browser's `userAgentData.mobile`, or "Mobi" in the user
+agent), not the width. A tablet counts as a desktop. Because it's read once at load,
+switching DevTools' device mode needs a reload.
+
+**Anywhere else it uses the fewest lines that fit.** That's measured from the controls
+themselves, not set at breakpoints, because the width needed changes with more than the
+window. An agent has no actions or events switch and fits one line where an admin needs
+two, and select mode adds five buttons, which can push the toolbar onto another line while
+it's on.
+
+Every line either holds the whole toolbar or spans the full width, so its edges line up
+with the lines above and below. The old toolbar just wrapped, and at in-between widths
+that left a control alone on a line, or a line ending short of the one under it. The groups
+stay in one container and only their classes change, so a switch remounts nothing: the date
+picker stays attached and an open dialog survives a resize.
 
 ## Row order
 
