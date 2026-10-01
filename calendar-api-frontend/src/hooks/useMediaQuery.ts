@@ -45,3 +45,23 @@ export const useIsCoarsePointer = () => useMediaQuery("(pointer: coarse)");
 
 /** `useIsMobile` for a one-off read outside render, such as a state initialiser. */
 export const isMobileNow = () => listFor(MOBILE_QUERY)?.matches ?? false;
+
+/**
+ * Whether the device is a phone — the device, not the window. A phone keeps its phone
+ * layout turned sideways, where it is wider than `MOBILE_QUERY`; a desktop window dragged
+ * narrow is still a desktop, laid out for the width it has.
+ *
+ * Read from the browser's own answer where it gives one (`userAgentData.mobile`,
+ * Chromium), and otherwise from "Mobi" in the user agent, which every phone browser sends
+ * and tablets do not — so a tablet is laid out by width like a desktop. Fixed for the
+ * session: a device does not change, so there is nothing to listen to.
+ */
+const detectPhone = () => {
+  if (typeof navigator === "undefined") return false;
+  const { userAgentData } = navigator as Navigator & {
+    userAgentData?: { mobile: boolean };
+  };
+  return Boolean(userAgentData?.mobile) || /Mobi/i.test(navigator.userAgent);
+};
+
+export const IS_PHONE = detectPhone();
