@@ -24,6 +24,8 @@ import jiraBacklogRouter from "./src/jiraBacklog/jiraBacklogRouter.js";
 import { startJiraBacklogScheduler } from "./src/jiraBacklog/scheduler.js";
 // Reports — self-contained module, see src/reports/README.md to remove.
 import reportsRouter from "./src/reports/reportsRouter.js";
+// MCP server — self-contained module, see src/mcp/README.md to remove.
+import { mountMcpRoutes } from "./src/mcp/mcpRouter.js";
 
 dotenv.config();
 
@@ -55,14 +57,24 @@ app.use(
 );
 app.use(clerkMiddleware());
 app.use(cookieParser());
-app.use(clerkMiddleware());
+// Hoisted above mountMcpRoutes: the MCP routes log with req.requestId, so the id has to
+// exist before they run. Everything downstream is unaffected by the earlier assignment.
+app.use(addRequestId);
+
+// MCP server (self-contained module). Mounted here, ahead of the global CORS policy
+// below, on purpose: that policy is locked to the Vercel origin and answers preflight
+// requests itself, so anything mounted after it can never apply its own CORS. MCP's
+// discovery routes must be publicly readable and must expose WWW-Authenticate, so they
+// carry their own policy — see src/mcp/mcpRouter.js. It still sits after
+// clerkMiddleware(), which is what makes the OAuth token on the request verifiable.
+mountMcpRoutes(app);
+
 const corsOptions = {
   origin: corsOrigin,
   optionsSuccessStatus: 200,
   credentials: true,
 };
 app.use(cors(corsOptions));
-app.use(addRequestId);
 mountSwagger(app);
 
 connectDB();
