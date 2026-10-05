@@ -1,7 +1,7 @@
 import process from "process";
 import { getAuth } from "@clerk/express";
 import { resolveUser } from "../../services/authz.js";
-import { publicOrigin } from "./clerkOauth.js";
+import { publicOrigin, MCP_REQUIRED_SCOPES } from "./clerkOauth.js";
 
 /**
  * The MCP perimeter: who is allowed to open a connection at all.
@@ -46,6 +46,12 @@ function emailDomainAllowed(email) {
  * 401 with the `WWW-Authenticate` challenge that tells the client where to discover the
  * authorization server. Without this header a client has no way to start the OAuth flow —
  * it just sees a failure.
+ *
+ * `scope` is included as well as `resource_metadata`. Some clients read the challenge
+ * before they fetch the metadata document, and a client left to guess falls back to the
+ * authorization server's `scopes_supported` — Clerk's full list, which includes metadata
+ * scopes a correctly-scoped OAuth app refuses to issue. Stating the scopes in both places
+ * means neither kind of client has to guess.
  */
 function unauthorized(req, res, reason) {
   // e.g. https://agendo.example.com/.well-known/oauth-protected-resource/mcp
@@ -54,7 +60,10 @@ function unauthorized(req, res, reason) {
   console.warn(`[${req.requestId}] - [mcp] 401: ${reason}`);
   return res
     .status(401)
-    .set("WWW-Authenticate", `Bearer resource_metadata="${prmUrl}"`)
+    .set(
+      "WWW-Authenticate",
+      `Bearer resource_metadata="${prmUrl}", scope="${MCP_REQUIRED_SCOPES.join(" ")}"`,
+    )
     .json({ error: "unauthorized", error_description: reason });
 }
 

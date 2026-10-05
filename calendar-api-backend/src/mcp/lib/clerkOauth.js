@@ -78,12 +78,39 @@ export function publicOrigin(req) {
   return `${proto}://${host}`;
 }
 
+/**
+ * The scopes a client must request to use agendo's MCP server — and no more.
+ *
+ * Declaring this is not cosmetic. A client that is told nothing falls back to the
+ * *authorization server's* `scopes_supported`, which for Clerk includes
+ * `public_metadata` and `private_metadata`. A correctly-scoped Clerk OAuth app does not
+ * grant those, so the authorization request is rejected outright:
+ *
+ *   "The OAuth 2.0 Client is not allowed to request scope 'public_metadata'"
+ *
+ * agendo needs identity and nothing else. It resolves the caller by Clerk user id and
+ * reads every attribute — role included — from Mongo; reading Clerk metadata for
+ * authorization is forbidden (docs/knowledge/clerk-mongo-boundary.md). Requesting those
+ * scopes would be asking for access the server must never act on.
+ *
+ * `offline_access` earns its place: it is what grants a refresh token, so a connection
+ * survives without sending the user back through Google every time the access token
+ * expires.
+ */
+export const MCP_REQUIRED_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+];
+
 /** RFC 9728 protected-resource metadata pointing clients at Clerk. */
 export function protectedResourceMetadata(resourceUrl) {
   const authServerUrl = clerkFrontendApiUrl();
   return {
     resource: resourceUrl,
     authorization_servers: [authServerUrl],
+    scopes_supported: MCP_REQUIRED_SCOPES,
     token_types_supported: ["urn:ietf:params:oauth:token-type:access_token"],
     token_introspection_endpoint: `${authServerUrl}/oauth/token`,
     token_introspection_endpoint_auth_methods_supported: [
