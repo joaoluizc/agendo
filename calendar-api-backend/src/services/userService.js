@@ -215,6 +215,7 @@ const getGapiToken = async (email) => {
 export default {
   createUser,
   findUser: findUserByEmail,
+  findAllUsers,
   findUserByClerkId,
   findUsersByClerkIds,
   getSlingIdByClerkId,

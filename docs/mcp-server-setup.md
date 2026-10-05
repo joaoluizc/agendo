@@ -6,10 +6,26 @@ has to happen next. Written 2026-08-17._
 
 ## Where things stand
 
-**Phase 0 (the auth spike) is built in code and verified locally. Nothing is deployed and
-no client can connect yet.**
+**Phase 0 is done: deployed, and verified end to end from a real client on 2026-10-05.**
+Claude Desktop connects over `mcp-remote`, a Google SSO login through Clerk returns a
+token agendo accepts, and `whoami` answers with the caller's own agendo identity and role.
 
-The backend now serves four routes:
+**Phase 1 (read tools) ships alongside this**: `get_my_schedule`, `get_agent_schedule`,
+`get_coverage_at`, and admin-only `find_coverage_gaps`.
+
+Two things worth knowing that Phase 0 turned up:
+
+- **`User.timezone` is fiction.** All 18 production users hold the schema default `UTC`;
+  the field was never written, because the web UI reads the browser's zone instead. Every
+  MCP-rendered time therefore states its zone explicitly. Phase 5 of the plan fixes the
+  data.
+- **The `shifts` collection is not split by environment.** `users` and `coverage-meters`
+  have `dev-` counterparts; `shifts` does not. Running locally with
+  `NODE_ENV=development` reads dev users against *production* shifts, so real agents
+  render as "unknown agent". Set `NODE_ENV=production` when testing read tools against
+  realistic data.
+
+The backend serves these routes:
 
 | Path | Who can call it | What it does |
 | --- | --- | --- |
