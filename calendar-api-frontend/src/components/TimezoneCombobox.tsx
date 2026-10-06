@@ -37,6 +37,65 @@ function allZones(): string[] {
   return ["UTC", ...supported.filter((zone: string) => zone !== "UTC")];
 }
 
+/**
+ * Country names people actually type, mapped to the zone they mean.
+ *
+ * IANA zones are named after cities, but nobody looks up their own timezone by city —
+ * they type the country. "Israel" returned nothing while `Asia/Jerusalem` sat in the
+ * list, which is how this was found. The legacy IANA aliases (`Israel`, `Asia/Tel_Aviv`)
+ * are deliberately not offered as values: they are deprecated links that resolve to the
+ * canonical zone anyway, so storing one would just mean two spellings of the same place
+ * in the database.
+ *
+ * Search-only — the stored value is always the canonical zone. Weighted toward where the
+ * support team actually is, with the common rest filled in; add to it freely, nothing
+ * depends on it being complete.
+ */
+const SEARCH_ALIASES: Record<string, string[]> = {
+  "Asia/Jerusalem": ["israel", "tel aviv", "jerusalem", "il"],
+  "America/Sao_Paulo": ["brazil", "brasil", "br", "sao paulo"],
+  "Asia/Manila": ["philippines", "ph", "manila"],
+  "America/Argentina/Buenos_Aires": ["argentina", "ar", "buenos aires"],
+  "America/Mexico_City": ["mexico", "mx"],
+  "America/Bogota": ["colombia", "co"],
+  "America/Santiago": ["chile", "cl"],
+  "America/Lima": ["peru", "pe"],
+  "America/New_York": ["usa", "us", "united states", "eastern", "est", "edt", "new york"],
+  "America/Chicago": ["usa", "us", "central", "cst", "cdt", "chicago"],
+  "America/Denver": ["usa", "us", "mountain", "mst", "mdt", "denver"],
+  "America/Los_Angeles": ["usa", "us", "pacific", "pst", "pdt", "california"],
+  "America/Toronto": ["canada", "ca", "toronto"],
+  "Europe/London": ["uk", "united kingdom", "england", "britain", "gb", "london"],
+  "Europe/Lisbon": ["portugal", "pt", "lisbon"],
+  "Europe/Madrid": ["spain", "espana", "es", "madrid"],
+  "Europe/Paris": ["france", "fr", "paris"],
+  "Europe/Berlin": ["germany", "de", "berlin"],
+  "Europe/Amsterdam": ["netherlands", "holland", "nl"],
+  "Europe/Dublin": ["ireland", "ie", "dublin"],
+  "Europe/Warsaw": ["poland", "pl", "warsaw"],
+  "Europe/Kyiv": ["ukraine", "ua", "kyiv", "kiev"],
+  "Europe/Bucharest": ["romania", "ro"],
+  "Asia/Kolkata": ["india", "in", "calcutta", "kolkata", "bangalore", "ist"],
+  "Asia/Tokyo": ["japan", "jp", "tokyo"],
+  "Asia/Shanghai": ["china", "cn", "beijing", "shanghai"],
+  "Asia/Singapore": ["singapore", "sg"],
+  "Asia/Dubai": ["uae", "united arab emirates", "dubai", "ae"],
+  "Australia/Sydney": ["australia", "au", "sydney"],
+  "Pacific/Auckland": ["new zealand", "nz", "auckland"],
+  "Africa/Johannesburg": ["south africa", "za", "johannesburg"],
+  "Africa/Cairo": ["egypt", "eg", "cairo"],
+  UTC: ["utc", "gmt", "universal", "zulu"],
+};
+
+/** Everything a row should match on: its id, its pretty label and its aliases. */
+function searchHaystack(zone: string) {
+  return [zone, label(zone), ...(SEARCH_ALIASES[zone] ?? [])]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[_/—]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
 /** `Sao Paulo — America` reads better in a long list than `America/Sao_Paulo`. */
 function label(zone: string) {
   if (!zone.includes("/")) return zone;
@@ -92,13 +151,17 @@ export default function TimezoneCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command
-          filter={(itemValue, search) =>
-            // Match the raw zone name as well as the pretty label, so both
-            // "sao_paulo" and "sao paulo" find the same row.
-            itemValue.toLowerCase().replace(/_/g, " ").includes(search.toLowerCase().replace(/_/g, " "))
-              ? 1
-              : 0
-          }
+          filter={(itemValue, search) => {
+            // `itemValue` is the zone id; match against its label and country aliases
+            // too, so "israel", "sao paulo" and "America/Sao_Paulo" all find their row.
+            const needle = search
+              .toLowerCase()
+              .replace(/[_/—]/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (!needle) return 1;
+            return searchHaystack(itemValue).includes(needle) ? 1 : 0;
+          }}
         >
           <CommandInput placeholder="Search city or region…" />
           <CommandList>
