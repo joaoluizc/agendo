@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerIdentityTools } from "./tools/identity.js";
 import { registerScheduleTools } from "./tools/schedule.js";
+import { registerShiftWriteTools } from "./tools/shifts.js";
 
 export const MCP_SERVER_INFO = { name: "agendo", version: "0.1.0" };
 
@@ -34,6 +35,7 @@ export function createMcpServer(caller) {
 
   registerIdentityTools(server, caller);
   registerScheduleTools(server, caller);
+  registerShiftWriteTools(server, caller);
 
   return server;
 }

@@ -148,6 +148,28 @@ export function parseUtcDate(value, fieldName) {
   return date;
 }
 
+/**
+ * `YYYY-MM-DD` + `HH:MM` as a UTC instant.
+ *
+ * UTC, like every other boundary in these tools, because `Shift.startTime` is a UTC
+ * instant and the roster spans several countries — see the timezone note in format's
+ * header. The time is stated back to the caller with its zone, so a mistake is visible
+ * rather than silent.
+ */
+export function parseUtcDateTime(date, time, fieldName) {
+  if (!/^\d{2}:\d{2}$/.test(String(time || ""))) {
+    throw new Error(
+      `${fieldName} must be a 24-hour time as HH:MM (got ${JSON.stringify(time)})`,
+    );
+  }
+  const [h, m] = time.split(":").map(Number);
+  if (h > 23 || m > 59) {
+    throw new Error(`${fieldName} is not a real time: ${time}`);
+  }
+  const day = parseUtcDate(date, "date");
+  return new Date(day.getTime() + (h * 60 + m) * 60000);
+}
+
 /** Today at UTC midnight. */
 export function todayUtc() {
   const now = new Date();
@@ -175,6 +197,7 @@ export function slotTime(slot) {
 
 export default {
   DEFAULT_ROW_CAP,
+  parseUtcDateTime,
   safeTimeZone,
   timeOnly,
   dayLabel,

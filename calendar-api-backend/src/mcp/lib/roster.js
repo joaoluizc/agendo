@@ -117,6 +117,29 @@ export function findUsersByName(query, users) {
   return scored.filter((s) => s.rank === best).map((s) => s.user);
 }
 
+/**
+ * Find positions by a loosely-typed name, with the same all-matches contract as
+ * `findUsersByName`: scheduling someone onto the wrong position because two share a word
+ * is exactly the confident error worth refusing to make.
+ */
+export function findPositionsByName(query, positions) {
+  const needle = normalise(query);
+  if (!needle) return [];
+
+  const scored = [];
+  for (const position of positions) {
+    const name = normalise(position.name);
+    let rank = null;
+    if (name === needle) rank = 0;
+    else if (name.startsWith(needle)) rank = 1;
+    else if (name.includes(needle)) rank = 2;
+    if (rank !== null) scored.push({ position, rank });
+  }
+  if (!scored.length) return [];
+  const best = Math.min(...scored.map((s) => s.rank));
+  return scored.filter((s) => s.rank === best).map((s) => s.position);
+}
+
 /** Lowercase, strip accents, collapse whitespace. */
 function normalise(value) {
   return String(value || "")
@@ -129,6 +152,7 @@ function normalise(value) {
 
 export default {
   loadRoster,
+  findPositionsByName,
   userDisplayName,
   resolveUserLabel,
   resolvePositionName,
