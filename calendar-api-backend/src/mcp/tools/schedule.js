@@ -7,6 +7,7 @@ import {
   resolveUserLabel,
   resolvePositionName,
   findUsersByName,
+  findPositionsByName,
   userDisplayName,
 } from "../lib/roster.js";
 import {
@@ -136,6 +137,67 @@ function renderSchedule({ heading, shifts, from, to, timeZone, positionsById }) 
   }
   if (note) lines.push(note);
   return lines;
+}
+
+/**
+ * Hours in a window, grouped — the shape a manager's question actually has.
+ *
+ * "Does anyone have development time this week?" and "how many hours of Personal Queue
+ * did Sarah have?" are both answerable from the per-person tools only by fetching every
+ * day and adding it up, which is dozens of calls and arithmetic an LLM does confidently
+ * and sometimes wrongly. This does the sum server-side, once.
+ *
+ * Hours are **clipped to the window**. A night shift running 22:00 Sunday to 02:00 Monday
+ * contributes two hours to a week starting Monday, not four. Totalling whole overlapping
+ * shifts would inflate every period that happens to begin or end mid-shift, and the error
+ * is invisible in the output.
+ */
+function summariseShifts(shifts, from, toExclusive, roster) {
+  const byAgent = new Map();
+  const byPosition = new Map();
+  let totalMinutes = 0;
+
+  for (const shift of shifts) {
+    const start = Math.max(shift.startTime.getTime(), from.getTime());
+    const end = Math.min(shift.endTime.getTime(), toExclusive.getTime());
+    const minutes = Math.max(0, (end - start) / 60000);
+    if (!minutes) continue;
+    totalMinutes += minutes;
+
+    const agentKey = shift.userId;
+    const agent = byAgent.get(agentKey) || { minutes: 0, count: 0 };
+    agent.minutes += minutes;
+    agent.count += 1;
+    byAgent.set(agentKey, agent);
+
+    const positionKey = String(shift.positionId);
+    const position = byPosition.get(positionKey) || { minutes: 0, count: 0 };
+    position.minutes += minutes;
+    position.count += 1;
+    byPosition.set(positionKey, position);
+  }
+
+  const hours = (minutes) => Math.round((minutes / 60) * 10) / 10;
+  const agents = [...byAgent.entries()]
+    .map(([clerkId, v]) => ({
+      label: resolveUserLabel(clerkId, roster.usersByClerkId),
+      hours: hours(v.minutes),
+      count: v.count,
+    }))
+    .sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
+  const positions = [...byPosition.entries()]
+    .map(([id, v]) => {
+      const position = roster.positionsById.get(id);
+      return {
+        label: position?.name || `unknown position (${id})`,
+        type: position?.type || "",
+        hours: hours(v.minutes),
+        count: v.count,
+      };
+    })
+    .sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
+
+  return { totalHours: hours(totalMinutes), agents, positions };
 }
 
 export function registerScheduleTools(server, caller) {
@@ -300,6 +362,161 @@ export function registerScheduleTools(server, caller) {
       lines.push("");
       lines.push(
         `${shifts.length} agent${shifts.length === 1 ? "" : "s"} across ${byPosition.size} position${byPosition.size === 1 ? "" : "s"}.`,
+      );
+      return textResult(lines);
+    },
+  });
+
+  registerTool(server, caller, {
+    name: "summarize_shifts",
+    level: "user",
+    title: "Hours over a period",
+    description:
+      "Total scheduled hours across a date range, broken down by agent and by position — " +
+      "the tool for questions about a period rather than a moment. Answers 'does anyone " +
+      "have development time this week?', 'how many hours of Personal Queue did Sarah " +
+      "have?', 'who worked the most last week?'. Filter by agent, by position name, or by " +
+      "position TYPE (development, tickets, meeting, training, break, live channel) — a " +
+      "type covers several differently-named positions, so it is usually what a question " +
+      "about 'development time' or 'meetings' means. Use this instead of calling the " +
+      "per-day tools repeatedly.",
+    inputSchema: {
+      from: z
+        .string()
+        .optional()
+        .describe("First day, YYYY-MM-DD (UTC). Defaults to today."),
+      to: z
+        .string()
+        .optional()
+        .describe("Last day, inclusive, YYYY-MM-DD (UTC). Defaults to 6 days after `from`."),
+      agent: z
+        .string()
+        .optional()
+        .describe("Limit to one agent, by name."),
+      position: z
+        .string()
+        .optional()
+        .describe("Limit to one position, by name (e.g. 'Personal Queue')."),
+      position_type: z
+        .string()
+        .optional()
+        .describe(
+          "Limit to a whole category of positions, e.g. 'development' or 'tickets'.",
+        ),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: async (args) => {
+      const { from, to, toExclusive } = resolveRange(args);
+      const roster = await loadRoster();
+
+      const filters = [];
+      let agentClerkId = null;
+      if (args.agent) {
+        const matches = findUsersByName(args.agent, roster.users);
+        if (!matches.length) {
+          return textResult(
+            `No agendo user matches "${args.agent}" (the roster has ${roster.users.length} people).`,
+          );
+        }
+        if (matches.length > 1) {
+          return textResult([
+            `"${args.agent}" matches ${matches.length} people — ask again with a fuller name:`,
+            ...matches.map((u) => `  • ${userDisplayName(u)}`),
+          ]);
+        }
+        agentClerkId = matches[0].clerkId;
+        filters.push(`agent ${userDisplayName(matches[0])}`);
+      }
+
+      // A position id set, so a name and a type filter narrow the same way.
+      let allowedPositionIds = null;
+      if (args.position) {
+        const matches = findPositionsByName(args.position, roster.positions);
+        if (!matches.length) {
+          return textResult(`No position matches "${args.position}".`);
+        }
+        allowedPositionIds = new Set(matches.map((p) => String(p._id)));
+        filters.push(
+          `position ${matches.map((p) => p.name).join(" / ")}`,
+        );
+      }
+      if (args.position_type) {
+        const wanted = String(args.position_type).trim().toLowerCase();
+        const matches = roster.positions.filter(
+          (p) => String(p.type || "").toLowerCase() === wanted,
+        );
+        if (!matches.length) {
+          const known = [
+            ...new Set(roster.positions.map((p) => p.type).filter(Boolean)),
+          ].sort();
+          return textResult(
+            `No position type called "${args.position_type}". Known types: ${known.join(", ")}.`,
+          );
+        }
+        const ids = new Set(matches.map((p) => String(p._id)));
+        allowedPositionIds = allowedPositionIds
+          ? new Set([...allowedPositionIds].filter((id) => ids.has(id)))
+          : ids;
+        filters.push(
+          `type ${wanted} (${matches.length} position${matches.length === 1 ? "" : "s"})`,
+        );
+      }
+
+      const shifts = (
+        await shiftService.findShiftsByRange(from, toExclusive)
+      ).filter(
+        (shift) =>
+          (!agentClerkId || shift.userId === agentClerkId) &&
+          (!allowedPositionIds ||
+            allowedPositionIds.has(String(shift.positionId))),
+      );
+
+      const heading =
+        `Scheduled hours, ${dayLabel(from, timeZone)} – ${dayLabel(to, timeZone)}` +
+        (filters.length ? ` — ${filters.join(", ")}` : "");
+
+      if (!shifts.length) {
+        return textResult([heading, "", "No published shifts match."]);
+      }
+
+      const { totalHours, agents, positions } = summariseShifts(
+        shifts,
+        from,
+        toExclusive,
+        roster,
+      );
+
+      const lines = [
+        heading,
+        "",
+        `${totalHours}h total across ${shifts.length} shift${shifts.length === 1 ? "" : "s"}, ` +
+          `${agents.length} agent${agents.length === 1 ? "" : "s"}, ` +
+          `${positions.length} position${positions.length === 1 ? "" : "s"}.`,
+        "",
+        "By agent:",
+      ];
+      const cappedAgents = cap(agents, 40);
+      for (const a of cappedAgents.items) {
+        lines.push(
+          `  ${a.hours}h  ${a.label}  (${a.count} shift${a.count === 1 ? "" : "s"})`,
+        );
+      }
+      if (cappedAgents.note) lines.push(`  ${cappedAgents.note}`);
+
+      lines.push("", "By position:");
+      const cappedPositions = cap(positions, 40);
+      for (const p of cappedPositions.items) {
+        lines.push(
+          `  ${p.hours}h  ${p.label}${p.type ? ` [${p.type}]` : ""}  ` +
+            `(${p.count} shift${p.count === 1 ? "" : "s"})`,
+        );
+      }
+      if (cappedPositions.note) lines.push(`  ${cappedPositions.note}`);
+
+      lines.push(
+        "",
+        "Published shifts only (drafts excluded). Hours are clipped to the range, so a shift " +
+          "crossing its edge counts only the part inside.",
       );
       return textResult(lines);
     },
