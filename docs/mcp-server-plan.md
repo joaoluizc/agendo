@@ -269,13 +269,42 @@ populates the field, the rule is:
 `whoami` reports the caller's timezone precisely so a surprising answer is explicable
 without an engineer. That is no longer hypothetical: it is how this was found.
 
-**Phase 2 — Rollout to the support team.** CIMD and the allowlist are already in place
+**Phase 2 — Rollout to the support team. Resequenced 2026-10-05 to run last**, since
+it is gated on org permission for claude.ai custom connectors rather than on any
+engineering work. Everything else ships first so the request is backed by a working,
+demonstrable integration.
+
+**Phase 2, in detail.** CIMD and the allowlist are already in place
 from Phase 0; before real users connect, confirm **Client admission is "Pre-registered
 clients only"** and review anything sitting at *Implicitly allowed*. Then: setup
 instructions, revocation procedure in the offboarding checklist, watch the audit log. Do this *before* write tools — real usage will reshape the
 write surface, and read-only is a safe thing to be wrong about.
 
-**Phase 3 — Admin write tools.** Per-tool controller extraction, dry-run/diff behaviour.
+**Phase 3 — Admin write tools. Shipped 2026-10-05.** `create_shift`,
+`list_draft_shifts`, `update_shift`, `delete_shift` — all admin-only.
+
+**Scope decision: MCP writes the draft layer only.** It never publishes, and refuses to
+change or delete a shift that is already published. This is narrower than "full CRUD for
+admins" (decision #7) and deliberately so, because of where the orchestration sits:
+
+- `shiftService.publishShifts` flips status only; syncing the newly published shifts to
+  Google Calendar is the *controller's* job, afterwards. A tool calling the service
+  directly would mark shifts published with no calendar event behind them.
+- `shiftService.deleteShift` removes the document only; removing the matching calendar
+  event is likewise the controller's. Deleting a published shift here would orphan a real
+  event on a real person's calendar.
+
+So: **an LLM may draft a schedule; a human commits it.** That also supplies what this plan
+wanted from dry runs — the draft layer already is one, and a durable, reviewable one.
+Drafts are excluded from the schedule view, from Google Calendar sync and from coverage
+counts, so a wrong draft costs nothing until someone publishes it.
+
+Publishing from MCP needs the sync orchestration extracted out of the controller first.
+That is its own piece of work and is not blocked by anything here.
+
+Everything written carries `source: "mcp"`, so a draft's provenance is in the data rather
+than inferred. `list_draft_shifts` exists because the Phase 1 read tools deliberately
+exclude drafts — without it an admin could not see back what they had just drafted.
 
 **Phase 4 — `apply_schedule` / constraints-app integration**, if Phase 3 shows it earns
 its place.
