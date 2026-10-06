@@ -25,7 +25,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { cn } from "@/lib/utils";
-import { performanceApi, type ImportPreview, type ImportSource, type PreviewRow } from "./api";
+import {
+  performanceApi,
+  type ExternalAgent,
+  type ImportPreview,
+  type ImportSource,
+  type PreviewRow,
+} from "./api";
 import { SOURCE_LABELS, int, pct } from "./format";
 import { DENSE_TABLE } from "./parts";
 
@@ -87,12 +93,24 @@ export default function ImportDialog({
     }
   }, [open]);
 
+  // People added in Performance without an agendo account are pickable too; once they
+  // have an account the backend links them, so only the unlinked ones are listed.
+  const [externals, setExternals] = useState<ExternalAgent[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    performanceApi
+      .listAgents()
+      .then(setExternals)
+      .catch(() => setExternals([]));
+  }, [open]);
+
   const users = useMemo(
     () =>
-      [...allUsers]
-        .map((u) => ({ id: u.id, name: `${u.firstName} ${u.lastName}`.trim() }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [allUsers],
+      [
+        ...allUsers.map((u) => ({ id: u.id, name: `${u.firstName} ${u.lastName}`.trim() })),
+        ...externals.filter((a) => !a.linkedTo).map((a) => ({ id: a.agentId, name: `${a.name} (no account)` })),
+      ].sort((a, b) => a.name.localeCompare(b.name)),
+    [allUsers, externals],
   );
   const nameById = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
 

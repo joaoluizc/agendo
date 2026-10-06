@@ -3,6 +3,7 @@ import methodologyService from "./services/methodologyService.js";
 import periodService from "./services/periodService.js";
 import importService from "./services/importService.js";
 import scoreService from "./services/scoreService.js";
+import agentService from "./services/agentService.js";
 import { Alias } from "./models/aliasModel.js";
 import { REGIONS } from "./lib/regions.js";
 import { parsePeriodKey } from "./lib/quarters.js";
@@ -177,6 +178,25 @@ const getScores = handle(async (req, res) => {
   );
 }, "getScores");
 
+const listAgents = handle(async (req, res) => {
+  res.status(200).json(await agentService.listAgents());
+}, "listAgents");
+
+const createAgent = handle(async (req, res) => {
+  const { name, email, region, periodKey, role } = req.body || {};
+  if (periodKey != null && !parsePeriodKey(periodKey)) {
+    return res.status(400).json({ message: "periodKey must look like 2026-Q3" });
+  }
+  if (role != null && typeof role !== "string") return res.status(400).json({ message: "role must be a string" });
+  const agent = await agentService.createAgent({ name, email, region, periodKey, role, createdBy: callerId(req) });
+  res.status(201).json(agent);
+}, "createAgent");
+
+const deleteAgent = handle(async (req, res) => {
+  await agentService.deleteAgent(req.params.agentId);
+  res.status(204).end();
+}, "deleteAgent");
+
 const listAliases = handle(async (req, res) => {
   res.status(200).json(await Alias.find().sort({ display: 1 }).lean());
 }, "listAliases");
@@ -201,6 +221,9 @@ export default {
   previewImport,
   commitImport,
   getScores,
+  listAgents,
+  createAgent,
+  deleteAgent,
   listAliases,
   deleteAlias,
 };

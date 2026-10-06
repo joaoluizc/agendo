@@ -35,6 +35,10 @@ performanceRouter.post("/periods/:key/imports", canManagePerformance, c.commitIm
 
 performanceRouter.get("/periods/:key/scores", canViewPerformance, c.getScores);
 
+performanceRouter.get("/agents", canViewPerformance, c.listAgents);
+performanceRouter.post("/agents", canManagePerformance, c.createAgent);
+performanceRouter.delete("/agents/:agentId", canManagePerformance, c.deleteAgent);
+
 performanceRouter.get("/aliases", canViewPerformance, c.listAliases);
 performanceRouter.delete("/aliases/:id", canManagePerformance, c.deleteAlias);
 

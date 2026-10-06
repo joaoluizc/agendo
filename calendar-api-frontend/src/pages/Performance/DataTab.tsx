@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Lock, LockOpen, Upload } from "lucide-react";
+import { Lock, LockOpen, Upload, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -29,6 +29,7 @@ import {
 } from "./api";
 import { hoursFromMinutes, SOURCE_LABELS, WARNING_TEXT } from "./format";
 import ImportDialog from "./ImportDialog";
+import AddAgentDialog from "./AddAgentDialog";
 import { DENSE_TABLE } from "./parts";
 import type { RegionFilter } from "./regionFilter";
 
@@ -65,6 +66,7 @@ export default function DataTab({
   const cohorts = overview.methodology.cohorts;
 
   const [importing, setImporting] = useState<ImportSource | null>(null);
+  const [addingAgent, setAddingAgent] = useState(false);
   const [confirmLock, setConfirmLock] = useState(false);
   const [busy, setBusy] = useState(false);
   const [setup, setSetup] = useState<Map<string, AgentSetup>>(new Map());
@@ -248,14 +250,19 @@ export default function DataTab({
               starts from the previous one’s. The cohort follows the region unless overridden.
             </CardDescription>
           </div>
-          <Button
-            disabled={!dirty || locked || busy}
-            onClick={() =>
-              run("Agent setup saved.", () => performanceApi.saveAgents(period.key, [...setup.values()]))
-            }
-          >
-            Save setup
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" disabled={locked || busy} onClick={() => setAddingAgent(true)}>
+              <UserPlus className="mr-1.5 h-4 w-4" /> Add without account
+            </Button>
+            <Button
+              disabled={!dirty || locked || busy}
+              onClick={() =>
+                run("Agent setup saved.", () => performanceApi.saveAgents(period.key, [...setup.values()]))
+              }
+            >
+              Save setup
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-3 pt-0">
           <Table className={DENSE_TABLE}>
@@ -284,7 +291,16 @@ export default function DataTab({
                     <TableCell className="whitespace-nowrap font-medium">
                       {agent.name ?? agent.clerkId}
                       {!agent.inSetup && <span className="ml-1.5 text-amber-600 dark:text-amber-400">new</span>}
-                      {agent.userMissing && <span className="ml-1.5 text-destructive">no user</span>}
+                      {agent.external ? (
+                        <span
+                          className="ml-1.5 text-muted-foreground"
+                          title="No agendo account yet — moves to their account once they sign in"
+                        >
+                          no account
+                        </span>
+                      ) : (
+                        agent.userMissing && <span className="ml-1.5 text-destructive">no user</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Select
@@ -369,6 +385,15 @@ export default function DataTab({
           </Table>
         </CardContent>
       </Card>
+
+      <AddAgentDialog
+        open={addingAgent}
+        onOpenChange={setAddingAgent}
+        periodKey={period.key}
+        periodLabel={period.label}
+        roles={roles}
+        onAdded={onChanged}
+      />
 
       {importing && (
         <ImportDialog

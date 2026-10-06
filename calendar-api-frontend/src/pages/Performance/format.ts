@@ -65,6 +65,8 @@ export function flagText(flag: string, config: MethodologyConfig): string {
   switch (code) {
     case "setupDefaulted":
       return "Not in this quarter's agent setup yet — scored with defaults (regular, region from Location).";
+    case "noAccount":
+      return "No agendo account yet — added in Performance. Moves to their account automatically once they sign in.";
     case "userMissing":
       return "No agendo user with this id any more.";
     case "hoursOverridden":

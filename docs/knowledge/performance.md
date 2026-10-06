@@ -40,6 +40,14 @@ admins) replaces the sheet's assembly and computes the score.
   and listed apart from the leaderboard. Roles are assigned per quarter in the UI, never
   in code.
 
+## People without an agendo account
+
+Someone scored but never signed in (no `users` doc) is added in the Data tab as a
+Performance-only agent: name, email and region. Don't pre-create them in `users`. First
+sign-in doesn't attach a clerk id to an existing user with the same email, so the person
+couldn't use agendo. Performance instead links the agent to whoever later signs in with
+that email, at read time, and their data follows them.
+
 ## Gotchas
 
 - **Quarter bounds are UTC-3 instants** (Q3 = 2026-07-01T03:00Z → 2026-10-01T03:00Z).
