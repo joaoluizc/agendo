@@ -3,7 +3,9 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import mcpAuth from "./lib/mcpAuth.js";
 import { createMcpServer } from "./server.js";
 import {
+  clientMetadataDocument,
   fetchAuthorizationServerMetadata,
+  MCP_CLIENT_METADATA_PATH,
   protectedResourceMetadata,
   publicOrigin,
 } from "./lib/clerkOauth.js";
@@ -59,6 +61,24 @@ async function authorizationServerHandler(req, res) {
 }
 
 /**
+ * `/mcp-client.json` — the Client ID Metadata Document for the `mcp-remote` bridge.
+ *
+ * Fetched by Clerk, not by the user's client: the client sends this URL *as* its
+ * client_id, and Clerk resolves it. Public by necessity and by design — it contains no
+ * secret, only a description of the bridge and the loopback URIs it may be sent back to.
+ *
+ * Cached for an hour because Clerk refetches it; the dashboard has an explicit "Refresh
+ * metadata" button for when this file changes and the wait is unwelcome.
+ */
+function clientMetadataHandler(req, res) {
+  const document = clientMetadataDocument(
+    `${publicOrigin(req)}${MCP_CLIENT_METADATA_PATH}`,
+  );
+  res.set("Cache-Control", "public, max-age=3600");
+  return res.json(document);
+}
+
+/**
  * The MCP endpoint itself. Stateless: one server + transport per request.
  *
  * Exported so the protocol layer can be exercised with a caller supplied directly,
@@ -107,6 +127,7 @@ export function mountMcpRoutes(app) {
     mcpCors,
     authorizationServerHandler,
   );
+  app.get(MCP_CLIENT_METADATA_PATH, mcpCors, clientMetadataHandler);
 
   // Authenticated. `app.all` so GET and DELETE get a protocol-shaped answer from the
   // transport instead of an Express 404.

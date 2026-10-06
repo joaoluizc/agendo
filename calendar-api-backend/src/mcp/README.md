@@ -18,10 +18,14 @@ tool design is committed. Read tools are Phase 1.
 | GET | `/.well-known/oauth-protected-resource/mcp` | none | RFC 9728 metadata — tells a client which authorization server to use |
 | GET | `/.well-known/oauth-protected-resource` | none | Same, bare form, for clients that probe the root |
 | GET | `/.well-known/oauth-authorization-server` | none | Mirrors Clerk's own OAuth metadata |
+| GET | `/mcp-client.json` | none | CIMD document identifying the `mcp-remote` bridge, fetched by Clerk |
 | ALL | `/mcp` | Clerk **OAuth** access token | The MCP endpoint (Streamable HTTP, stateless) |
 
 The discovery routes must be publicly readable — that is how an unauthenticated client
-learns where to send the user to log in.
+learns where to send the user to log in. `/mcp-client.json` is public for a different
+reason: Clerk fetches it to resolve a URL-shaped client id (see `lib/clerkOauth.js`). It
+holds no secret — a native client cannot keep one — and it grants nothing on its own,
+because Clerk still has to admit the client and the person still has to log in.
 
 ## Authorization
 

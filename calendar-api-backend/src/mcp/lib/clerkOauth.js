@@ -148,3 +148,68 @@ export async function fetchAuthorizationServerMetadata() {
   }
   return await response.json();
 }
+
+/**
+ * Loopback callback ports offered to the `mcp-remote` bridge.
+ *
+ * Clerk matches a redirect URI against `redirect_uris` *exactly* — there is no loopback
+ * wildcard, despite RFC 8252 §7.3 recommending one. Two consequences shape this list:
+ *
+ *  - **Both host spellings are required.** `mcp-remote` defaults its callback host to
+ *    `127.0.0.1` on Windows and `localhost` everywhere else, and they are different
+ *    strings to an exact matcher. A document listing only one works on half the team's
+ *    laptops and fails on the other half with `redirect_uri_mismatch`.
+ *  - **More than one port.** `mcp-remote` does not fall back when its callback port is
+ *    taken; it exits with `Callback port N is already in use`. That happens as soon as a
+ *    second bridge is running for another server. Extra ports let someone edit one digit
+ *    in their config instead of waiting on a redeploy and a Clerk metadata refresh.
+ *
+ * The range stays short on purpose. Every entry is a loopback address, so this is not the
+ * part of the design doing security work — any local program can already impersonate a
+ * native client (docs/mcp-server-plan.md). It is a usability list, not a trust boundary.
+ */
+const MCP_CLIENT_CALLBACK_PORTS = [3334, 3335, 3336];
+
+/** The path the client metadata document is served from. */
+export const MCP_CLIENT_METADATA_PATH = "/mcp-client.json";
+
+/**
+ * A Client ID Metadata Document (CIMD) for the `mcp-remote` bridge.
+ *
+ * CIMD replaces the client id/secret pair a teammate would otherwise paste into their
+ * Claude config: the client's id *is* the HTTPS URL this document is served from, and
+ * Clerk fetches it to learn what the client is. Nothing secret is involved, which is the
+ * point — a native client cannot keep a secret (RFC 8252 §8.5), so distributing one to
+ * every laptop bought no security and a rotation problem.
+ *
+ * Clerk's requirements, all load-bearing:
+ *
+ *  - `client_id` must equal the URL Clerk fetched, character for character. It is built
+ *    from the request rather than hardcoded so the document stays correct behind Render's
+ *    proxy and on any other host this is deployed to.
+ *  - `token_endpoint_auth_method` must be `"none"`. Clerk **rejects** a document that
+ *    carries a client secret or names a secret-based method — public clients only.
+ *  - `redirect_uris` must contain the exact URI the client will use (see above).
+ *
+ * Admission is still Clerk's call: with "Pre-registered clients only" set, this URL has
+ * to be allowlisted in the dashboard before any token is issued. Serving the document is
+ * necessary, not sufficient — which is the property we wanted over DCR.
+ */
+export function clientMetadataDocument(clientIdUrl) {
+  const redirectUris = MCP_CLIENT_CALLBACK_PORTS.flatMap((port) => [
+    `http://127.0.0.1:${port}/oauth/callback`,
+    `http://localhost:${port}/oauth/callback`,
+  ]);
+
+  return {
+    client_id: clientIdUrl,
+    client_name: "agendo (mcp-remote bridge)",
+    client_uri: "https://github.com/joaoluizc/agendo",
+    application_type: "native",
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    scope: MCP_REQUIRED_SCOPES.join(" "),
+    redirect_uris: redirectUris,
+  };
+}
