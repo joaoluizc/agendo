@@ -2,7 +2,12 @@
 
 _Companion to [`mcp-server-plan.md`](./mcp-server-plan.md), which covers design and
 rationale. This one covers what exists today, what the moving parts actually do, and what
-has to happen next. Written 2026-08-17._
+has to happen next. Written 2026-08-17; the status section below updated 2026-10-06._
+
+**If you just want to connect a client, you want
+[`mcp-team-setup.md`](./mcp-team-setup.md) instead** — a short, pasteable page with no
+credentials in it. This document is the background behind why that page looks the way it
+does.
 
 ## Where things stand
 
@@ -32,10 +37,13 @@ The backend serves these routes:
 | `/.well-known/oauth-protected-resource/mcp` | anyone | Tells a client "to talk to me, get a token from Clerk" |
 | `/.well-known/oauth-protected-resource` | anyone | Same, bare form some clients probe first |
 | `/.well-known/oauth-authorization-server` | anyone | Mirrors Clerk's own OAuth details |
-| `/mcp` | a signed-in agendo user | The MCP endpoint itself. One tool: `whoami` |
+| `/mcp-client.json` | anyone | CIMD document identifying the `mcp-remote` bridge, fetched by Clerk |
+| `/mcp` | a signed-in agendo user | The MCP endpoint itself |
 
 The three `.well-known` routes are public on purpose — that is how a client with no token
-finds out where to send you to log in. They expose no agendo data.
+finds out where to send you to log in. `/mcp-client.json` is public because Clerk fetches
+it to resolve a URL-shaped client id. None of the four expose agendo data or hold a
+secret.
 
 Code lives in `calendar-api-backend/src/mcp/` (see its README). `app.js` gained one line.
 Verified locally: the protocol works over real HTTP, a request with no token gets a 401
@@ -78,9 +86,9 @@ control them. Three answers exist, and Clerk supports all three.
 
 | | How it works | Trade-off |
 | --- | --- | --- |
-| **Pre-registration** _(what you did)_ | You create an OAuth application in Clerk by hand. It gives you a **client ID** and a **client secret**. You paste those into the one client you want to allow. | Simplest and tightest. But you must know the client's redirect URL in advance — which rules out desktop apps (see below). |
+| **Pre-registration** _(the first thing we tried)_ | You create an OAuth application in Clerk by hand. It gives you a **client ID** and a **client secret**. You paste those into the one client you want to allow. | Simplest and tightest. But you must know the client's redirect URL in advance — which rules out desktop apps (see below). |
 | **DCR** (Dynamic Client Registration) | You flip a switch and Clerk exposes a public endpoint where any client can register itself and get its own credentials, unprompted. | Works with everything, no setup per client. But it's a public, unauthenticated endpoint anyone on the internet can call, with no record of who. Deprecated in the MCP spec. |
-| **CIMD** (Client ID Metadata Documents) | The client's ID *is* an HTTPS URL that serves a small JSON file describing it (`{"client_name": ..., "redirect_uris": [...]}`). Clerk fetches that file and verifies it. Clerk's dashboard then lets you allowlist specific ones and block unknown clients. | The allowlist model — the "configure which apps may connect" idea you described. **Generally available at Clerk since 2026-09-17**: self-serve in the dashboard, on every application, off until you switch it on. |
+| **CIMD** (Client ID Metadata Documents) | The client's ID *is* an HTTPS URL that serves a small JSON file describing it (`{"client_name": ..., "redirect_uris": [...]}`). Clerk fetches that file and verifies it. Clerk's dashboard then lets you allowlist specific ones and block unknown clients. | The allowlist model — the "configure which apps may connect" idea you described. **Generally available at Clerk since 2026-09-17, and what agendo uses now**: self-serve in the dashboard, on every application, off until you switch it on. |
 
 The MCP spec's order of preference is pre-registration → CIMD → DCR. **You went straight to
 the best option.** My earlier suggestion to enable DCR was the quick way to get a spike
@@ -158,10 +166,23 @@ but that doesn't tell us the plan. Worth confirming in the Render dashboard.
 
 ## Connecting, and what success looks like
 
-In Claude, add a custom connector pointing at `https://agendo-backend.onrender.com/mcp`,
-and put the production app's client ID and secret in the OAuth fields. Discovery handles
-the rest: Claude reads agendo's `.well-known` document, gets sent to Clerk, you complete
-the Google login, and Claude comes back with a token that `/mcp` verifies on every call.
+The instructions live in [`mcp-team-setup.md`](./mcp-team-setup.md). In short: a
+`claude_desktop_config.json` entry runs `mcp-remote` against
+`https://agendo-backend.onrender.com/mcp` with `--client-metadata-url` pointing at
+`/mcp-client.json`. Discovery handles the rest: the bridge reads agendo's `.well-known`
+document, gets sent to Clerk, Clerk fetches the metadata document to learn what the client
+is, you complete the Google login, and the bridge comes back with a token that `/mcp`
+verifies on every call.
+
+Two details that are easy to get wrong and expensive to debug:
+
+- **`mcp-remote` defaults its callback host to `127.0.0.1` on Windows and `localhost`
+  elsewhere.** Clerk matches redirect URIs by exact string, so the metadata document has
+  to list both spellings or the setup works on half the team's laptops and fails on the
+  other half.
+- **`mcp-remote` does not fall back when its callback port is taken** — it exits outright.
+  The document lists ports 3334–3336 so someone can change one digit rather than wait on a
+  redeploy and a Clerk metadata refresh.
 
 Then ask it to call `whoami`. Success is your own name, email, `Role: admin`, and your
 timezone. That single response proves the entire chain — client → Clerk OAuth → Render →
@@ -180,16 +201,19 @@ happens is reconstructable after the fact.
 
 ## After Phase 0
 
-- **Phase 1 — read tools.** `get_my_schedule`, `get_agent_schedule`, `get_coverage_at`,
-  and admin-only `find_coverage_gaps`. Where the actual value is.
-- **Phase 2 — rollout.** Setup instructions for the team, revocation in offboarding, and
-  CIMD switched on with an explicit allowlist once desktop clients are wanted (GA since
-  2026-09-17 — no longer anything to wait for).
-- **Phase 3 — admin write tools.** Creating and changing shifts, with a preview-before-acting
-  default.
+- **Phase 1 — read tools.** _Done._ `get_my_schedule`, `get_agent_schedule`,
+  `get_coverage_at`, `summarize_shifts`, admin-only `find_coverage_gaps`, and
+  `find_shifts`, the general query the others are special cases of.
+- **Phase 3 — admin write tools.** _Done._ Create, update and delete, confined to **draft**
+  shifts so nothing here can reach a published schedule or Google Calendar.
+- **Phase 5 — timezone settings.** _Done._ Agents set their own; admins set anyone's.
+- **Phase 2 — rollout.** _In progress._ CIMD is on and
+  [`mcp-team-setup.md`](./mcp-team-setup.md) is the page to hand people. Still open:
+  revocation in the offboarding checklist, and asking Duda's Claude admins to publish
+  agendo in the org connector directory so claude.ai works without the bridge.
 
-Read-only first is deliberate: real usage will reshape the write surface, and read-only is
-a safe thing to be wrong about.
+Read-only first was deliberate: real usage reshaped the write surface, and read-only is a
+safe thing to be wrong about.
 
 ## Glossary
 
