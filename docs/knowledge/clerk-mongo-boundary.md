@@ -123,7 +123,9 @@ permanently subtracted from `/all-events-excluding-platform`.
 
 Related: `usersgcalevents`, `shifts` and `positions` are **not** environment-split, even
 though `users`/`dev-users` is. A dev backend writes to and deletes from the production
-tracking collection.
+tracking collection. Redis is shared the same way, so a cached value computed from an
+env-split collection needs a `dev` segment in its key — the hours report's does (see
+`src/reports/README.md`, Caching).
 
 See [calendar sync paths](agendo-sync-paths.md) for the two sync worlds and the position
 id-space gotcha.
