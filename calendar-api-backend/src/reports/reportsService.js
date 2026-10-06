@@ -219,6 +219,14 @@ async function computeHoursReport({ start, end, groupByLocation }) {
 const PAST_RANGE_TTL_SECONDS = 24 * 60 * 60; // a closed range's shifts don't change retroactively
 const CURRENT_RANGE_TTL_SECONDS = 10 * 60; // still accumulating shifts — refresh often
 
+// Redis is shared between a local dev run and production, but the report's inputs are
+// not: a dev run resolves users from `dev-users` (models/UserModel.js), so it computes
+// near-empty rows for the same range. Without the `dev` segment it would write them under
+// the exact key production reads, and production would serve them until the TTL ran out.
+// Production's prefix is left as it was so its existing entries keep serving.
+const isDev = process.env.NODE_ENV === "development";
+const CACHE_PREFIX = isDev ? "reports:dev:hours" : "reports:hours";
+
 /**
  * Cached wrapper around computeHoursReport. Keyed on the exact request (including
  * groupByLocation) — quarter/preset navigation always regenerates the same
@@ -233,7 +241,7 @@ async function getHoursReport({ start, end, groupByLocation, refresh = false }) 
   // hold Sling-merged totals, which double-count the shifts copied into agendo, and a
   // past range's entry lives for PAST_RANGE_TTL_SECONDS — a new key keeps them from being
   // served after the switch, and they expire on their own.
-  const cacheKey = `reports:hours:agendo-only:${start}:${end}:${groupByLocation}`;
+  const cacheKey = `${CACHE_PREFIX}:agendo-only:${start}:${end}:${groupByLocation}`;
 
   // `refresh` skips the read and lets the write below overwrite the entry. It is a
   // bypass rather than a delete, and shared rather than per-caller, because nothing

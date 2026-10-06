@@ -93,7 +93,17 @@ the same boundary-aligned ISO strings for a given period. The `agendo-only` segm
 added when the report stopped reading Sling: entries under the old
 `reports:hours:${start}:…` key hold Sling-merged totals, and a past range's entry would
 otherwise have kept serving them for up to 24h after the switch. They are never read
-again and expire on their own. TTL is tiered: 24h for a range that's
+again and expire on their own.
+
+A backend run with `NODE_ENV=development` writes under `reports:dev:hours:agendo-only:…`
+instead (`CACHE_PREFIX` in `reportsService.js`). Redis is one instance shared by every
+environment, but the report's inputs are not: a dev run resolves users from `dev-users`
+(`models/UserModel.js`), so it computes near-empty rows for the same range. Without the
+`dev` segment a local run wrote those rows under the exact key production reads, and
+production served them until the TTL ran out. Production's key is deliberately unchanged
+so its existing entries keep serving; only the dev side moved.
+
+TTL is tiered: 24h for a range that's
 already fully in the past (those shifts won't change retroactively), 10 minutes for
 anything touching the present (still accumulating shifts). No invalidation on shift
 mutation — matches this codebase's existing Redis usages, which are all TTL-only. A
