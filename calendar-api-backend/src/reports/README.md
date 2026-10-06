@@ -68,6 +68,18 @@ a sensible default split on first read if the collection is empty (mirrors
   result entirely — checked against the raw summed minutes, not the floored display
   hours, so real but sub-hour Tickets/Chats time isn't mistaken for none.
 
+## Shared with Performance
+
+The clamping, classification and unmatched-user rules above live in `lib/groupMinutes.js`,
+which is pure: no models and no Redis, so it is testable with `node --test`.
+`reportsService.computeGroupMinutes` loads the data and returns raw minutes per agent per
+group, with no flooring and no clamp to today. Two callers use it:
+- `computeHoursReport`, which floors and filters the minutes as described above;
+- `src/performance`, whose quarterly scores use the same hours.
+
+So a report-group edit changes both, and removing this module means moving
+`lib/groupMinutes.js` and `computeGroupMinutes` along with Performance.
+
 ## Caching
 
 `getHoursReport` is expensive (a Position/User scan plus the `shifts` range query) and gets
