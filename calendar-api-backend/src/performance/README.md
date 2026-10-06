@@ -84,6 +84,13 @@ the same inputs and config score.
   column, then a saved alias (`performance-aliases`), then the exact full name. Fuzzy
   matches are suggestions only and never applied automatically. Confirming a fuzzy match
   can save the export's spelling as an alias.
+- **People without an agendo account** (e.g. a billing specialist with no shifts) are
+  added as Performance-only agents (`performance-agents`, id `ext_…`). Their facts and
+  setup are keyed by that id. They are not placeholders in `users`: first sign-in only
+  provisions a user when no doc has the email, and would leave a placeholder without
+  its clerk id. Instead `services/directory.js` resolves the agent id to the user who
+  later appears with the same email, at read time. Their data follows them, and
+  identity data is never written.
 - **Agents not in a quarter's setup are still scored.** They get defaults (regular, and
   a region from their Location if they're in exactly one of the four flag locations) and
   are flagged. A new quarter copies the previous quarter's setup.
@@ -117,6 +124,8 @@ Routes:
 - `GET /performance/periods/:key/scores?methodology=&refresh=`: everything the
   Leaderboard, Leads & billing, Interactions and Methodology tabs show, with each row's
   previous-quarter figures under the same methodology
+- `GET /performance/agents`, `POST /performance/agents {name, email, region, periodKey?, role?}`,
+  `DELETE /performance/agents/:agentId` (refused once they have imported data)
 - `GET /performance/aliases`, `DELETE /performance/aliases/:id`
 
 Writes to a locked quarter return 409.
