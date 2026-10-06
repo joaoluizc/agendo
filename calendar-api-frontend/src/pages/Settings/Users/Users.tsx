@@ -15,6 +15,7 @@ import { UserSafeInfo } from "@/types/userTypes";
 import { cn } from "@/lib/utils";
 import PreferencesCard from "./PreferencesCard";
 import SyncedPositionsCard from "./SyncedPositionsCard";
+import UserTimezoneCard from "./UserTimezoneCard";
 import { usersApi } from "./api";
 import { usePageTitle } from "./use-page-title";
 
@@ -270,6 +271,7 @@ export default function Users() {
                   onReset={reset}
                   onSave={save}
                 />
+                <UserTimezoneCard user={selected} />
                 <SyncedPositionsCard user={selected} />
               </>
             )}

@@ -43,6 +43,10 @@ const getMyProfile = async (req, res) => {
     // schema default "UTC", while the real legacy value sits in the unreadable
     // off-schema `timeZone` field. Nothing consumes this yet; migrating the real
     // values is tracked separately.
+    // `timezone` is the real, schema-backed value. `timeZone` is kept alongside it only
+    // so an older client that still reads the camelCase key does not break mid-deploy;
+    // it carries the same string and should be dropped once nothing reads it.
+    timezone: user.timezone,
     timeZone: user.timezone,
     type: user.type,
   };
@@ -183,6 +187,62 @@ const isEmptyMarkup = (html) =>
 // Admin-only (route-gated): save one agent's scheduling preferences. The body is
 // `{ preferences }`, HTML from the Settings → Users editor; it is rendered through
 // interweave on the way out, which strips anything unsafe.
+/**
+ * An agent sets their own timezone.
+ *
+ * Self-service and therefore not admin-gated: a person changing their own zone needs no
+ * approval, and making them ask is how the field stayed empty for a year.
+ */
+const setMyTimezone = async (req, res) => {
+  const { timezone } = req.body ?? {};
+  try {
+    const saved = await userService.setUserTimezone(req.auth.userId, timezone);
+    console.log(
+      `[${req.requestId}]: setMyTimezone - ${req.auth.userId} -> ${saved.timezone}`,
+    );
+    return res.status(200).json(saved);
+  } catch (err) {
+    if (err.code === "INVALID_TIMEZONE") {
+      return res.status(400).json({ message: err.message });
+    }
+    if (err.message === "User not found") {
+      return res.status(404).json({ message: err.message });
+    }
+    console.error(`[${req.requestId}]: setMyTimezone failed: ${err.message}`);
+    return res.status(500).json({ message: `caught error: ${err.message}` });
+  }
+};
+
+/**
+ * An admin sets someone else's timezone.
+ *
+ * Needed because the team spans several countries and people do not reliably keep their
+ * own profile current — an admin has to be able to fix a wrong zone without chasing the
+ * person. Gated by `adminOnly` on the route, server-side, not merely hidden in the UI.
+ */
+const setUserTimezoneById = async (req, res) => {
+  const { clerkId } = req.params;
+  const { timezone } = req.body ?? {};
+  try {
+    const saved = await userService.setUserTimezone(clerkId, timezone);
+    console.log(
+      `[${req.requestId}]: setUserTimezone - ${req.auth.userId} set ${clerkId} -> ${saved.timezone}`,
+    );
+    return res.status(200).json(saved);
+  } catch (err) {
+    if (err.code === "INVALID_TIMEZONE") {
+      return res.status(400).json({ message: err.message });
+    }
+    if (err.message === "User not found") {
+      return res.status(404).json({ message: err.message });
+    }
+    console.error(
+      `[${req.requestId}]: setUserTimezone failed for ${clerkId}: ${err.message}`,
+    );
+    return res.status(500).json({ message: `caught error: ${err.message}` });
+  }
+};
+
 const setUserPreferences = async (req, res) => {
   const { clerkId } = req.params;
   const { preferences } = req.body ?? {};
@@ -224,4 +284,6 @@ export default {
   newClerkUser,
   getAllUsers,
   setUserPreferences,
+  setMyTimezone,
+  setUserTimezoneById,
 };

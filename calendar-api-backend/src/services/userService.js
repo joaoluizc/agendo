@@ -34,6 +34,57 @@ const findUserByEmail = async (email) => {
   return user;
 };
 
+/**
+ * Is this a zone the runtime can actually format a time in?
+ *
+ * Asked of `Intl.DateTimeFormat` directly rather than checked against
+ * `Intl.supportedValuesOf("timeZone")`, which looks like the obvious list and is the
+ * wrong one: it returns *canonical* zone names and omits `"UTC"`. Every agendo user
+ * currently holds exactly `"UTC"`, so validating against that list rejects the entire
+ * roster — a save of an unmodified profile would fail. Caught by a round-trip test that
+ * could not restore the value it had just read.
+ *
+ * The question that matters is the one this answers: will rendering a time in this zone
+ * throw later, somewhere far from here? `Intl` accepts "UTC", "America/Sao_Paulo" and
+ * "Etc/GMT+3", and rejects "Mars/Olympus" and "UTC+3".
+ */
+export function isValidTimezone(zone) {
+  if (typeof zone !== "string" || !zone.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Store an agent's timezone.
+ *
+ * The field existed on the schema from early on but nothing ever wrote it — the web UI
+ * read the browser's zone instead, so all 18 production users sat on the default "UTC"
+ * while the app happily rendered local times anyway. That worked until a client with no
+ * browser arrived: agendo's MCP server has only this field to go on, and had to label
+ * every time "UTC" because that is genuinely what it was told.
+ *
+ * So this writes the stored value, deliberately, rather than inferring one. A detected
+ * zone is a good default to *offer*; it is not a substitute for a recorded answer.
+ */
+const setUserTimezone = async (clerkId, timezone) => {
+  if (!isValidTimezone(timezone)) {
+    const err = new Error(`"${timezone}" is not a known IANA timezone`);
+    err.code = "INVALID_TIMEZONE";
+    throw err;
+  }
+  const user = await User.findOneAndUpdate(
+    { clerkId },
+    { $set: { timezone } },
+    { new: true },
+  );
+  if (!user) throw new Error("User not found");
+  return { clerkId, timezone: user.timezone };
+};
+
 const findAllUsers = async () => {
   // Sorted so the roster order is stable. Clerk's getUserList (the previous source for
   // /user/all) returned newest-first; Mongo's natural order is insertion order, so
@@ -118,6 +169,9 @@ async function getAllUsersSafeInfo() {
       hasImage: avatar?.hasImage || false,
       slingId: user.slingId || "",
       type: user.type || "normal",
+      // Shown and editable in Settings -> Users; an admin has to be able to fix a wrong
+      // zone without chasing the person.
+      timezone: user.timezone || "UTC",
       preferences: user.preferences || "",
       preferencesUpdatedAt: user.preferencesUpdatedAt || null,
       preferencesUpdatedBy: user.preferencesUpdatedBy || null,
@@ -214,6 +268,8 @@ const getGapiToken = async (email) => {
 
 export default {
   createUser,
+  setUserTimezone,
+  isValidTimezone,
   findUser: findUserByEmail,
   findAllUsers,
   findUserByClerkId,

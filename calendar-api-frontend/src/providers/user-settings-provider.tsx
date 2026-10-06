@@ -32,7 +32,15 @@ type UserSettingsProviderState = {
   /** Stored per browser and applied by reloading, so every screen starts from the new role. */
   setViewAsAgent: (value: boolean) => void;
   userInfoLoaded: boolean;
-  timeZone: number;
+  /**
+   * The agent's stored IANA timezone (e.g. "America/Sao_Paulo"), from Mongo.
+   *
+   * Replaced a `timeZone: number` that was fed by an off-schema field holding 0 for
+   * everyone and read by nothing — the app had always used the browser's zone instead.
+   * It is stored now because agendo's MCP server has no browser to ask.
+   */
+  timezone: string;
+  setTimezone: (zone: string) => void;
   allPositions: Position[];
   allUsers: UserSafeInfo[];
   /** Office locations and who is assigned to each. Drives the schedule's location filter. */
@@ -50,7 +58,6 @@ type UserSettingsProviderState = {
   setEmail: (value: string) => void;
   setSlingId: (value: string) => void;
   setType: (value: string) => void;
-  setTimeZone: (value: number) => void;
   setAllPositions: (value: Position[]) => void;
   /**
    * Bump a position's `lastUsedAt` to today, locally.
@@ -113,7 +120,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     window.location.reload();
   };
   const [userInfoLoaded, setUserInfoLoaded] = useState(false);
-  const [timeZone, setTimeZone] = useState(0);
+  const [timezone, setTimezone] = useState("UTC");
   const [allPositions, setAllPositions] = useState<Position[]>([]);
 
   /**
@@ -171,7 +178,9 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
           setEmail(data.email);
           setSlingId(data.slingId);
           setType(data.type);
-          setTimeZone(data.timeZone);
+          // `timezone` is the real field; `timeZone` is the legacy camelCase key the
+          // API still mirrors, kept only so a client mid-deploy is not left blank.
+          setTimezone(data.timezone ?? data.timeZone ?? "UTC");
         } else {
           console.error("Failed to get user settings");
         }
@@ -268,7 +277,8 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     viewAsAgent,
     setViewAsAgent,
     userInfoLoaded,
-    timeZone,
+    timezone,
+    setTimezone,
     allPositions,
     allUsers,
     locations,
@@ -285,7 +295,6 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     setEmail,
     setSlingId,
     setType,
-    setTimeZone,
     setAllPositions,
     markPositionUsed,
     setAllUsers,
