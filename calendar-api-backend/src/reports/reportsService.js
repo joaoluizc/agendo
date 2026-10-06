@@ -4,9 +4,7 @@ import Location from "../models/LocationModel.js";
 import shiftService from "../services/shiftService.js";
 import redisClient from "../database/redisClient.js";
 import { ReportGroup } from "./reportGroupModel.js";
-
-const GROUP_NAMES = ["Tickets", "Chats"];
-const OTHER = "Other";
+import { GROUP_NAMES, normalize, classifierFrom, foldGroupMinutes } from "./lib/groupMinutes.js";
 
 // Seeded once on first use so the report works out of the box — see README.md.
 const DEFAULT_GROUP_SEEDS = {
@@ -23,10 +21,6 @@ const DEFAULT_GROUP_SEEDS = {
   ],
   Chats: ["Chats", "Customer Chat", "chat"],
 };
-
-function normalize(name) {
-  return String(name || "").trim().toLowerCase();
-}
 
 // Memoised so concurrent first-requests in one process can't double-seed (mirrors
 // jiraBacklog's taskService.seedStatusesIfEmpty); the unique index on `name` is the
@@ -99,33 +93,40 @@ async function replaceGroups(groups) {
   return getGroups();
 }
 
-/** normalized position name -> "Tickets" | "Chats" | "Other" */
-async function buildClassifier() {
-  const groups = await getGroups();
-  const map = new Map();
-  for (const group of groups) {
-    for (const name of group.positionNames || []) {
-      map.set(normalize(name), group.name);
-    }
-  }
-  return (name) => map.get(normalize(name)) || OTHER;
-}
-
 /**
- * Clamp a shift's interval to the report window and return the overlap in minutes (0 if
- * none). findShiftsByRange returns shifts that merely overlap the window uncut, so any
- * shift straddling a boundary must be clamped here before its duration is summed —
- * otherwise hours get overcounted for exactly the shifts that cross into/out of range.
+ * Raw minutes per agent per report group over [rangeStart, rangeEnd], from agendo shifts
+ * only — the loading half of lib/groupMinutes.js's foldGroupMinutes, which holds the rules
+ * (clamping, classification, the unmatched-user guard). No flooring, no clamp to today, no
+ * filtering: the hours report below and src/performance each present the minutes their
+ * own way.
+ *
+ * Also returns the group lists the minutes were classified with, so a caller that keeps
+ * the result (performance's locked periods) also keeps what "Tickets" and "Chats" meant.
  */
-function clampedMinutes(shiftStart, shiftEnd, rangeStart, rangeEnd) {
-  const start = Math.max(new Date(shiftStart).getTime(), rangeStart.getTime());
-  const end = Math.min(new Date(shiftEnd).getTime(), rangeEnd.getTime());
-  if (!(end > start)) return 0;
-  return (end - start) / 60000;
-}
+async function computeGroupMinutes({ rangeStart, rangeEnd }) {
+  const groups = await getGroups();
+  const classify = classifierFrom(groups);
 
-function emptyMinutes() {
-  return { Tickets: 0, Chats: 0, Other: 0 };
+  const positions = await Position.find().select("name").lean();
+  const positionNameById = new Map(positions.map((p) => [String(p._id), p.name]));
+
+  const users = await User.find().select("clerkId firstName lastName").lean();
+  const userByClerkId = new Map(users.map((u) => [u.clerkId, u]));
+
+  const shifts = await shiftService.findShiftsByRange(rangeStart, rangeEnd);
+  const { agents, skippedUnmatched } = foldGroupMinutes(shifts, {
+    rangeStart,
+    rangeEnd,
+    userByClerkId,
+    positionNameById,
+    classify,
+  });
+
+  return {
+    agents: [...agents.values()],
+    skippedUnmatched,
+    groups: groups.map((g) => ({ name: g.name, positionNames: g.positionNames || [] })),
+  };
 }
 
 /**
@@ -161,43 +162,10 @@ async function computeHoursReport({ start, end, groupByLocation }) {
   // report to build (and no reason to hit Mongo for it).
   if (!(rangeEnd > rangeStart)) return [];
   const effectiveEnd = rangeEnd.toISOString();
-  const classify = await buildClassifier();
 
-  const positions = await Position.find().select("name").lean();
-  const positionNameById = new Map(positions.map((p) => [String(p._id), p.name]));
-
-  const users = await User.find().select("clerkId firstName lastName").lean();
-  const userByClerkId = new Map(users.map((u) => [u.clerkId, u]));
-
-  const rowsByKey = new Map(); // key -> { key, label, minutes }
-  function addMinutes(key, label, group, minutes) {
-    if (minutes <= 0) return;
-    if (!rowsByKey.has(key)) {
-      rowsByKey.set(key, { key, label, minutes: emptyMinutes() });
-    }
-    rowsByKey.get(key).minutes[group] += minutes;
-  }
-
-  // A shift whose userId matches no `users` doc is skipped outright rather than reported
-  // under its raw clerk id: `Shift` is one shared collection while `User` is env-split
-  // into `dev-users`/`users` (see models/UserModel.js), so a local dev run against the
-  // same cluster writes real rows into production `shifts` keyed by a dev-only clerk id. Those, plus shifts left behind by deleted accounts, are the only
-  // way this lookup can miss — a current agent always has a `users` doc — so dropping
-  // them keeps dev data out without touching any active roster member's hours.
-  const nativeShifts = await shiftService.findShiftsByRange(rangeStart, rangeEnd);
-  let skippedUnmatched = 0;
-  for (const shift of nativeShifts) {
-    const minutes = clampedMinutes(shift.startTime, shift.endTime, rangeStart, rangeEnd);
-    if (minutes <= 0) continue;
-    const user = userByClerkId.get(shift.userId);
-    if (!user) {
-      skippedUnmatched += 1;
-      continue;
-    }
-    const positionName = shift.positionId ? positionNameById.get(String(shift.positionId)) : "";
-    const group = classify(positionName);
-    addMinutes(user.clerkId, `${user.firstName} ${user.lastName}`.trim(), group, minutes);
-  }
+  // Shifts whose userId matches no `users` doc are dropped inside computeGroupMinutes —
+  // see foldGroupMinutes in lib/groupMinutes.js for why.
+  const { agents, skippedUnmatched } = await computeGroupMinutes({ rangeStart, rangeEnd });
   if (skippedUnmatched > 0) {
     console.log(
       `[reports] skipped ${skippedUnmatched} shift(s) with no matching user, range ${start} - ${effectiveEnd}`,
@@ -215,7 +183,8 @@ async function computeHoursReport({ start, end, groupByLocation }) {
     }
   }
 
-  const rows = [...rowsByKey.values()]
+  const rows = agents
+    .map(({ clerkId, name, minutes }) => ({ key: clerkId, label: name, minutes }))
     // An agent with no Tickets/Chats time at all (only Other, or nothing) isn't
     // interesting for this report — drop them. Checked on the raw minutes, not the
     // floored display hours, so someone with real but sub-hour Tickets/Chats time
@@ -311,4 +280,5 @@ export default {
   getGroups,
   replaceGroups,
   getHoursReport,
+  computeGroupMinutes,
 };

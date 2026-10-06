@@ -21,6 +21,8 @@ import AdaStats from "./pages/AdaStats/AdaStats.tsx";
 import JiraBacklog from "./pages/JiraBacklog/JiraBacklog.tsx";
 import Tasks from "./pages/Tasks/Tasks.tsx";
 import Reports from "./pages/Reports/Reports.tsx";
+// Performance — self-contained feature, see pages/Performance/README.md to remove.
+import Performance from "./pages/Performance/Performance.tsx";
 import Users from "./pages/Settings/Users/Users.tsx";
 
 const router = createBrowserRouter([
@@ -40,6 +42,8 @@ const router = createBrowserRouter([
         children: [
           { path: "/app/sling-schedule", element: <SlingSchedule /> },
           { path: "/app/schedule", element: <Schedule /> },
+          // Not under AdminRoute: access is a named allowlist the page checks itself.
+          { path: "/app/performance", element: <Performance /> },
           // Every settings page shares SettingsLayout's sidebar. Users is admin-only.
           {
             path: "/app/settings",
