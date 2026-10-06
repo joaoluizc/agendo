@@ -67,12 +67,26 @@ async function shiftsForUser(clerkId, from, toExclusive) {
 }
 
 /**
- * Render a person's shifts, grouped by day.
+ * Render a person's shifts, grouped by the day each one starts.
  *
  * Days with nothing on them are stated as such rather than omitted. "Not working" is an
  * answer; a missing row is ambiguous between that and a tool that failed to look.
+ *
+ * A shift is included when it *overlaps* the requested days, not only when it starts
+ * inside them — `shiftService.findShiftsByRange` is an overlap query and that is the
+ * right behaviour here. Support runs night shifts that cross midnight UTC, so asking
+ * about Tuesday and being told nothing about the 22:00 Monday shift still running at
+ * 01:00 Tuesday would hide real coverage.
+ *
+ * The cost is that such a shift groups under a day outside the range the heading states.
+ * Rather than drop it or silently contradict the heading, the day is labelled as
+ * overlapping. Found by running the tool against real data: asking for Tue–Wed returned
+ * a block headed "Mon, 5 Oct" with no explanation.
  */
 function renderSchedule({ heading, shifts, from, to, timeZone, positionsById }) {
+  const firstKey = dayKey(from, timeZone);
+  const lastKey = dayKey(to, timeZone);
+  const outsideRange = (key) => key < firstKey || key > lastKey;
   const lines = [heading, ""];
 
   if (!shifts.length) {
@@ -91,8 +105,14 @@ function renderSchedule({ heading, shifts, from, to, timeZone, positionsById }) 
   }
 
   let totalMinutes = 0;
-  for (const [, dayShifts] of byDay) {
-    lines.push(dayLabel(dayShifts[0].startTime, timeZone));
+  let overlapping = 0;
+  for (const [key, dayShifts] of byDay) {
+    const spills = outsideRange(key);
+    if (spills) overlapping += dayShifts.length;
+    lines.push(
+      dayLabel(dayShifts[0].startTime, timeZone) +
+        (spills ? "  (outside the range asked for — runs into it)" : ""),
+    );
     for (const shift of dayShifts) {
       totalMinutes += (shift.endTime - shift.startTime) / 60000;
       lines.push(
@@ -108,6 +128,12 @@ function renderSchedule({ heading, shifts, from, to, timeZone, positionsById }) 
     `${items.length} shift${items.length === 1 ? "" : "s"}, ` +
       `${Math.round((totalMinutes / 60) * 10) / 10}h total.`,
   );
+  if (overlapping) {
+    lines.push(
+      `Includes ${overlapping} shift${overlapping === 1 ? "" : "s"} starting outside ` +
+        `${dayLabel(from, timeZone)} – ${dayLabel(to, timeZone)} that run${overlapping === 1 ? "s" : ""} into it.`,
+    );
+  }
   if (note) lines.push(note);
   return lines;
 }
