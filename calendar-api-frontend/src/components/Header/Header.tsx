@@ -2,6 +2,7 @@ import { Link, NavLink } from "react-router-dom";
 import { Clock, Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { usePerformanceAccess } from "@/pages/Performance/access";
 import { TimeFormatPreference, useTimeFormat } from "@/utils/timeFormat";
 import agendoLogoLight from "../../resources/agendo-logo.svg";
 import agendoLogoDark from "../../resources/agendo-logo-dark.svg";
@@ -17,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, UserButton, useAuth } from "@clerk/clerk-react";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -71,6 +72,9 @@ const MobileNavLink = ({
 const Header = () => {
   const { setTheme, theme } = useTheme();
   const { type, realType, viewAsAgent, setViewAsAgent } = useUserSettings();
+  const { isSignedIn } = useAuth();
+  // Performance is an allowlist, not an admin perk; hidden while previewing the agent view.
+  const showPerformance = usePerformanceAccess(Boolean(isSignedIn)) === true && !viewAsAgent;
   const {
     preference: timeFormat,
     setPreference: setTimeFormat,
@@ -244,6 +248,22 @@ const Header = () => {
                   </NavigationMenuItem>
                 </>
               )}
+              {showPerformance && (
+                <NavigationMenuItem>
+                  <NavLink
+                    to="/app/performance"
+                    className={({ isActive }) =>
+                      `${
+                        isActive ? "text-foreground" : "text-muted-foreground"
+                      } transition-colors hover:text-foreground`
+                    }
+                  >
+                    <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                      Performance
+                    </NavigationMenuLink>
+                  </NavLink>
+                </NavigationMenuItem>
+              )}
             </SignedIn>
           </NavigationMenuList>
         </NavigationMenu>
@@ -301,6 +321,11 @@ const Header = () => {
                       Reports
                     </MobileNavLink>
                   </>
+                )}
+                {showPerformance && (
+                  <MobileNavLink to="/app/performance" onNavigate={closeMenu}>
+                    Performance
+                  </MobileNavLink>
                 )}
               </SignedIn>
             </nav>

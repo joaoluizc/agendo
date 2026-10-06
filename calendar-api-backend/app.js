@@ -24,6 +24,8 @@ import jiraBacklogRouter from "./src/jiraBacklog/jiraBacklogRouter.js";
 import { startJiraBacklogScheduler } from "./src/jiraBacklog/scheduler.js";
 // Reports — self-contained module, see src/reports/README.md to remove.
 import reportsRouter from "./src/reports/reportsRouter.js";
+// Performance — self-contained module, see src/performance/README.md to remove.
+import performanceRouter from "./src/performance/performanceRouter.js";
 // MCP server — self-contained module, see src/mcp/README.md to remove.
 import { mountMcpRoutes } from "./src/mcp/mcpRouter.js";
 
@@ -103,6 +105,9 @@ app.use("/jira-backlog", requireAuth(), jiraBacklogRouter);
 
 // Reports (self-contained module). Admin-only end to end via adminOnly middleware.
 app.use("/reports", requireAuth(), reportsRouter);
+
+// Performance (self-contained module). Gated in src/performance/lib/access.js (admin-only).
+app.use("/performance", requireAuth(), performanceRouter);
 
 app.get("/auth-check", requireAuth(), (req, res) =>
   res.status(200).json({ message: "authenticated" }),
