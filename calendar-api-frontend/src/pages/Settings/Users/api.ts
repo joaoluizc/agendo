@@ -49,6 +49,15 @@ export type SavedPreferences = {
 };
 
 export const usersApi = {
+  /**
+   * Set an agent's timezone. Admin-only server-side (`adminOnly` on
+   * `PUT /user/:clerkId/timezone`), not merely hidden in this UI.
+   */
+  setTimezone: (userId: string, timezone: string) =>
+    request<{ clerkId: string; timezone: string }>(
+      `/${encodeURIComponent(userId)}/timezone`,
+      { method: "PUT", body: { timezone } }
+    ),
   /** `userId` is the agent's Clerk id — `UserSafeInfo.id`. */
   savePreferences: (userId: string, preferences: string) =>
     request<SavedPreferences>(`/${encodeURIComponent(userId)}/preferences`, {

@@ -18,6 +18,8 @@ export type UserSafeInfo = {
     email?: string;
     /** Admin-only. Absent for non-admin callers. */
     slingId?: string;
+    /** Admin-only. The agent's stored IANA timezone; "UTC" until they or an admin set one. */
+    timezone?: string;
     /** Admin-only. Absent for non-admin callers. Never gate UI on this - use
      *  `useUserSettings().type`, which comes from `/user/info`. */
     type?: string;

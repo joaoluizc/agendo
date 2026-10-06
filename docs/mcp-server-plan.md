@@ -280,7 +280,7 @@ write surface, and read-only is a safe thing to be wrong about.
 **Phase 4 — `apply_schedule` / constraints-app integration**, if Phase 3 shows it earns
 its place.
 
-**Phase 5 (last) — Timezone settings UI.** Make `User.timezone` real.
+**Phase 5 — Timezone settings UI. Shipped 2026-10-05.** `User.timezone` is real.
 
 Two capabilities on agendo's settings screen:
 
@@ -294,9 +294,24 @@ Two capabilities on agendo's settings screen:
 Gate the admin path with `adminOnly` server-side, not only in the UI — that is the hole
 closed for shift mutations and it should not be reopened here.
 
-Worth knowing when building the backfill: **Sling already holds real per-user timezones**
-(`docs/schedule-example.json` shows `Asia/Manila` for one agent), so a one-time seed from
-Sling beats asking 18 people to fill in a form. Seed once; do not read Sling live —
+**Built:** `PUT /user/me/timezone` (self-service, any authenticated user) and
+`PUT /user/:clerkId/timezone` (`adminOnly`), a searchable zone picker, a *Your timezone*
+card in Settings → General, and the same control per agent in Settings → Users. The admin
+roster shape now carries `timezone`.
+
+**A trap worth recording.** The validator first checked against
+`Intl.supportedValuesOf("timeZone")`, which looks like the obvious list and is the wrong
+one: it returns *canonical* names and omits `"UTC"` — the value every single user holds.
+Validating against it rejected the whole roster, so saving an unmodified profile failed.
+Caught by a round-trip test that could not restore the value it had just read. It now asks
+`Intl.DateTimeFormat` directly, which is the question that actually matters: will
+rendering a time in this zone throw later, far from here.
+
+**Backfill, still open.** The off-schema `timeZone` field (camelCase, unreadable by
+Mongoose) turned out to hold the number `0` for all 18 users — a UTC-offset field, not a
+zone — so there is no hidden real data to recover. **Sling does hold real per-user
+timezones** (`docs/schedule-example.json` shows `Asia/Manila`), so a one-time seed from
+Sling still beats asking 18 people to fill in a form. Seed once; do not read Sling live —
 agendo is migrating off it.
 
 Why last: nothing else is blocked on it. The read tools work correctly without it as long

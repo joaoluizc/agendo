@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
  */
 const SECTIONS = [
   { id: "shifts-to-add-to-cal", label: "Synced shifts", adminOnly: false },
+  { id: "timezone", label: "Your timezone", adminOnly: false },
   { id: "generate-api-token", label: "API Token", adminOnly: true },
   { id: "manage-locations", label: "Locations", adminOnly: true },
   { id: "manage-positions", label: "Positions", adminOnly: true },
