@@ -3,7 +3,6 @@
  * are never stored — they are a function of those inputs and a methodology version, so
  * they are recomputed on every read (a quarter is ~40 agents of arithmetic).
  */
-import { User } from "../../models/UserModel.js";
 import Location from "../../models/LocationModel.js";
 import { Fact } from "../models/factModel.js";
 import { Period } from "../models/periodModel.js";
@@ -11,34 +10,40 @@ import periodService from "./periodService.js";
 import methodologyService from "./methodologyService.js";
 import hoursService from "./hoursService.js";
 import importService from "./importService.js";
+import { loadDirectory as loadPeople, isAgentId } from "./directory.js";
 import { scorePeriod } from "../engine/score.js";
 import { defaultRegions } from "../lib/regions.js";
 import { previousQuarter, periodKey } from "../lib/quarters.js";
 
+/** People (users + Performance-only agents, see directory.js) and default regions. */
 async function loadDirectory() {
-  const [users, locations] = await Promise.all([
-    User.find().select("clerkId firstName lastName").lean(),
+  const [people, locations] = await Promise.all([
+    loadPeople(),
     Location.find().select("name assignedUsers").lean(),
   ]);
-  return {
-    userById: new Map(users.filter((u) => u.clerkId).map((u) => [u.clerkId, u])),
-    regions: defaultRegions(locations),
-  };
+  return { ...people, regions: defaultRegions(locations) };
 }
 
-async function loadInputs(period, { refresh }) {
-  const facts = await Fact.find({ periodKey: period.key }).lean();
+/**
+ * Facts saved under a Performance-only agent who has since got an account are read as
+ * that account's. If both exist for one source, the account's own fact wins.
+ */
+async function loadInputs(period, { refresh }, directory) {
+  const facts = (await Fact.find({ periodKey: period.key }).lean())
+    .map((fact) => ({ ...fact, clerkId: directory.resolve(fact.clerkId), viaAgent: isAgentId(fact.clerkId) }))
+    .sort((a, b) => Number(b.viaAgent) - Number(a.viaAgent));
   const factsByClerk = {};
-  const hoursFacts = [];
+  const hoursByClerk = new Map();
   const factCounts = {};
   for (const fact of facts) {
     factCounts[fact.source] = (factCounts[fact.source] || 0) + 1;
     if (fact.source === "hours") {
-      hoursFacts.push(fact);
+      hoursByClerk.set(fact.clerkId, fact);
       continue;
     }
     factsByClerk[fact.clerkId] = { ...(factsByClerk[fact.clerkId] || {}), [fact.source]: fact.metrics };
   }
+  const hoursFacts = [...hoursByClerk.values()];
   const hours = await hoursService.minutesForPeriod(period, hoursFacts, { refresh });
   return { factsByClerk, hoursFacts, factCounts, hours };
 }
@@ -50,7 +55,12 @@ async function loadInputs(period, { refresh }) {
  * instead of silently missing.
  */
 function buildRoster(period, inputs, directory) {
-  const setup = new Map((period.agents || []).map((a) => [a.clerkId, a]));
+  // Setup saved under an agent id follows the agent to their account; an entry saved
+  // under the account itself takes precedence.
+  const setup = new Map();
+  for (const entry of [...(period.agents || [])].sort((a, b) => Number(isAgentId(b.clerkId)) - Number(isAgentId(a.clerkId)))) {
+    setup.set(directory.resolve(entry.clerkId), { ...entry, clerkId: directory.resolve(entry.clerkId) });
+  }
   const ids = new Set(setup.keys());
   for (const id of Object.keys(inputs.factsByClerk)) ids.add(id);
   for (const fact of inputs.hoursFacts) ids.add(fact.clerkId);
@@ -59,16 +69,18 @@ function buildRoster(period, inputs, directory) {
   }
   return [...ids].map((clerkId) => {
     const saved = setup.get(clerkId);
-    const user = directory.userById.get(clerkId);
+    const person = directory.people.get(clerkId);
     return {
       clerkId,
-      name: user ? `${user.firstName} ${user.lastName}`.trim() : null,
-      region: saved ? saved.region ?? null : directory.regions.get(clerkId) ?? null,
+      name: person?.name ?? null,
+      region: saved ? saved.region ?? null : person?.region ?? directory.regions.get(clerkId) ?? null,
       role: saved?.role ?? "regular",
       cohortOverride: saved?.cohortOverride ?? null,
       note: saved?.note ?? "",
       inSetup: Boolean(saved),
-      userMissing: !user,
+      userMissing: !person,
+      // Performance-only, no agendo account yet.
+      external: Boolean(person?.external),
     };
   });
 }
@@ -94,7 +106,7 @@ function withLeadsAsAgents(config) {
 }
 
 async function scoreWith(period, methodology, directory, { refresh = false } = {}) {
-  const inputs = await loadInputs(period, { refresh });
+  const inputs = await loadInputs(period, { refresh }, directory);
   const roster = buildRoster(period, inputs, directory);
   const result = scorePeriod({
     agents: roster,
@@ -168,6 +180,7 @@ async function getScores(key, { methodologyKey, refresh = false, includeLeads = 
     const flags = [...row.flags];
     if (!agent.inSetup) flags.push("setupDefaulted");
     if (agent.userMissing) flags.push("userMissing");
+    if (agent.external) flags.push("noAccount");
     if (minutes?.source === "override") flags.push("hoursOverridden");
     return {
       ...row,
@@ -207,7 +220,7 @@ async function getOverview(key, { refresh = false } = {}) {
   const period = await periodService.getPeriod(key);
   const methodology = await methodologyService.getMethodology(period.methodologyKey);
   const directory = await loadDirectory();
-  const inputs = await loadInputs(period, { refresh });
+  const inputs = await loadInputs(period, { refresh }, directory);
   const roster = buildRoster(period, inputs, directory);
   const hoursFactIds = new Set(inputs.hoursFacts.map((f) => f.clerkId));
 

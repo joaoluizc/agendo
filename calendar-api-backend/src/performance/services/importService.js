@@ -8,11 +8,11 @@
  * and records everything it replaced in the import document.
  */
 import crypto from "crypto";
-import { User } from "../../models/UserModel.js";
 import { Fact } from "../models/factModel.js";
 import { Import, MAX_IMPORT_CHARS } from "../models/importModel.js";
 import { Alias } from "../models/aliasModel.js";
 import periodService from "./periodService.js";
+import { loadDirectory } from "./directory.js";
 import { parsePaste, SOURCES } from "../lib/parsePaste.js";
 import { matchAgent, normalizeName } from "../lib/names.js";
 import { badRequest } from "../lib/httpError.js";
@@ -25,12 +25,17 @@ function assertInput(source, text) {
   }
 }
 
+/**
+ * Agendo users plus Performance-only agents (no account yet), as one list to match
+ * against. An alias saved for an agent who has since got an account resolves to them.
+ */
 async function loadMatchingContext() {
-  const users = (await User.find().select("clerkId firstName lastName email").lean()).filter(
-    (u) => u.clerkId,
+  const directory = await loadDirectory();
+  const users = directory.matchable();
+  const aliases = new Map(
+    (await Alias.find().lean()).map((a) => [a.normalized, directory.resolve(a.clerkId)]),
   );
-  const aliases = new Map((await Alias.find().lean()).map((a) => [a.normalized, a.clerkId]));
-  return { users, aliases, userById: new Map(users.map((u) => [u.clerkId, u])) };
+  return { users, aliases, directory, userById: new Map(users.map((u) => [u.clerkId, u])) };
 }
 
 const fullName = (user) => (user ? `${user.firstName} ${user.lastName}`.trim() : null);
@@ -52,7 +57,7 @@ async function previewImport({ periodKey, source, text, columns }) {
   assertInput(source, text);
   const period = await periodService.getPeriod(periodKey);
   const parsed = parsePaste(text, source, columns || null);
-  const { users, aliases, userById } = await loadMatchingContext();
+  const { users, aliases, userById, directory } = await loadMatchingContext();
 
   const rows = parsed.rows.map((row) => {
     const match = matchAgent(row, users, aliases);
@@ -68,8 +73,8 @@ async function previewImport({ periodKey, source, text, columns }) {
   const matched = new Set(rows.map((r) => r.match.clerkId).filter(Boolean));
   const existing = await Fact.find({ periodKey, source }).select("clerkId").lean();
   const wouldRemove = existing
-    .filter((f) => !matched.has(f.clerkId))
-    .map((f) => ({ clerkId: f.clerkId, name: fullName(userById.get(f.clerkId)) }));
+    .filter((f) => !matched.has(directory.resolve(f.clerkId)))
+    .map((f) => ({ clerkId: f.clerkId, name: fullName(userById.get(directory.resolve(f.clerkId))) }));
 
   return {
     period: { key: period.key, label: period.label, status: period.status },
@@ -97,7 +102,7 @@ async function commitImport({ periodKey, source, text, columns, decisions, creat
 
   const parsed = parsePaste(text, source, columns || null);
   if (parsed.errors?.length) throw badRequest(parsed.errors.join("; "));
-  const { userById } = await loadMatchingContext();
+  const { userById, directory } = await loadMatchingContext();
   const byLine = new Map(decisions.map((d) => [Number(d.line), d]));
 
   const accepted = [];
@@ -106,7 +111,8 @@ async function commitImport({ periodKey, source, text, columns, decisions, creat
   for (const row of parsed.rows) {
     const decision = byLine.get(row.line);
     if (!decision) throw badRequest(`line ${row.line} (${row.rawName}) has no decision`);
-    const clerkId = decision.clerkId || null;
+    // An agent without an account who has since got one is filed under the account.
+    const clerkId = decision.clerkId ? directory.resolve(decision.clerkId) : null;
     if (clerkId) {
       if (row.errors.length) {
         throw badRequest(`line ${row.line} (${row.rawName}) has errors — skip it or fix the paste`);

@@ -255,6 +255,8 @@ export interface OverviewAgent {
   note: string;
   inSetup: boolean;
   userMissing: boolean;
+  /** A Performance-only agent: no agendo account (yet). */
+  external: boolean;
   sources: Record<ImportSource, boolean>;
   minutes: { chats: number; tickets: number; other: number; unresolved: number };
   hoursSource: string | null;
@@ -335,6 +337,19 @@ export interface AgentSetup {
   note: string;
 }
 
+/**
+ * Someone scored without an agendo account. Once a user with this email exists, the
+ * backend files everything under that user (`linkedTo`).
+ */
+export interface ExternalAgent {
+  agentId: string;
+  name: string;
+  email: string;
+  region: Region | null;
+  linkedTo: string | null;
+  linkedName: string | null;
+}
+
 const q = encodeURIComponent;
 
 export const performanceApi = {
@@ -362,6 +377,10 @@ export const performanceApi = {
       method: "POST",
       body,
     }),
+  listAgents: () => request<ExternalAgent[]>("/agents"),
+  createAgent: (body: { name: string; email: string; region: Region | null; periodKey?: string; role?: string }) =>
+    request<ExternalAgent>("/agents", { method: "POST", body }),
+  deleteAgent: (agentId: string) => request<void>(`/agents/${q(agentId)}`, { method: "DELETE" }),
   getScores: (key: string, methodologyKey?: string | null, refresh = false, includeLeads = false) => {
     const params = new URLSearchParams();
     if (methodologyKey) params.set("methodology", methodologyKey);
