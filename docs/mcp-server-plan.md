@@ -244,10 +244,30 @@ risky assumption — that Clerk OAuth works end to end, through Render, with the
 before any tool design is committed. If it fails, the approach needs rethinking, so it
 comes first.
 
-**Phase 1 — Read tools.** The four read tools, `registerTool` wrapper, `format.js`
-shaping, audit logging, domain assertion. Little-to-no controller extraction needed:
-`shiftService.findShiftsByRange` and `coverageMeterService.getMeters` are already
-callable. This is the phase that delivers user value.
+**Phase 1 — Read tools. Shipped 2026-10-05.** `get_my_schedule`,
+`get_agent_schedule`, `get_coverage_at` and admin-only `find_coverage_gaps`, over
+`src/mcp/lib/format.js` (rendering) and `src/mcp/lib/roster.js` (id → name). No
+controller extraction was needed: `shiftService.findShiftsByRange` and
+`coverageMeterService.getMeters` were already callable.
+
+**Timezone reality check (audited 2026-10-05): `User.timezone` is unusable.** All 18
+production users and all 15 dev users hold the schema default `"UTC"` — not one real
+value. The field was added but never wired up: the web UI reads the *browser's* timezone,
+so nothing ever wrote it.
+
+An MCP client has no browser to ask, so that trick is unavailable here. Until Phase 5
+populates the field, the rule is:
+
+- **Never render a bare time.** Every timestamp carries its zone explicitly — `14:00 UTC`,
+  not `14:00`. A bare time that is silently wrong by several hours is worse than an
+  obviously-labelled one, because it looks authoritative.
+- Use `mongoUser.timezone` where it is set. Today that always yields UTC, which is at
+  least honest once labelled, and it means the tools need no change when Phase 5 lands.
+- Do not infer a timezone from anything else — not the shift data, not the locale, not
+  Sling. Guessing produces confident wrongness.
+
+`whoami` reports the caller's timezone precisely so a surprising answer is explicable
+without an engineer. That is no longer hypothetical: it is how this was found.
 
 **Phase 2 — Rollout to the support team.** CIMD and the allowlist are already in place
 from Phase 0; before real users connect, confirm **Client admission is "Pre-registered
@@ -259,6 +279,30 @@ write surface, and read-only is a safe thing to be wrong about.
 
 **Phase 4 — `apply_schedule` / constraints-app integration**, if Phase 3 shows it earns
 its place.
+
+**Phase 5 (last) — Timezone settings UI.** Make `User.timezone` real.
+
+Two capabilities on agendo's settings screen:
+
+- **An agent sets their own timezone.** Default the picker to the browser's detected zone
+  so it is one confirming click, but *store the choice* rather than continuing to infer
+  it — inference is exactly why the field is empty today.
+- **An admin sets anyone's timezone**, from the same roster view used elsewhere in
+  settings. The support team spans several countries and people do not reliably update
+  their own profile; an admin needs to fix a wrong one without asking.
+
+Gate the admin path with `adminOnly` server-side, not only in the UI — that is the hole
+closed for shift mutations and it should not be reopened here.
+
+Worth knowing when building the backfill: **Sling already holds real per-user timezones**
+(`docs/schedule-example.json` shows `Asia/Manila` for one agent), so a one-time seed from
+Sling beats asking 18 people to fill in a form. Seed once; do not read Sling live —
+agendo is migrating off it.
+
+Why last: nothing else is blocked on it. The read tools work correctly without it as long
+as they label the zone, and this is a UI change with a data migration, which is a
+different kind of work from everything above. It is on the list because leaving the field
+permanently fictional means every future time-rendering decision inherits the same trap.
 
 ## Verification
 
