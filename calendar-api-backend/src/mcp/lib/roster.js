@@ -1,5 +1,6 @@
 import userService from "../../services/userService.js";
 import positionService from "../../services/positionService.js";
+import locationService from "../../services/locationService.js";
 
 /**
  * Names for ids, so no tool ever hands an id to a model.
@@ -25,9 +26,12 @@ import positionService from "../../services/positionService.js";
  * round trip for data no tool renders.
  */
 export async function loadRoster() {
-  const [users, positions] = await Promise.all([
+  const [users, positions, locations] = await Promise.all([
     userService.findAllUsers(),
     positionService.getPositions(),
+    // `Location.assignedUsers` holds Clerk ids, the same space as `Shift.userId`, so a
+    // location filter narrows to people by a direct lookup rather than another join.
+    locationService.getAllLocations().catch(() => []),
   ]);
 
   const usersByClerkId = new Map();
@@ -40,7 +44,7 @@ export async function loadRoster() {
     positionsById.set(String(position._id), position);
   }
 
-  return { users, usersByClerkId, positions, positionsById };
+  return { users, usersByClerkId, positions, positionsById, locations };
 }
 
 /** `João Coelho`, falling back to the email, then to the raw id. */
@@ -140,6 +144,24 @@ export function findPositionsByName(query, positions) {
   return scored.filter((s) => s.rank === best).map((s) => s.position);
 }
 
+/** Find locations by a loosely-typed name, returning every match. */
+export function findLocationsByName(query, locations) {
+  const needle = normalise(query);
+  if (!needle) return [];
+  const scored = [];
+  for (const location of locations) {
+    const name = normalise(location.name);
+    let rank = null;
+    if (name === needle) rank = 0;
+    else if (name.startsWith(needle)) rank = 1;
+    else if (name.includes(needle)) rank = 2;
+    if (rank !== null) scored.push({ location, rank });
+  }
+  if (!scored.length) return [];
+  const best = Math.min(...scored.map((s) => s.rank));
+  return scored.filter((s) => s.rank === best).map((s) => s.location);
+}
+
 /** Lowercase, strip accents, collapse whitespace. */
 function normalise(value) {
   return String(value || "")
@@ -153,6 +175,7 @@ function normalise(value) {
 export default {
   loadRoster,
   findPositionsByName,
+  findLocationsByName,
   userDisplayName,
   resolveUserLabel,
   resolvePositionName,
