@@ -1,3 +1,5 @@
+import type { Permissions } from "@/permissions/permissions";
+
 /**
  * A roster entry from `GET /api/user/all`.
  *
@@ -14,21 +16,27 @@ export type UserSafeInfo = {
     lastName: string;
     imageUrl: string;
     hasImage: boolean;
-    /** Admin-only. Absent for non-admin callers - see userController.getAllUsers. */
+    /** Admins and schedule builders. Absent for everyone else - see permissions/shaping.js. */
     email?: string;
-    /** Admin-only. Absent for non-admin callers. */
+    /** Admins and schedule builders. Absent for everyone else. */
     slingId?: string;
-    /** Admin-only. The agent's stored IANA timezone; "UTC" until they or an admin set one. */
+    /** Admins and schedule builders. The agent's stored IANA timezone; "UTC" until they or an admin set one. */
     timezone?: string;
-    /** Admin-only. Absent for non-admin callers. Never gate UI on this - use
-     *  `useUserSettings().type`, which comes from `/user/info`. */
+    /** Admin-only. Whether this person is an admin. Never gate UI on it — gate on
+     *  `useUserSettings().can` / `isAdmin`, which come from `/user/info`. */
     type?: string;
-    /** Admin-only. Managers' notes on how this agent likes to be scheduled, as HTML
-     *  from Settings → Users; "" when there are none. Absent for non-admin callers.
-     *  Render with `PreferencesContent`, never as raw HTML. */
+    /** Admin-only. Their stored area levels (null = never set), for the access editor. */
+    permissions?: Partial<Permissions> | null;
+    /** Admin-only. ISO time their access last changed, or null. */
+    permissionsUpdatedAt?: string | null;
+    /** Admin-only. Clerk id of the admin who last changed it, or "migration"/"provisioning". */
+    permissionsUpdatedBy?: string | null;
+    /** Admins and schedule builders (scheduling:edit). Managers' notes on how this agent
+     *  likes to be scheduled, as HTML from Settings → Users; "" when there are none.
+     *  Absent for everyone else. Render with `PreferencesContent`, never as raw HTML. */
     preferences?: string;
-    /** Admin-only. ISO time `preferences` was last saved, or null. */
+    /** Admins and schedule builders. ISO time `preferences` was last saved, or null. */
     preferencesUpdatedAt?: string | null;
-    /** Admin-only. Clerk id of the admin who last saved `preferences`, or null. */
+    /** Admins and schedule builders. Clerk id of the admin who last saved `preferences`, or null. */
     preferencesUpdatedBy?: string | null;
 };

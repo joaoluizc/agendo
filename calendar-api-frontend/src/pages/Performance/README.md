@@ -27,8 +27,9 @@ another version; the selector only appears once there are two.
 ## Conventions
 
 - `api.ts` follows `pages/Reports/api.ts`.
-- `access.ts` asks `GET /performance/access` once per page load. The nav links and the
-  page use it, and the route sits outside `AdminRoute`, since access isn't an admin perk.
+- Access is `performance: edit` (admins have it): main.tsx guards the route and the header
+  offers the link from `useUserSettings().meets`. There is no self level — agents never see
+  the score.
 - Quarter dates are formatted in the quarter's own timezone (`period.tz`). Don't reuse
   Reports' `DateRangePicker`, which builds quarters in the browser's timezone.
 

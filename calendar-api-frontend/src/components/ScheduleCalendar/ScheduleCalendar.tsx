@@ -88,7 +88,7 @@ const Schedule = () => {
   } = useSchedule();
   const { selectedDate, dateKey, setDate } = useScheduleDateParam();
   const datepickerRef = useRef<AirDatepicker | null>(null);
-  const { type, allUsers, allPositions, coverageMeters } =
+  const { isAdmin, can, allUsers, allPositions, coverageMeters } =
     useUserSettings();
 
   /**
@@ -216,9 +216,11 @@ const Schedule = () => {
   const { user } = useUser();
   const visitorId = user?.id;
 
-  const isAdmin = type === "admin";
-  useSelectShortcuts(isAdmin);
-  useUndoShortcut(isAdmin);
+  // Building the schedule — drafts, gestures, publishing, coverage — is scheduling:edit.
+  // Everyone's personal Google Calendar overlay stays admin-only (`isAdmin`).
+  const canEditSchedule = can("scheduling", "edit");
+  useSelectShortcuts(canEditSchedule);
+  useUndoShortcut(canEditSchedule);
   const isMobile = useIsMobile();
   const isToday =
     startOfLocalDay(selectedDate).getTime() ===
@@ -240,7 +242,7 @@ const Schedule = () => {
    */
   const pinSentinelRef = useRef<HTMLDivElement>(null);
   const [coverageCompact, setCoverageCompact] = useState(false);
-  const compactSaving = isAdmin ? coverageMeters.length * COMPACT_SAVING_PX : 0;
+  const compactSaving = canEditSchedule ? coverageMeters.length * COMPACT_SAVING_PX : 0;
 
   useEffect(() => {
     if (compactSaving === 0) {
@@ -395,7 +397,7 @@ const Schedule = () => {
   // Load shifts (and, for admins, Google Calendar events) for the selected day.
   useEffect(() => {
     fetchData(selectedDate);
-  }, [dateKey, type]);
+  }, [dateKey, isAdmin, canEditSchedule]);
 
   /**
    * Leave select-shifts mode entirely when the day changes.
@@ -600,7 +602,7 @@ const Schedule = () => {
       {/* Creating a shift no longer syncs it, so the day needs somewhere that says
           out loud what has not been committed yet. Renders nothing when the day is
           fully published. */}
-      {isAdmin && (
+      {canEditSchedule && (
         <PublishDraftsBar
           shifts={visibleShifts}
           onPublished={reloadCurrentDay}
@@ -673,8 +675,8 @@ const Schedule = () => {
                 selectedDate={selectedDate}
               />
 
-              {/* Coverage rows are admin-only, on the client and on the API. */}
-              {isAdmin &&
+              {/* Coverage rows need scheduling:edit, on the client and on the API. */}
+              {canEditSchedule &&
                 coverageMeters.map((meter) => (
                   <CoverageRow
                     key={meter._id}
@@ -769,14 +771,14 @@ const Schedule = () => {
         )}
 
         <ScheduleLegend
-          showCoverage={isAdmin}
+          showCoverage={canEditSchedule}
           showEvents={isAdmin && showCalendarEvents}
         />
 
         {/* Saves every grid gesture — a resize or a drop — as a draft, and asks only
             before a delete. Rendered here rather than per shift, since any of the 384
             EmptySlots can raise one. */}
-        {isAdmin && <PendingChangePrompt />}
+        {canEditSchedule && <PendingChangePrompt />}
       </div>
     </div>
   );

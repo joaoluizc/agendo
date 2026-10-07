@@ -16,8 +16,8 @@ type SlingSunsetBannerProps = {
  * an error. The link keeps the day, so switching over drops nobody back on today.
  */
 const SlingSunsetBanner = ({ dateKey }: SlingSunsetBannerProps) => {
-  const { type: userType } = useUserSettings();
-  if (userType !== "admin") return null;
+  const canEditSchedule = useUserSettings().can("scheduling", "edit");
+  if (!canEditSchedule) return null;
 
   return (
     <div className="mx-2 mb-4 flex items-center gap-3 rounded-lg border border-warn/35 bg-warn-bg px-3.5 py-2.5">

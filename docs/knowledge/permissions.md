@@ -5,9 +5,9 @@ replaced the admin/normal binary once agendo became the support team's hub. The 
 every decision behind it are in [`docs/permissions-plan.md`](../permissions-plan.md); this
 page is how it works and how to extend it.
 
-**Status:** enforced on the REST API (phase 2). Still to come: the admin access editor and
-the frontend reading `permissions` (phase 4), and the MCP tools (phase 3). Until phase 3,
-the MCP still splits tools by admin vs. normal.
+**Status:** enforced on the REST API, and the frontend gates on it with an access editor on
+Settings → Users. Still to come: the MCP tools (phase 3). Until then the MCP still splits
+tools by admin vs. normal.
 
 ## The model
 
@@ -54,7 +54,9 @@ the MCP still splits tools by admin vs. normal.
 | Mount table (routers + paths) | `src/routes.js` |
 | Effective access for the UI | `GET /user/info` → `isAdmin`, `permissions` |
 | Registry for the admin editor | `GET /user/permission-registry` |
-| Change someone's access (admin) | `PUT /user/:clerkId/permissions` |
+| Change someone's access (admin) | `PUT /user/:clerkId/permissions`, from the Access card on Settings → Users |
+| Frontend mirror of the areas and levels; `meets`, preview presets | `calendar-api-frontend/src/permissions/permissions.ts` |
+| Route guard and nav table | `calendar-api-frontend/src/permissions/RequirePermission.tsx`, `pages.ts` |
 
 ## Every route declares one requirement
 
@@ -119,8 +121,26 @@ disagreed with the old gates.
 
 Every change is stamped (`permissionsUpdatedAt/By`) and appended to `PermissionAudit`.
 
-The user sees a change on their next request. On the frontend that is the next page load
-for now. MCP clients see new tools when their tool list refreshes (see the plan, §2).
+The **Access** card on Settings → Users does this one click at a time: each level change
+saves at once (and is audited); turning admin on or off asks first. It greys out your own
+access and the last admin's switch, as the server refuses both.
+
+The user sees a change on their next API call. The frontend re-reads `/user/info` when
+their tab comes back after a minute, so it shows without a reload. MCP clients see new
+tools when their tool list refreshes (see the plan, §2).
+
+## The frontend
+
+- `useUserSettings()` exposes `isAdmin`, `permissions` (effective, from `/user/info`),
+  `can(area, level)` and `meets(requirement)`. Gate UI on those — never on a roster `type`.
+- `calendar-api-frontend/src/permissions/permissions.ts` mirrors the backend registry's areas
+  and levels (the server stays the authority). A new area needs adding there to gate its
+  pages; the editor's labels and descriptions come from `GET /user/permission-registry`.
+- Routes are wrapped in `<RequirePermission requires="…">` in `main.tsx`, which shows a "no
+  access" page rather than bouncing home. The header offers only the pages you can open
+  (`permissions/pages.ts`).
+- In a dev build, an admin can preview the UI as someone else from the **localhost** badge
+  (see [Frontend build & lint](frontend-build-and-lint.md)).
 
 ## Adding an area
 

@@ -130,7 +130,6 @@ const EXPECTED = {
   "GET /reports/hours": "reports:self",
 
   // Performance (no self level — agents never see the score)
-  "GET /performance/access": "signedIn", // removed with the old frontend gate
   "GET /performance/methodologies": "performance:edit",
   "GET /performance/methodologies/:key": "performance:edit",
   "GET /performance/periods": "performance:edit",
@@ -228,5 +227,5 @@ test("the route → requirement map matches the reviewed contract", () => {
     .filter((key) => key in actual && actual[key] !== EXPECTED[key])
     .map((key) => `${key}: expected ${EXPECTED[key]}, got ${actual[key]}`);
   assert.deepEqual({ missing, unexpected, changed }, { missing: [], unexpected: [], changed: [] });
-  assert.equal(routes.length, 107);
+  assert.equal(routes.length, 106);
 });

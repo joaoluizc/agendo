@@ -2,8 +2,8 @@ import { CoverageMeter } from "@/types/coverageTypes";
 import { normalizeTargets } from "@/utils/coverageTargets";
 
 /**
- * Coverage meters are admin-only on the API too (both routes are behind adminOnly),
- * so a non-admin gets a 403 here — callers must gate on `type === "admin"` rather
+ * Coverage meters need scheduling:edit on the API too (both routes),
+ * so anyone else gets a 403 here — callers must gate on `can("scheduling", "edit")` rather
  * than relying on an empty list coming back.
  */
 

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useTimeFormat } from "@/utils/timeFormat";
+import { useUserSettings } from "@/providers/useUserSettings";
 import DateRangePicker, { DateRangeValue, PresetKey, presetRange, shiftRange } from "./DateRangePicker";
 import { reportsApi, HoursReportRow } from "./api";
 import { usePageTitle } from "./use-page-title";
@@ -88,7 +89,8 @@ function SortableHead({
   columnKey: ColumnKey;
   sort: SortState;
   onSort: (key: ColumnKey) => void;
-  onCopy: (key: ColumnKey) => void;
+  /** Absent in the self view: copying columns is for pasting the team's sheet. */
+  onCopy?: (key: ColumnKey) => void;
   align?: "left" | "right";
   className?: string;
 }) {
@@ -114,22 +116,24 @@ function SortableHead({
           {label}
           <SortIcon className={cn("h-3.5 w-3.5 shrink-0 opacity-70", !active && "max-sm:hidden")} />
         </button>
-        <button
-          type="button"
-          onClick={() => onCopy(columnKey)}
-          aria-label={`Copy ${label} column`}
-          title={`Copy ${label} column`}
-          className="text-muted-foreground opacity-70 hover:text-foreground hover:opacity-100 max-md:hidden"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </button>
+        {onCopy && (
+          <button
+            type="button"
+            onClick={() => onCopy(columnKey)}
+            aria-label={`Copy ${label} column`}
+            title={`Copy ${label} column`}
+            className="text-muted-foreground opacity-70 hover:text-foreground hover:opacity-100 max-md:hidden"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </TableHead>
   );
 }
 
 /**
- * Admin-only "agent hours" report: total hours worked per agent over a date range,
+ * The "agent hours" report: total hours worked per agent over a date range,
  * broken into Tickets/Chats/Other, from agendo shifts only (the backend stopped reading
  * Sling once its history was copied into agendo — see the backend's
  * src/reports/README.md). Location
@@ -137,9 +141,15 @@ function SortableHead({
  * that didn't match an agendo user by email never joined a Location and left most
  * agents under "Unassigned". That cause is gone, but the toggle hasn't been brought
  * back; the backend still supports groupByLocation for when it is.
+ *
+ * Who sees what is the server's call: reports:edit (and admins) get every agent's row;
+ * everyone else — reports:self, the default — gets only their own, and the page becomes
+ * "Your report" without the team tools (recalculating, copying columns for the sheet).
  */
 export default function Reports() {
   usePageTitle("Reports");
+  // reports:self sees one row — their own; the server narrows it and ignores ?refresh.
+  const seesEveryone = useUserSettings().can("reports", "edit");
 
   const [preset, setPreset] = useState<PresetKey>("currentQuarter");
   const [range, setRange] = useState<DateRangeValue>(defaultRange);
@@ -283,18 +293,21 @@ export default function Reports() {
           a 375px screen before the table got any. */}
       <main className="flex min-h-[calc(100vh_-_theme(spacing.16))] flex-1 flex-col gap-3 bg-muted/40 p-2 sm:gap-4 sm:p-4 md:gap-8 md:p-10">
         <div className="mx-auto grid w-full max-w-5xl gap-2 max-sm:px-1">
-          <h1 className="text-2xl font-semibold sm:text-3xl">Reports</h1>
+          <h1 className="text-2xl font-semibold sm:text-3xl">
+            {seesEveryone ? "Reports" : "Your report"}
+          </h1>
         </div>
         <div className="mx-auto w-full max-w-5xl">
           <Card>
             <CardHeader className="flex flex-col gap-4 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div className="grid gap-1.5">
-                <CardTitle>Agent hours</CardTitle>
+                <CardTitle>{seesEveryone ? "Agent hours" : "Your hours"}</CardTitle>
                 {/* The refresh tooltip's "calculated at", for a phone, where a tooltip
                     never opens. */}
                 {computedAt && (
                   <p className="text-xs text-muted-foreground sm:hidden">
-                    Calculated at {clock.time(computedAt)} · tap ↻ to recalculate
+                    Calculated at {clock.time(computedAt)}
+                    {seesEveryone && " · tap ↻ to recalculate"}
                   </p>
                 )}
                 {rangeRunsPastToday && (
@@ -356,7 +369,9 @@ export default function Reports() {
                 {/* The figures can be up to 10 minutes behind the shifts, because the
                     backend caches them and nothing clears that cache when a shift is
                     published. Rather than hide that, the tooltip states when they were
-                    computed and the button recomputes on demand. */}
+                    computed and the button recomputes on demand — for those who see the
+                    whole report; the server ignores a recompute from anyone else. */}
+                {seesEveryone && (
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -382,6 +397,7 @@ export default function Reports() {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
@@ -395,7 +411,7 @@ export default function Reports() {
                         columnKey="name"
                         sort={sort}
                         onSort={(k) => setSort(nextSort(sort, k))}
-                        onCopy={copyColumn}
+                        onCopy={seesEveryone ? copyColumn : undefined}
                         className={cn(
                           STICKY_AGENT,
                           "max-sm:shadow-[inset_0_0_0_999px_hsl(var(--muted)/0.4)]",
@@ -405,28 +421,28 @@ export default function Reports() {
                         columnKey="Tickets"
                         sort={sort}
                         onSort={(k) => setSort(nextSort(sort, k))}
-                        onCopy={copyColumn}
+                        onCopy={seesEveryone ? copyColumn : undefined}
                         align="right"
                       />
                       <SortableHead
                         columnKey="Chats"
                         sort={sort}
                         onSort={(k) => setSort(nextSort(sort, k))}
-                        onCopy={copyColumn}
+                        onCopy={seesEveryone ? copyColumn : undefined}
                         align="right"
                       />
                       <SortableHead
                         columnKey="Other"
                         sort={sort}
                         onSort={(k) => setSort(nextSort(sort, k))}
-                        onCopy={copyColumn}
+                        onCopy={seesEveryone ? copyColumn : undefined}
                         align="right"
                       />
                       <SortableHead
                         columnKey="totalHours"
                         sort={sort}
                         onSort={(k) => setSort(nextSort(sort, k))}
-                        onCopy={copyColumn}
+                        onCopy={seesEveryone ? copyColumn : undefined}
                         align="right"
                       />
                     </TableRow>
@@ -441,7 +457,9 @@ export default function Reports() {
                     ) : sortedRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                          No shifts in this range.
+                          {seesEveryone
+                            ? "No shifts in this range."
+                            : "No Tickets or Chats hours for you in this range."}
                         </TableCell>
                       </TableRow>
                     ) : (

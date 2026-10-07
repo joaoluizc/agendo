@@ -23,24 +23,24 @@ type PreferencesHoverCardProps = {
 /**
  * An agent's scheduling preferences, on hover over their name.
  *
- * Managers only, and only for an agent with a note: otherwise the trigger is returned
- * untouched, so wrapping a name costs nothing for everyone else. `preferences` only ever
- * arrives in the admin shape of /user/all, so the type check is a second gate, not the
- * first. See docs/knowledge/user-preferences.md.
+ * Schedule builders (scheduling:edit) only, and only for an agent with a note: otherwise
+ * the trigger is returned untouched, so wrapping a name costs nothing for everyone else.
+ * `preferences` only ever arrives in /user/all for admins and schedule builders, so the
+ * check here is a second gate, not the first. See docs/knowledge/user-preferences.md.
  */
 const PreferencesHoverCard = ({
   user,
   children,
   side = "right",
 }: PreferencesHoverCardProps) => {
-  const { type, allUsers } = useUserSettings();
+  const { can, allUsers } = useUserSettings();
   const { clock } = useTimeFormat();
   // Inside a modal dialog the card has to portal into it, or the dialog makes it inert —
   // and the dialog then has to be the collision boundary too, because it clips overflow
   // (same arrangement as PositionCombobox). null, i.e. body and viewport, elsewhere.
   const container = useDialogContentElement();
 
-  if (type !== "admin" || !user || !hasPreferences(user)) return children;
+  if (!can("scheduling", "edit") || !user || !hasPreferences(user)) return children;
 
   const editor = user.preferencesUpdatedBy
     ? allUsers.find((candidate) => candidate.id === user.preferencesUpdatedBy)

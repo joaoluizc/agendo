@@ -45,7 +45,7 @@ const FEATURES: { icon: typeof CalendarDays; index: string; title: string; body:
   { icon: ArrowLeftRight, index: "03", title: "Google Calendar sync", body: "Every shift becomes a calendar event on the right person’s schedule." },
   { icon: Users, index: "04", title: "Team-wide push", body: "Admins sync an entire day to every calendar in a single action." },
   { icon: Import, index: "05", title: "Sling import", body: "Read your existing Sling shifts and keep them in sync alongside Agendo." },
-  { icon: ShieldCheck, index: "06", title: "Role-based admin", body: "Publishing and team-wide calendar syncs stay in the right hands." },
+  { icon: ShieldCheck, index: "06", title: "Per-area access", body: "Admins choose who can view or edit the schedule, bugs, reports and performance." },
 ];
 
 const SYNC_POINTS = [

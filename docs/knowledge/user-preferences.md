@@ -6,7 +6,8 @@ _Last updated: 2026-09-24_
 
 A preferences note is free-form rich text ("mornings only", "no Fridays after 3pm") that an
 admin writes about an agent, so whoever builds shifts can glance at it while doing so.
-**Only admins (`User.type === "admin"`) can read or write it — agents never see theirs.**
+**Admins write it; admins and schedule builders (`scheduling: edit`) read it — agents never
+see theirs.** See [Permissions](permissions.md).
 
 ## Where it lives
 
@@ -14,7 +15,7 @@ admin writes about an agent, so whoever builds shifts can glance at it while doi
   `preferencesUpdatedAt` and `preferencesUpdatedBy` (the admin's Clerk id). Being on `User`,
   it is split by environment like the rest of the user doc (`dev-users` vs `users`), so a
   local backend never edits production agents' notes.
-- **Edited** on **Settings → Users** (`/app/settings/users`, under `AdminRoute`). Settings is
+- **Edited** on **Settings → Users** (`/app/settings/users`, admin-only). Settings is
   a layout route: `SettingsLayout` gives every settings page the same frame and sidebar
   (`SettingsNav` — **General**, today's long page, with its sections as `#hash` sub-items,
   then **Users**). General is planned to split into grouped pages (Your account, Team,

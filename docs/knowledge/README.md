@@ -12,4 +12,4 @@ teammates. Keep entries tight and skimmable; one topic per file.
 - [Schedule screens & date handling](frontend-schedule-date.md) — the two schedule screens, the URL `?date=` convention, clock times (24-hour or AM/PM), hiding Google events, the pinned hour rows, zoom, the phone layout, row order, and the date footguns
 - [User preferences](user-preferences.md) — managers' notes on agents: admin-only by `select: false` plus response allowlists, the Settings → Users page, the name hover card, and the lazy-loaded editor
 - [Performance](performance.md) — the quarterly Agent Performance Score: pasted facts + agendo hours + a versioned methodology, scores computed on read, locking, and the v1 decisions (APAC cohort, per-quarter benchmarks, σ as context)
-- [Frontend build & lint](frontend-build-and-lint.md) — what gates a build, why ESLint is noisy, and previewing the agent view on localhost
+- [Frontend build & lint](frontend-build-and-lint.md) — what gates a build, why ESLint is noisy, and previewing someone else's access on localhost

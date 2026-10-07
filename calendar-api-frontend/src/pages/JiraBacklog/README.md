@@ -10,9 +10,10 @@ places (the route and the nav link — see "Remove it").
 
 ## Behaviour
 
-- **Auth/roles:** any signed-in agendo user can view. Editing (panel edits, add/delete
-  rows, Jira fetches) is gated on `useUserSettings().type === "admin"`. The backend
-  enforces the same with `adminOnly`, so the UI gate is convenience, not security.
+- **Access:** the page needs `bugs: view`. Editing (panel edits, add/delete rows, Jira
+  fetches, tasks) needs `bugs: edit` (`useUserSettings().can("bugs", "edit")`); managing
+  bug statuses and MRR overrides is admin-only. The backend enforces the same on every
+  route, so the UI gate is convenience, not security. See docs/knowledge/permissions.md.
 - **Layout:** the page scrolls as a whole (no inner table scroll) and the table blends into
   the page. A sticky toolbar keeps the view tabs, search box, To-Review status filter, and
   Add row / Sync from Jira visible (and shows a compact title) once you scroll; the column

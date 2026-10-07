@@ -166,8 +166,9 @@ function Column({
 }
 
 export default function Tasks() {
-  const { type } = useUserSettings();
-  const canEdit = type === "admin";
+  const { can, isAdmin } = useUserSettings();
+  // bugs:edit moves and edits tasks; the board's columns (task statuses) are admin-only.
+  const canEdit = can("bugs", "edit");
 
   usePageFavicon(favicon);
   usePageTitle("Bug Tasks");
@@ -266,18 +267,22 @@ export default function Tasks() {
         <h1 className="text-2xl font-semibold">Bug Tasks</h1>
         <p className="text-sm text-muted-foreground">
           Every task across the Jira backlog, by status.{" "}
-          {canEdit ? "Drag a card to change its status." : "Read-only — ask an admin for edit access."}
+          {canEdit ? "Drag a card to change its status." : "Read-only — an agendo admin can give you edit access."}
         </p>
       </div>
 
-      {canEdit && (
+      {(canEdit || isAdmin) && (
         <div className="flex flex-wrap items-center gap-2 py-2">
-          <Button variant="outline" size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> New task
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
-            <ListChecks className="h-4 w-4" /> Manage statuses
-          </Button>
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> New task
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" size="sm" onClick={() => setManageOpen(true)}>
+              <ListChecks className="h-4 w-4" /> Manage statuses
+            </Button>
+          )}
         </div>
       )}
 
@@ -332,7 +337,7 @@ export default function Tasks() {
         />
       )}
 
-      {canEdit && (
+      {isAdmin && (
         <TaskStatusManagerDialog
           open={manageOpen}
           onOpenChange={setManageOpen}

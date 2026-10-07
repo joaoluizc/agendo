@@ -11,7 +11,8 @@ type SyncWithGCalBtnProps = {
 
 const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
   const { selectedDate } = props;
-  const { type: userType } = useUserSettings();
+  // The team-wide sync deletes and re-adds everyone's events: admin-only.
+  const { isAdmin } = useUserSettings();
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const syncWithGCal = async () => {
@@ -43,7 +44,7 @@ const SyncWithGCalBtn = (props: SyncWithGCalBtnProps) => {
   };
 
   return (
-    userType === "admin" &&
+    isAdmin &&
     (!isLoading ? (
       <Button variant={"outline"} onClick={syncWithGCal}>
         <img

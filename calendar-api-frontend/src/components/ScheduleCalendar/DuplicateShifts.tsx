@@ -14,10 +14,10 @@ const DuplicateShifts = ({
   selectedDate,
   onDuplicated,
 }: DuplicateShiftsProps) => {
-  const { type: userType } = useUserSettings();
+  const canEditSchedule = useUserSettings().can("scheduling", "edit");
   const [open, setOpen] = useState(false);
 
-  if (userType !== "admin") return null;
+  if (!canEditSchedule) return null;
 
   return (
     <>

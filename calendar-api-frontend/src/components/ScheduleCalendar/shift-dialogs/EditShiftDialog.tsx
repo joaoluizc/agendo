@@ -91,7 +91,7 @@ const EditShiftDialog = ({
   onOpenChange,
   reloadScheduleCalendar,
 }: EditShiftDialogProps) => {
-  const { allUsers, allPositions, coverageMeters, markPositionUsed, type } =
+  const { allUsers, allPositions, coverageMeters, markPositionUsed, can } =
     useUserSettings();
   const { shifts, events, setShifts, setEvents } = useSchedule();
   const { clock } = useTimeFormat();
@@ -171,7 +171,7 @@ const EditShiftDialog = ({
   // Drives the status line in the footer; the toggle beside it carries the live choice.
   const draft = isDraft(shift);
   const agent = roster.find((entry) => entry.id === String(shift.userId));
-  const showPreferences = type === "admin" && hasPreferences(agent?.user);
+  const showPreferences = can("scheduling", "edit") && hasPreferences(agent?.user);
   const positionRecord = positionsById.get(positionId);
   const position = positionDisplay(positionRecord);
   const originalPositionRecord = positionsById.get(original.positionId);

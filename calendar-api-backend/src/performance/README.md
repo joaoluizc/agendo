@@ -105,9 +105,8 @@ the same inputs and config score.
 Every route needs `performance: edit` (see `docs/knowledge/permissions.md`): admins have it,
 and admins grant it to whoever else should run Performance. There is no self level — agents
 never see the score. The `PERFORMANCE_ACCESS_EMAILS` allowlist that gated this before was
-folded into those grants by the permissions backfill. `GET /performance/access` (any
-signed-in user) still returns `{ allowed }` for the current frontend, which hides the page
-with it.
+folded into those grants by the permissions backfill. The frontend shows the page and its
+nav link from `permissions.performance` in `/user/info`.
 
 Routes:
 

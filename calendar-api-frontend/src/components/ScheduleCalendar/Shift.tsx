@@ -59,7 +59,9 @@ export function Shift(props: ShiftProps) {
     setPendingChange,
     setDropTarget,
   } = useSchedule();
-  const { allPositions, type: userType } = useUserSettings();
+  const { allPositions, can } = useUserSettings();
+  // Moving, resizing and editing shifts is for schedule builders (scheduling:edit).
+  const canEditSchedule = can("scheduling", "edit");
   const { clock } = useTimeFormat();
   /**
    * The screen's main pointer is a finger. Then a shift cannot be dragged to move it or
@@ -145,7 +147,7 @@ export function Shift(props: ShiftProps) {
    */
   const beginResize =
     (edge: "start" | "end") => (event: React.PointerEvent<HTMLDivElement>) => {
-      if (userType !== "admin" || isBulkSelectorActive) return;
+      if (!canEditSchedule || isBulkSelectorActive) return;
       // Mouse only, like drag-to-create. On a touch-and-mouse laptop the handles still
       // show, and a finger landing on one does nothing rather than resizing.
       if (event.pointerType !== "mouse") return;
@@ -230,7 +232,7 @@ export function Shift(props: ShiftProps) {
     };
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>) => {
-    if (userType !== "admin") return;
+    if (!canEditSchedule) return;
 
     /**
      * Anchor the floating block at its own start, not at the point you grabbed.
@@ -282,7 +284,7 @@ export function Shift(props: ShiftProps) {
    * menu — so honouring whichever arrives does the right thing on each without sniffing.
    */
   const handleClick = (event: React.MouseEvent) => {
-    if (userType !== "admin") return;
+    if (!canEditSchedule) return;
 
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
@@ -297,7 +299,7 @@ export function Shift(props: ShiftProps) {
   };
 
   const toggleSelected = () => {
-    if (userType !== "admin") return;
+    if (!canEditSchedule) return;
 
     setBulkSelectedShifts(
       isSelected
@@ -465,7 +467,7 @@ export function Shift(props: ShiftProps) {
   const blockClass = cn(
     // `relative` anchors the edge handles.
     "pointer-events-auto relative overflow-hidden select-none",
-    userType === "admin" && !isBulkSelectorActive && "hover:brightness-110",
+    canEditSchedule && !isBulkSelectorActive && "hover:brightness-110",
     resizing && "brightness-110"
   );
 
@@ -476,7 +478,7 @@ export function Shift(props: ShiftProps) {
       // mid-resize stops the browser starting a move from the same gesture, and it is off
       // on a touch screen for the reason `coarsePointer` gives: iOS and Android both start
       // an HTML5 drag from a long press.
-      draggable={userType === "admin" && !resizing && !coarsePointer}
+      draggable={canEditSchedule && !resizing && !coarsePointer}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       title={title}
@@ -493,7 +495,7 @@ export function Shift(props: ShiftProps) {
 
           None on a touch screen either. Their `touch-none` strips would swallow a pinch
           or a scroll that happened to start on a shift's edge. */}
-      {userType === "admin" &&
+      {canEditSchedule &&
         !isBulkSelectorActive &&
         !spansTwoDays &&
         !coarsePointer && (
@@ -532,7 +534,7 @@ export function Shift(props: ShiftProps) {
     </div>
   ) : (
     <>
-      {userType === "admin" ? (
+      {canEditSchedule ? (
         block
       ) : (
         // An agent's tap shows what the hover title does. Hover never happens on a phone,
@@ -572,7 +574,7 @@ export function Shift(props: ShiftProps) {
       )}
       {/* Mounted only once opened: the dialog derives the whole roster's day and the
           coverage series on render, and a full day is around a hundred of these blocks. */}
-      {isOpen && userType === "admin" && (
+      {isOpen && canEditSchedule && (
         <EditShiftDialog
           shift={shift}
           selectedDate={selectedDate}

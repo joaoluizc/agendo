@@ -19,11 +19,12 @@ type NewShiftButtonProps = {
  * dialog.
  */
 const NewShiftButton = ({ selectedDate }: NewShiftButtonProps) => {
-  const { type: userType, allPositions } = useUserSettings();
+  const { can, allPositions } = useUserSettings();
+  const canEditSchedule = can("scheduling", "edit");
   const { focusedPositionIds, isBulkSelectorActive } = useSchedule();
   const [open, setOpen] = useState(false);
 
-  if (userType !== "admin") return null;
+  if (!canEditSchedule) return null;
 
   return (
     <>
