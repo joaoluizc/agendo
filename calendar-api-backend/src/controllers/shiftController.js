@@ -7,6 +7,7 @@ import gCalendarService from "../services/gCalendarService.js";
 import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
 import isISODate from "../utils/isISODate.js";
+import { getAuth } from "@clerk/express";
 import { isAdminRequest } from "../services/authz.js";
 import { mapWithConcurrency } from "../utils/mapWithConcurrency.js";
 
@@ -327,7 +328,9 @@ async function shouldReturnDrafts(req) {
   const requested =
     req.query.includeDrafts === "1" || req.query.includeDrafts === "true";
   if (!requested) return false;
-  return await isAdminRequest(req.auth?.userId);
+  // getAuth (session tokens only), not req.auth.userId, which answers for any token
+  // type. See middlewares/requireSession.js.
+  return await isAdminRequest(getAuth(req).userId);
 }
 
 async function findShiftsByRange(req, res) {

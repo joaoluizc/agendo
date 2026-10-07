@@ -29,8 +29,8 @@ event name inside the JSON `event` field.
 | POST   | `/discovai/chat` | SSE search stream, default `duda` dataset (`{ query, refreshCache?, debug? }`) | none |
 | POST   | `/discovai/:dataset/chat` | Same, scoped to `:dataset` (unknown key → `error` event) | none |
 
-The route is mounted **public** (no Clerk `requireAuth()`), like `/ada` and `/dns`. To
-require auth, change the mount in `app.js` to `app.use("/discovai", requireAuth(), discovaiRouter)`.
+The route is mounted **public** (no `requireSession`), like `/dns`. To require sign-in,
+change the mount in `app.js` to `app.use("/discovai", requireSession, discovaiRouter)`.
 
 ## Datasets
 

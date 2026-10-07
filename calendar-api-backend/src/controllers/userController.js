@@ -1,5 +1,6 @@
 import process from "process";
 import { Webhook } from "svix";
+import { getAuth } from "@clerk/express";
 import userService from "../services/userService.js";
 import { resolveUser } from "../services/authz.js";
 import utils from "../utils/utils.js";
@@ -159,7 +160,9 @@ const newClerkUser = async (req, res) => {
 // admin-only too: they are managers' notes about agents, never shown to the agents.
 const getAllUsers = async (req, res) => {
   try {
-    const { isAdmin } = await resolveUser(req.auth?.userId);
+    // getAuth (session tokens only), not req.auth.userId: the deprecated property answers
+    // for any token type, and this decides who sees the admin roster. See requireSession.
+    const { isAdmin } = await resolveUser(getAuth(req).userId);
     const users = await userService.getAllUsersSafeInfo();
     const payload = isAdmin
       ? users

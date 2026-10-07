@@ -6,7 +6,7 @@ import process from "process";
 import gCalendarService from "../services/gCalendarService.js";
 import userService from "../services/userService.js";
 import utils from "../utils/utils.js";
-import { requireAuth } from "@clerk/express";
+import requireSession from "../middlewares/requireSession.js";
 import adminOnly from "../middlewares/adminOnly.js";
 
 dotenv.config();
@@ -20,7 +20,7 @@ const SCOPES = [
 
 const gCalendarRouter = express.Router();
 
-gCalendarRouter.get("/calendars", requireAuth(), async (req, res) => {
+gCalendarRouter.get("/calendars", requireSession, async (req, res) => {
   const tokens = await userService.getGapiToken(req.user.email); // Retrieve tokens from the user service
   if (!tokens) {
     return res.status(401).send("User not authenticated");
@@ -37,7 +37,7 @@ gCalendarRouter.get("/calendars", requireAuth(), async (req, res) => {
   });
 });
 
-gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
+gCalendarRouter.get("/events", requireSession, async (req, res) => {
   console.log(
     `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId}`,
   );
@@ -124,7 +124,7 @@ gCalendarRouter.get("/events", requireAuth(), async (req, res) => {
  */
 gCalendarRouter.get(
   "/all-events",
-  requireAuth(),
+  requireSession,
   adminOnly,
   async (req, res) => {
     const date = new Date(req.query.date.split("/")[0]);
@@ -163,7 +163,7 @@ gCalendarRouter.get(
 
 gCalendarRouter.post(
   "/days-shifts-to-gcal",
-  requireAuth(),
+  requireSession,
   adminOnly,
   async (req, res) => {
     const date = req.body.date
@@ -193,7 +193,7 @@ gCalendarRouter.post(
 
 gCalendarRouter.post(
   "/user-day-shifts-to-gcal",
-  requireAuth(),
+  requireSession,
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
@@ -229,7 +229,7 @@ gCalendarRouter.post(
 
 gCalendarRouter.post(
   "/admin-sync-user-day-shifts",
-  requireAuth(),
+  requireSession,
   adminOnly,
   async (req, res) => {
     const date = req.body.date
@@ -326,7 +326,7 @@ gCalendarRouter.get("/", (req, res) =>
  */
 gCalendarRouter.get(
   "/all-events-excluding-platform",
-  requireAuth(),
+  requireSession,
   adminOnly,
   async (req, res) => {
     // Handle missing or invalid date parameter
