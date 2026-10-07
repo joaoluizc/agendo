@@ -1,6 +1,7 @@
 import express from "express";
 import skillController from "../controllers/skillController.js";
 import adminOnly from "../middlewares/adminOnly.js";
+import { requireAdmin, requirePermission } from "../middlewares/requirePermission.js";
 
 const skillRouter = express.Router();
 
@@ -40,7 +41,7 @@ const skillRouter = express.Router();
  *                 message:
  *                   type: string
  */
-skillRouter.get("/", skillController.getAllSkills);
+skillRouter.get("/", requirePermission("scheduling", "view"), skillController.getAllSkills);
 
 /**
  * @openapi
@@ -87,7 +88,7 @@ skillRouter.get("/", skillController.getAllSkills);
  *                 message:
  *                   type: string
  */
-skillRouter.get("/:skillId", skillController.getSkillById);
+skillRouter.get("/:skillId", requirePermission("scheduling", "view"), skillController.getSkillById);
 
 /**
  * @openapi
@@ -140,7 +141,7 @@ skillRouter.get("/:skillId", skillController.getSkillById);
  *                 message:
  *                   type: string
  */
-skillRouter.post("/", adminOnly, skillController.createSkill);
+skillRouter.post("/", requireAdmin, adminOnly, skillController.createSkill);
 
 /**
  * @openapi
@@ -209,7 +210,7 @@ skillRouter.post("/", adminOnly, skillController.createSkill);
  *                 message:
  *                   type: string
  */
-skillRouter.put("/:skillId", adminOnly, skillController.updateSkill);
+skillRouter.put("/:skillId", requireAdmin, adminOnly, skillController.updateSkill);
 
 /**
  * @openapi
@@ -254,6 +255,6 @@ skillRouter.put("/:skillId", adminOnly, skillController.updateSkill);
  *                 message:
  *                   type: string
  */
-skillRouter.delete("/:skillId", adminOnly, skillController.deleteSkill);
+skillRouter.delete("/:skillId", requireAdmin, adminOnly, skillController.deleteSkill);
 
 export default skillRouter;

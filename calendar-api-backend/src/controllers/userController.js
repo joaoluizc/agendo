@@ -2,7 +2,9 @@ import process from "process";
 import { Webhook } from "svix";
 import { getAuth } from "@clerk/express";
 import userService from "../services/userService.js";
-import { resolveUser } from "../services/authz.js";
+import { resolveUser, getCaller } from "../services/authz.js";
+import { effectivePermissions } from "../permissions/evaluate.js";
+import { publicRegistry } from "../permissions/registry.js";
 import utils from "../utils/utils.js";
 
 // The authoritative profile endpoint. Mongo owns every field returned here — Clerk
@@ -12,21 +14,27 @@ import utils from "../utils/utils.js";
 // the UI reads `type` from this response, and the provider treats a failed fetch as
 // "loaded, type = ''". So a 500 here silently demotes an admin to a normal user rather
 // than showing an error — never let this throw past the guards below.
+//
+// `permissions` is the caller's *effective* access per area (an admin's is the top level
+// everywhere), computed here by the same evaluator the API enforces with. The frontend
+// must read access from it, never derive it from `type`.
 const getMyProfile = async (req, res) => {
-  const userId = req.auth.userId;
+  // The caller the route's requirement marker already resolved: same session-only
+  // identity, no second Mongo read.
+  let caller;
+  try {
+    caller = await getCaller(req);
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).json({ message: `caught error: ${err.message}` });
+  }
+  const userId = caller?.clerkId;
   console.log(`[${req.requestId}]: getting user info for ${userId}`);
   if (!userId) {
     return res.status(400).json({ message: "userId is required" });
   }
 
-  let user;
-  try {
-    user = await userService.findUserByClerkId(userId);
-  } catch (err) {
-    console.error(err.message);
-    return res.status(500).json({ message: `caught error: ${err.message}` });
-  }
-
+  const user = caller.mongoUser;
   if (!user) {
     console.error(
       `[${req.requestId}]: no mongo user for clerk id ${userId} - profile unavailable`
@@ -50,8 +58,15 @@ const getMyProfile = async (req, res) => {
     timezone: user.timezone,
     timeZone: user.timezone,
     type: user.type,
+    isAdmin: caller.isAdmin,
+    permissions: effectivePermissions(caller),
   };
   res.status(200).json(response);
+};
+
+// The permission registry for the admin access editor: areas, levels, labels and copy.
+const getPermissionRegistry = (req, res) => {
+  res.status(200).json(publicRegistry());
 };
 
 // Creates the mongo user behind a verified clerk "user created" webhook. Runs after
@@ -284,6 +299,7 @@ const setUserPreferences = async (req, res) => {
 
 export default {
   getMyProfile,
+  getPermissionRegistry,
   newClerkUser,
   getAllUsers,
   setUserPreferences,

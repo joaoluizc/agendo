@@ -8,6 +8,7 @@ import userService from "../services/userService.js";
 import utils from "../utils/utils.js";
 import requireSession from "../middlewares/requireSession.js";
 import adminOnly from "../middlewares/adminOnly.js";
+import { publicRoute, requireAdmin, requirePermission, signedIn } from "../middlewares/requirePermission.js";
 
 dotenv.config();
 
@@ -20,7 +21,7 @@ const SCOPES = [
 
 const gCalendarRouter = express.Router();
 
-gCalendarRouter.get("/calendars", requireSession, async (req, res) => {
+gCalendarRouter.get("/calendars", signedIn, requireSession, async (req, res) => {
   const tokens = await userService.getGapiToken(req.user.email); // Retrieve tokens from the user service
   if (!tokens) {
     return res.status(401).send("User not authenticated");
@@ -37,7 +38,7 @@ gCalendarRouter.get("/calendars", requireSession, async (req, res) => {
   });
 });
 
-gCalendarRouter.get("/events", requireSession, async (req, res) => {
+gCalendarRouter.get("/events", signedIn, requireSession, async (req, res) => {
   console.log(
     `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId}`,
   );
@@ -124,6 +125,7 @@ gCalendarRouter.get("/events", requireSession, async (req, res) => {
  */
 gCalendarRouter.get(
   "/all-events",
+  requireAdmin,
   requireSession,
   adminOnly,
   async (req, res) => {
@@ -163,6 +165,7 @@ gCalendarRouter.get(
 
 gCalendarRouter.post(
   "/days-shifts-to-gcal",
+  requireAdmin,
   requireSession,
   adminOnly,
   async (req, res) => {
@@ -193,6 +196,7 @@ gCalendarRouter.post(
 
 gCalendarRouter.post(
   "/user-day-shifts-to-gcal",
+  signedIn,
   requireSession,
   async (req, res) => {
     const date = req.body.date
@@ -229,6 +233,7 @@ gCalendarRouter.post(
 
 gCalendarRouter.post(
   "/admin-sync-user-day-shifts",
+  requirePermission("scheduling", "edit"),
   requireSession,
   adminOnly,
   async (req, res) => {
@@ -269,7 +274,7 @@ gCalendarRouter.post(
   },
 );
 
-gCalendarRouter.get("/", (req, res) =>
+gCalendarRouter.get("/", publicRoute, (req, res) =>
   res.status(200).json({ message: "hey there :-))))" }),
 );
 
@@ -326,6 +331,7 @@ gCalendarRouter.get("/", (req, res) =>
  */
 gCalendarRouter.get(
   "/all-events-excluding-platform",
+  requireAdmin,
   requireSession,
   adminOnly,
   async (req, res) => {

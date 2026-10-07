@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { initialPositions } from "../database/seeds/initialPositions.js";
+import { PERMISSION_AREAS, AREA_KEYS } from "../permissions/registry.js";
 const { Schema } = mongoose;
 
 const GapiTokenSchema = new Schema({
@@ -68,6 +69,20 @@ const WorkHoursSchema = new Schema({
 });
 
 // Define the User schema
+// One level per permission area, generated from the registry so a new area needs no
+// schema edit. Each path is enum-checked against its area's levels. Unset areas read as
+// "none" in the evaluator (permissions/evaluate.js), which is the only place access is
+// decided — the "none" defaults here just fill the gaps when an admin saves a partial set.
+const PermissionsSchema = new Schema(
+  Object.fromEntries(
+    AREA_KEYS.map((area) => [
+      area,
+      { type: String, enum: [...PERMISSION_AREAS[area].levels], default: "none" },
+    ]),
+  ),
+  { _id: false },
+);
+
 const UserSchema = new mongoose.Schema({
   firstName: {
     type: String,
@@ -195,6 +210,25 @@ const UserSchema = new mongoose.Schema({
     default: null,
   },
   clerkId: {
+    type: String,
+    required: false,
+    // Every authenticated request looks its caller up by this.
+    index: true,
+  },
+  // Per-area access, granted by admins (see docs/knowledge/permissions.md). Deliberately
+  // no path default: a legacy document must not come back with a hydrated all-"none" set
+  // that a later unrelated `save()` would persist — that would hide it from the backfill,
+  // which only touches documents with no `permissions` at all. Missing means "none".
+  permissions: {
+    type: PermissionsSchema,
+    required: false,
+  },
+  permissionsUpdatedAt: {
+    type: Date,
+    required: false,
+  },
+  // Clerk id of the admin who last changed `permissions`, or "provisioning" / "migration".
+  permissionsUpdatedBy: {
     type: String,
     required: false,
   },

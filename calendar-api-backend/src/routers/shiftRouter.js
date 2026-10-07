@@ -1,6 +1,7 @@
 import express from "express";
 import shiftController from "../controllers/shiftController.js";
 import adminOnly from "../middlewares/adminOnly.js";
+import { requirePermission } from "../middlewares/requirePermission.js";
 
 const shiftRouter = express.Router();
 
@@ -14,32 +15,34 @@ const shiftRouter = express.Router();
 // Reads stay open to any authenticated user: the schedule page shows the whole
 // roster's day to everyone.
 
-shiftRouter.post("/new", adminOnly, shiftController.createShift);
+shiftRouter.post("/new", requirePermission("scheduling", "edit"), adminOnly, shiftController.createShift);
 
-shiftRouter.get("/range", shiftController.findShiftsByRange);
+shiftRouter.get("/range", requirePermission("scheduling", "view"), shiftController.findShiftsByRange);
 
-shiftRouter.get("/", shiftController.getShift);
+shiftRouter.get("/", requirePermission("scheduling", "view"), shiftController.getShift);
 
-shiftRouter.put("/", adminOnly, shiftController.updateShift);
+shiftRouter.put("/", requirePermission("scheduling", "edit"), adminOnly, shiftController.updateShift);
 
-shiftRouter.post("/delete", adminOnly, shiftController.deleteShift);
+shiftRouter.post("/delete", requirePermission("scheduling", "edit"), adminOnly, shiftController.deleteShift);
 
 shiftRouter.get(
   "/range/with-sling",
+  requirePermission("scheduling", "view"),
   shiftController.findShiftsByRangeWithSling
 );
 
 shiftRouter.post(
   "/duplicate-shifts",
+  requirePermission("scheduling", "edit"),
   adminOnly,
   shiftController.duplicateShiftsFromDay
 );
 
 // Commit drafts. Creating a shift no longer syncs it, so this is the only route that puts
 // a shift on an agent's real calendar — which is exactly why it is admin-only.
-shiftRouter.post("/publish", adminOnly, shiftController.publishShifts);
+shiftRouter.post("/publish", requirePermission("scheduling", "edit"), adminOnly, shiftController.publishShifts);
 
 // The reverse: back to draft, and the calendar event goes with it.
-shiftRouter.post("/unpublish", adminOnly, shiftController.unpublishShifts);
+shiftRouter.post("/unpublish", requirePermission("scheduling", "edit"), adminOnly, shiftController.unpublishShifts);
 
 export default shiftRouter;

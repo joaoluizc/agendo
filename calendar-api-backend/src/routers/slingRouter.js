@@ -1,5 +1,6 @@
 import express from "express";
 import slingController from "../controllers/slingController.js";
+import { requireAdmin, requirePermission } from "../middlewares/requirePermission.js";
 
 const slingRouter = express.Router();
 
@@ -23,7 +24,7 @@ const slingRouter = express.Router();
  *                   items:
  *                     type: object
  */
-slingRouter.get("/positions", async (req, res) => {
+slingRouter.get("/positions", requirePermission("scheduling", "view"), async (req, res) => {
   const positions = slingController.getPositions();
   res.status(200).json({ response: positions });
 });
@@ -48,7 +49,7 @@ slingRouter.get("/positions", async (req, res) => {
  *                   items:
  *                     type: object
  */
-slingRouter.get("/users", async (req, res) => {
+slingRouter.get("/users", requireAdmin, async (req, res) => {
   const users = slingController.getUsers();
   res.status(200).json({ response: users });
 });
@@ -75,7 +76,7 @@ slingRouter.get("/users", async (req, res) => {
  *             schema:
  *               type: object
  */
-slingRouter.get("/calendar/", async (req, res) => {
+slingRouter.get("/calendar/", requirePermission("scheduling", "view"), async (req, res) => {
   console.log("calendar route hit");
   const date = req.query.date;
   const calendar = await slingController.getCalendar(date);

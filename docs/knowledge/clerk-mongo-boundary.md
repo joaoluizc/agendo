@@ -43,10 +43,11 @@ One function, `src/services/authz.js`:
 const { mongoUser, isAdmin } = await resolveUser(clerkUserId);
 ```
 
-`adminOnly` uses it, `duplicateShiftsFromDay` uses it, and any future MCP tool layer must
-use it too — that is the whole point of having exactly one. It returns `{ mongoUser:
-null, isAdmin: false }` for a Clerk user with no Mongo document, so a missing user always
-fails closed.
+`adminOnly` uses it, the MCP perimeter uses it, and `getCaller(req)` (same file) wraps it
+for REST: one session-only, memoized lookup per request that the per-area permission
+checks read (see [permissions](permissions.md)). That is the whole point of having
+exactly one. It returns `{ mongoUser: null, isAdmin: false }` for a Clerk user with no
+Mongo document, so a missing user always fails closed.
 
 ### Local development
 
