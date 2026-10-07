@@ -1,10 +1,12 @@
 import process from "process";
 import { Webhook } from "svix";
-import { getAuth } from "@clerk/express";
 import userService from "../services/userService.js";
-import { resolveUser, getCaller } from "../services/authz.js";
+import { getCaller } from "../services/authz.js";
 import { effectivePermissions } from "../permissions/evaluate.js";
 import { publicRegistry } from "../permissions/registry.js";
+import { rosterShapeFor } from "../permissions/shaping.js";
+import { planAccessChange, storedPermissions } from "../permissions/accessChange.js";
+import { PermissionAudit } from "../models/PermissionAuditModel.js";
 import utils from "../utils/utils.js";
 
 // The authoritative profile endpoint. Mongo owns every field returned here — Clerk
@@ -168,27 +170,15 @@ const newClerkUser = async (req, res) => {
 };
 
 // The roster is readable by everyone - the schedule grid needs every agent's name and
-// avatar. But `type`, `slingId` and `email` are admin-only: previously they were
-// sourced from Clerk publicMetadata and came back empty, so nothing was exposed. Now
-// they carry real values, and without this filter any signed-in employee could
-// enumerate exactly who the admins are. `preferences` (and who/when last saved them) are
-// admin-only too: they are managers' notes about agents, never shown to the agents.
+// avatar. Everything else is shaped by permission (permissions/shaping.js): schedule
+// builders (scheduling:edit) also get email, slingId and the managers' notes about agents;
+// `type` and permissions stay admin-only, so nobody else can enumerate who the admins are.
 const getAllUsers = async (req, res) => {
   try {
-    // getAuth (session tokens only), not req.auth.userId: the deprecated property answers
-    // for any token type, and this decides who sees the admin roster. See requireSession.
-    const { isAdmin } = await resolveUser(getAuth(req).userId);
+    // Which fields each caller gets is decided in permissions/shaping.js.
+    const caller = await getCaller(req);
     const users = await userService.getAllUsersSafeInfo();
-    const payload = isAdmin
-      ? users
-      : users.map((user) => ({
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          imageUrl: user.imageUrl,
-          hasImage: user.hasImage,
-        }));
-    res.status(200).json(payload);
+    res.status(200).json(rosterShapeFor(caller, users));
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: `caught error: ${err.message}` });
@@ -236,7 +226,7 @@ const setMyTimezone = async (req, res) => {
  *
  * Needed because the team spans several countries and people do not reliably keep their
  * own profile current — an admin has to be able to fix a wrong zone without chasing the
- * person. Gated by `adminOnly` on the route, server-side, not merely hidden in the UI.
+ * person. Gated by `requireAdmin` on the route, server-side, not merely hidden in the UI.
  */
 const setUserTimezoneById = async (req, res) => {
   const { clerkId } = req.params;
@@ -297,8 +287,72 @@ const setUserPreferences = async (req, res) => {
   }
 };
 
+// An admin changes someone's access: their area levels and/or admin flag. The rules are
+// in permissions/accessChange.js; this loads, applies, stamps and audits. Admin-only on
+// the route. Every change appends a PermissionAudit record.
+const setUserPermissions = async (req, res) => {
+  const { clerkId } = req.params;
+  try {
+    const actor = await getCaller(req);
+    const target = await userService.findUserByClerkId(clerkId);
+    const otherAdminCount = target ? await userService.countOtherAdmins(clerkId) : 0;
+    const plan = planAccessChange({ actor, target, body: req.body, otherAdminCount });
+    if (!plan.ok) {
+      return res
+        .status(plan.status)
+        .json({ error: plan.error, ...(plan.details ? { details: plan.details } : {}) });
+    }
+
+    const before = { type: target.type, permissions: storedPermissions(target) };
+    if (plan.changed) {
+      target.type = plan.type;
+      target.permissions = plan.permissions;
+      target.permissionsUpdatedAt = new Date();
+      target.permissionsUpdatedBy = actor.clerkId;
+      await target.save();
+      try {
+        await PermissionAudit.create({
+          at: target.permissionsUpdatedAt,
+          via: "web",
+          actorClerkId: actor.clerkId,
+          targetClerkId: target.clerkId,
+          targetUserId: target._id,
+          before,
+          after: { type: target.type, permissions: plan.permissions },
+          requestId: req.requestId,
+        });
+      } catch (err) {
+        // The change itself is saved; a lost audit record must at least be loud.
+        console.error(
+          `[${req.requestId}]: setUserPermissions - AUDIT WRITE FAILED for ${clerkId}: ${err.message}`,
+        );
+      }
+      console.log(
+        `[${req.requestId}]: setUserPermissions - ${actor.clerkId} set ${clerkId}: type ${before.type} -> ${target.type}, permissions ${JSON.stringify(before.permissions)} -> ${JSON.stringify(plan.permissions)}`,
+      );
+    }
+
+    res.status(200).json({
+      id: target.clerkId,
+      type: target.type,
+      permissions: storedPermissions(target),
+      permissionsUpdatedAt: target.permissionsUpdatedAt || null,
+      permissionsUpdatedBy: target.permissionsUpdatedBy || null,
+      effectivePermissions: effectivePermissions({
+        clerkId: target.clerkId,
+        mongoUser: target,
+        isAdmin: target.type === "admin",
+      }),
+    });
+  } catch (err) {
+    console.error(`[${req.requestId}]: setUserPermissions failed for ${clerkId}: ${err.message}`);
+    res.status(500).json({ error: `Could not update access: ${err.message}` });
+  }
+};
+
 export default {
   getMyProfile,
+  setUserPermissions,
   getPermissionRegistry,
   newClerkUser,
   getAllUsers,

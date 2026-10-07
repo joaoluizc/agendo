@@ -1,76 +1,15 @@
 import dotenv from "dotenv";
 import express from "express";
-import { google } from "googleapis";
 // import cron from "node-cron";
 import process from "process";
 import gCalendarService from "../services/gCalendarService.js";
 import userService from "../services/userService.js";
 import utils from "../utils/utils.js";
-import requireSession from "../middlewares/requireSession.js";
-import adminOnly from "../middlewares/adminOnly.js";
 import { publicRoute, requireAdmin, requirePermission, signedIn } from "../middlewares/requirePermission.js";
 
 dotenv.config();
 
-const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/calendar.events.owned",
-  "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/userinfo.profile",
-];
-
 const gCalendarRouter = express.Router();
-
-gCalendarRouter.get("/calendars", signedIn, requireSession, async (req, res) => {
-  const tokens = await userService.getGapiToken(req.user.email); // Retrieve tokens from the user service
-  if (!tokens) {
-    return res.status(401).send("User not authenticated");
-  }
-  const oauth2Client = getOAuth2Client(tokens);
-  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-  calendar.calendarList.list({}, (err, response) => {
-    if (err) {
-      console.log(`[${req.requestId}] Error fetching calendars`, err);
-      res.send("Error");
-    }
-    const calendars = response.data.items;
-    res.json(calendars);
-  });
-});
-
-gCalendarRouter.get("/events", signedIn, requireSession, async (req, res) => {
-  console.log(
-    `[${req.requestId}] Fetching GCalendar events for ${req.auth.userId}`,
-  );
-  // const tokens = await userService.getGapiToken(req.user.email);
-  const tokens = await userService.getUserGoogleOAuthToken_cl(req.auth.userId);
-  if (!tokens) {
-    return res.status(401).send("User not Google authenticated");
-  }
-  const calendarId = req.query.calendar ?? "primary";
-  const oauth2Client = getOAuth2Client(tokens);
-  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-  calendar.events.list(
-    {
-      calendarId,
-      timeMin: new Date().toISOString(),
-      maxResults: 50,
-      singleEvents: true,
-      orderBy: "startTime",
-    },
-    (err, response) => {
-      if (err) {
-        console.error(`[${req.requestId}] Can't fetch events`, err);
-        return res.send("Error");
-      }
-      console.log(
-        `[${req.requestId}] GCal fetch successful: ${response.data.items.length} events`,
-      );
-      const events = response.data.items;
-      res.json(events);
-    },
-  );
-});
 
 /**
  * @openapi
@@ -126,8 +65,6 @@ gCalendarRouter.get("/events", signedIn, requireSession, async (req, res) => {
 gCalendarRouter.get(
   "/all-events",
   requireAdmin,
-  requireSession,
-  adminOnly,
   async (req, res) => {
     const date = new Date(req.query.date.split("/")[0]);
     console.log(
@@ -166,8 +103,6 @@ gCalendarRouter.get(
 gCalendarRouter.post(
   "/days-shifts-to-gcal",
   requireAdmin,
-  requireSession,
-  adminOnly,
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
@@ -197,7 +132,6 @@ gCalendarRouter.post(
 gCalendarRouter.post(
   "/user-day-shifts-to-gcal",
   signedIn,
-  requireSession,
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
@@ -234,8 +168,6 @@ gCalendarRouter.post(
 gCalendarRouter.post(
   "/admin-sync-user-day-shifts",
   requirePermission("scheduling", "edit"),
-  requireSession,
-  adminOnly,
   async (req, res) => {
     const date = req.body.date
       ? utils.todayISO(req.body.date)
@@ -332,8 +264,6 @@ gCalendarRouter.get("/", publicRoute, (req, res) =>
 gCalendarRouter.get(
   "/all-events-excluding-platform",
   requireAdmin,
-  requireSession,
-  adminOnly,
   async (req, res) => {
     // Handle missing or invalid date parameter
     if (!req.query.date) {

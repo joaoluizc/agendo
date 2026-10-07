@@ -3,16 +3,24 @@ import assert from "node:assert/strict";
 import express from "express";
 
 /**
- * Shadow-mode markers over HTTP: they must never block or break a request, and must log
- * exactly the disagreements with the legacy gate that answered it. The caller resolver is
- * mocked (authz.getCaller); everything else is real.
+ * The requirement markers over HTTP: who gets through, and exactly what everyone else gets
+ * back. The caller resolver (authz.getCaller) is mocked — it has its own tests — while the
+ * evaluator and the markers are real.
  */
 
 const CALLERS = {
   agent: {
     clerkId: "user_agent",
     isAdmin: false,
-    mongoUser: { email: "agent@example.test", permissions: { scheduling: "view", reports: "self" } },
+    mongoUser: {
+      email: "agent@example.test",
+      permissions: { scheduling: "view", bugs: "none", reports: "self", performance: "none" },
+    },
+  },
+  scheduler: {
+    clerkId: "user_scheduler",
+    isAdmin: false,
+    mongoUser: { email: "scheduler@example.test", permissions: { scheduling: "edit" } },
   },
   admin: { clerkId: "user_admin", isAdmin: true, mongoUser: { email: "admin@example.test" } },
   ghost: { clerkId: "user_ghost", noAccount: true },
@@ -40,16 +48,20 @@ before(async () => {
   markers = await import("./requirePermission.js");
   const { requirePermission, requireAdmin, signedIn, publicRoute } = markers;
 
-  // A stand-in legacy gate: answers 403 when the test asks it to, else lets through.
-  const legacy = (req, res, next) =>
-    req.get("x-legacy") === "deny" ? res.status(403).json({ error: "Forbidden" }) : next();
   const ok = (req, res) => res.json({ ok: true });
-
   const app = express();
-  app.get("/edit", requirePermission("scheduling", "edit"), legacy, ok);
-  app.get("/view", requirePermission("scheduling", "view"), legacy, ok);
-  app.get("/admin", requireAdmin, legacy, ok);
-  app.get("/signed-in", signedIn, legacy, ok);
+  // Stand in for clerkMiddleware: getAuth(req) needs a req.auth to exist.
+  app.use((req, res, next) => {
+    const tokenType = req.get("x-token-type") || "session_token";
+    const auth = { userId: req.get("x-token-type") ? "user_mcp" : null, tokenType };
+    req.auth = new Proxy(() => auth, { get: (_t, prop) => auth[prop] });
+    next();
+  });
+  app.get("/edit", requirePermission("scheduling", "edit"), ok);
+  app.get("/view", requirePermission("scheduling", "view"), ok);
+  app.get("/reports", requirePermission("reports", "self"), ok);
+  app.get("/admin", requireAdmin, ok);
+  app.get("/signed-in", signedIn, ok);
   app.get("/public", publicRoute, ok);
 
   console.warn = (...args) => warnings.push(args.join(" "));
@@ -67,16 +79,13 @@ after(() => {
   server?.close();
 });
 
-async function call(path, { caller, legacy } = {}) {
+async function call(path, { caller, tokenType } = {}) {
   const headers = {};
   if (caller) headers["x-test-caller"] = caller;
-  if (legacy) headers["x-legacy"] = legacy;
+  if (tokenType) headers["x-token-type"] = tokenType;
   const before = warnings.length;
   const res = await fetch(`${baseUrl}${path}`, { headers });
-  await res.text();
-  // 'finish' fires as the response ends; give the listener a tick.
-  await new Promise((resolve) => setImmediate(resolve));
-  return { status: res.status, logged: warnings.slice(before) };
+  return { status: res.status, body: await res.json(), logged: warnings.slice(before) };
 }
 
 test("markers expose their requirement and reject typos when declared", () => {
@@ -90,44 +99,69 @@ test("markers expose their requirement and reject typos when declared", () => {
   assert.throws(() => markers.requirePermission("billing", "view"), /Unknown permission area/);
 });
 
-test("agreement is silent: both allow, or both deny", async () => {
-  assert.deepEqual(await call("/view", { caller: "agent" }), { status: 200, logged: [] });
-  assert.deepEqual(await call("/edit", { caller: "agent", legacy: "deny" }), {
-    status: 403,
-    logged: [],
-  });
-  assert.deepEqual(await call("/admin", { caller: "admin" }), { status: 200, logged: [] });
+test("callers at or above the level get through, silently", async () => {
+  for (const [path, caller] of [
+    ["/view", "agent"],
+    ["/view", "scheduler"],
+    ["/edit", "scheduler"],
+    ["/edit", "admin"],
+    ["/reports", "agent"],
+    ["/admin", "admin"],
+    ["/signed-in", "agent"],
+  ]) {
+    const { status, logged } = await call(path, { caller });
+    assert.equal(status, 200, `${caller} on ${path}`);
+    assert.deepEqual(logged, []);
+  }
 });
 
-test("never blocks: a would-deny still reaches the handler, and is logged", async () => {
-  const { status, logged } = await call("/edit", { caller: "agent" });
-  assert.equal(status, 200);
-  assert.equal(logged.length, 1);
-  assert.match(logged[0], /\[perm\] shadow mismatch: GET \/edit requires scheduling:edit/);
-  assert.match(logged[0], /would DENY \(below_required, has scheduling:view\), legacy answered 200/);
-  assert.match(logged[0], /caller agent@example\.test/);
-});
-
-test("a would-allow that legacy refused is logged", async () => {
-  const { status, logged } = await call("/view", { caller: "agent", legacy: "deny" });
+test("below the level is a 403 that says what was needed and what they have", async () => {
+  const { status, body, logged } = await call("/edit", { caller: "agent" });
   assert.equal(status, 403);
+  assert.deepEqual(body, {
+    error: "Forbidden",
+    reason: "below_required",
+    required: "scheduling:edit",
+    have: "view",
+  });
   assert.equal(logged.length, 1);
-  assert.match(logged[0], /would ALLOW, legacy answered 403/);
+  assert.match(logged[0], /\[perm\] denied GET \/edit: requires scheduling:edit — below_required \(has view\) — caller agent@example\.test/);
 });
 
-test("users without an agendo account and anonymous callers are would-deny", async () => {
-  const ghost = await call("/signed-in", { caller: "ghost" });
-  assert.equal(ghost.status, 200);
-  assert.match(ghost.logged[0], /would DENY \(no_agendo_account\)/);
-  const anon = await call("/signed-in");
-  assert.match(anon.logged[0], /would DENY \(no_session\).*caller anonymous/);
+test("admin-only routes refuse everyone else, however high their levels", async () => {
+  const { status, body } = await call("/admin", { caller: "scheduler" });
+  assert.equal(status, 403);
+  assert.deepEqual(body, { error: "Forbidden", reason: "not_admin", required: "admin" });
 });
 
-test("a failing caller lookup is logged and the request carries on", async () => {
-  const { status, logged } = await call("/admin", { caller: "explode" });
-  assert.equal(status, 200);
+test("a Clerk identity with no agendo user is refused everywhere but public routes", async () => {
+  for (const path of ["/signed-in", "/view"]) {
+    const { status, body } = await call(path, { caller: "ghost" });
+    assert.equal(status, 403);
+    assert.equal(body.reason, "no_agendo_account");
+  }
+  assert.equal((await call("/public", { caller: "ghost" })).status, 200);
+});
+
+test("no session is a JSON 401, not a redirect; a signed-out browser isn't logged", async () => {
+  const { status, body, logged } = await call("/signed-in");
+  assert.equal(status, 401);
+  assert.deepEqual(body, { error: "Unauthorized" });
   assert.deepEqual(logged, []);
-  assert.ok(errors.some((line) => line.includes("[perm] shadow check failed") && line.includes("mongo is down")));
+});
+
+test("a valid token of another type (an MCP OAuth token) is a 401, and logged", async () => {
+  const { status, logged } = await call("/view", { tokenType: "oauth_token" });
+  assert.equal(status, 401);
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /refused a oauth_token for user_mcp on GET \/view/);
+});
+
+test("a failing caller lookup is a 500, never a pass", async () => {
+  const { status, body } = await call("/view", { caller: "explode" });
+  assert.equal(status, 500);
+  assert.deepEqual(body, { error: "Could not verify permissions" });
+  assert.ok(errors.some((line) => line.includes("could not resolve caller") && line.includes("mongo is down")));
 });
 
 test("declaration markers never resolve a caller", async () => {

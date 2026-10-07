@@ -105,6 +105,10 @@ const findAllUsers = async () => {
   return users;
 };
 
+// How many admins there are besides `clerkId` — the last-admin guard on access changes.
+const countOtherAdmins = async (clerkId) =>
+  User.countDocuments({ type: "admin", clerkId: { $ne: clerkId } });
+
 const findUserByClerkId = async (clerkId) => {
   let user = await User.findOne({ clerkId });
   return user;
@@ -181,6 +185,11 @@ async function getAllUsersSafeInfo() {
       preferences: user.preferences || "",
       preferencesUpdatedAt: user.preferencesUpdatedAt || null,
       preferencesUpdatedBy: user.preferencesUpdatedBy || null,
+      // Stored grants (null = never set). Admin-only, like `type`: permissions/shaping.js
+      // strips them for everyone else.
+      permissions: user.permissions?.toObject?.() ?? user.permissions ?? null,
+      permissionsUpdatedAt: user.permissionsUpdatedAt || null,
+      permissionsUpdatedBy: user.permissionsUpdatedBy || null,
     };
   });
 }
@@ -279,6 +288,7 @@ export default {
   findUser: findUserByEmail,
   findAllUsers,
   findUserByClerkId,
+  countOtherAdmins,
   findUsersByClerkIds,
   getSlingIdByClerkId,
   getGapiToken,

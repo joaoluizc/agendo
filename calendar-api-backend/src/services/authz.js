@@ -27,31 +27,16 @@ export async function resolveUser(clerkUserId) {
 }
 
 /**
- * Is the admin gate bypassed for this process?
+ * Is ADMIN_BYPASS=1 set for this process? It makes every REST caller an admin (see
+ * getCaller) — an explicit, local-only escape hatch for working on admin routes.
  *
  * Read through this function rather than the env var directly so the flag has exactly one
  * reader. Deliberately not keyed on NODE_ENV: that variable also selects the Mongo
  * collection (dev-users vs users), and tying the two together used to disable every admin
- * gate as a silent side effect of pointing at dev data. See middlewares/adminOnly.js.
+ * gate as a silent side effect of pointing at dev data.
  */
 export function adminBypassEnabled() {
   return process.env.ADMIN_BYPASS === "1";
-}
-
-/**
- * Admin verdict for a request, bypass included.
- *
- * `adminOnly` covers routes that are entirely admin-gated. This is for a route that is
- * open to everyone but *shows more* to an admin — the schedule read, which returns draft
- * shifts only to someone who can act on them. Both answer the question the same way, so
- * neither grows its own notion of who is an admin.
- */
-export async function isAdminRequest(clerkUserId) {
-  if (adminBypassEnabled()) {
-    return true;
-  }
-  const { isAdmin } = await resolveUser(clerkUserId);
-  return isAdmin;
 }
 
 /**
@@ -72,10 +57,10 @@ const CALLER_PROMISE = Symbol("agendo.caller");
  * Resolved once per request and memoized — the promise on a private key, the settled
  * value on `req.caller` — so any number of checks cost a single Mongo read.
  *
- * Identity is read from a **session token only**, the same rule as `requireSession`:
- * Clerk's middleware accepts any token type, and an MCP OAuth token must never act on
- * REST. ADMIN_BYPASS=1 marks the caller admin here and nowhere else; MCP builds its caller
- * with `callerFromUser` and so keeps ignoring the bypass, as before.
+ * Identity is read from a **session token only**: Clerk's middleware accepts any token
+ * type, and an MCP OAuth token must never act on REST. ADMIN_BYPASS=1 marks the caller
+ * admin here and nowhere else; MCP builds its caller with `callerFromUser` and so keeps
+ * ignoring the bypass, as before.
  */
 export function getCaller(req) {
   if (!req[CALLER_PROMISE]) {
@@ -106,7 +91,6 @@ async function resolveCaller(req) {
 export default {
   resolveUser,
   adminBypassEnabled,
-  isAdminRequest,
   callerFromUser,
   getCaller,
 };

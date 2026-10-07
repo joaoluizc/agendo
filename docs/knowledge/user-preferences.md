@@ -36,14 +36,16 @@ Two layers, both needed:
    `gCalendarController` even logs one with `JSON.stringify(user)` — and none of them should
    carry an agent's notes. The one query that asks is `userService.findAllUsers`, which
    feeds only the roster.
-2. **The response allowlists.** `/user/all` sends `preferences` in its admin shape only; the
-   non-admin shape is an explicit five-field map (`userController.getAllUsers`). `/user/info`
-   is an allowlist that never includes it.
+2. **The response allowlists.** `/user/all` sends `preferences` only to admins and to
+   schedule builders (`scheduling: edit`) — the notes exist "so whoever builds shifts can
+   glance at it". Everyone else gets an explicit five-field shape
+   (`permissions/shaping.js` `rosterShapeFor`). `/user/info` is an allowlist that never
+   includes it.
 
 **Adding a read of `preferences` anywhere else means adding the `+preferences` select there —
-and making sure that response only reaches admins.**
+and making sure that response only reaches admins and schedule builders.**
 
-The one write is `PUT /user/:clerkId/preferences` (`requireSession` + `adminOnly`), body
+The one write is `PUT /user/:clerkId/preferences` (`requireAdmin`), body
 `{ preferences }`, a string of at most 20,000 characters. Markup with no text in it
 (`<p></p>`) is stored as `""`. Last write wins: two managers editing the same agent at once
 overwrite each other, which is fine for a short note.

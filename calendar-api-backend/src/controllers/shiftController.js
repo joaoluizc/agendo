@@ -7,8 +7,8 @@ import gCalendarService from "../services/gCalendarService.js";
 import positionService from "../services/positionService.js";
 import userService from "../services/userService.js";
 import isISODate from "../utils/isISODate.js";
-import { getAuth } from "@clerk/express";
-import { isAdminRequest } from "../services/authz.js";
+import { getCaller } from "../services/authz.js";
+import { can } from "../permissions/evaluate.js";
 import { mapWithConcurrency } from "../utils/mapWithConcurrency.js";
 
 /**
@@ -217,7 +217,7 @@ async function createShift(req, res) {
   // A new shift is a draft unless the caller explicitly asks for it published. The dialog
   // offers that as a toggle for the case where someone knows the shift is final and does
   // not want a second step; the default stays draft, so the safe outcome is the one you
-  // get by not choosing. Only an admin can reach this route at all (`adminOnly`).
+  // get by not choosing. Only scheduling:edit can reach this route at all (see shiftRouter).
   //
   // An unrecognised value is rejected rather than quietly treated as a draft: silently
   // ignoring it would let a client believe it had published something it had not.
@@ -316,21 +316,21 @@ async function createShift(req, res) {
 /**
  * Should this request see draft shifts?
  *
- * Drafts go only to someone who can act on them. The route itself stays open — the
- * schedule shows the whole roster's day to everyone — so the gate is per-response rather
- * than per-route, and a non-admin simply receives the committed schedule.
- *
- * Asking `authz.isAdminRequest` rather than re-deriving the answer keeps this in step with
- * `adminOnly`, including the ADMIN_BYPASS opt-in: without that, a local admin could create
- * drafts through a bypassed route and then not see them on the grid.
+ * Drafts go only to someone who can act on them — scheduling:edit. The read itself needs
+ * only scheduling:view (the schedule shows the whole roster's day to everyone), so the gate
+ * is per-response rather than per-route, and a viewer simply receives the committed
+ * schedule. The caller is the one the route's marker already resolved (ADMIN_BYPASS
+ * included), so this never disagrees with the routes that create drafts.
  */
+async function canSeeDrafts(req) {
+  return can(await getCaller(req), "scheduling", "edit");
+}
+
 async function shouldReturnDrafts(req) {
   const requested =
     req.query.includeDrafts === "1" || req.query.includeDrafts === "true";
   if (!requested) return false;
-  // getAuth (session tokens only), not req.auth.userId, which answers for any token
-  // type. See middlewares/requireSession.js.
-  return await isAdminRequest(getAuth(req).userId);
+  return canSeeDrafts(req);
 }
 
 async function findShiftsByRange(req, res) {
@@ -651,7 +651,9 @@ async function getShift(req, res) {
     });
   }
 
-  if (!shift) {
+  // A draft is invisible below scheduling:edit, exactly as on the range read — answered as
+  // "not found" so the id doesn't confirm that an unpublished shift exists.
+  if (!shift || (shift.status === "draft" && !(await canSeeDrafts(req)))) {
     return res.status(404).json({ message: "Shift not found" });
   }
 
@@ -714,7 +716,7 @@ async function duplicateShiftsFromDay(req, res) {
   // Stamped onto every duplicated shift as `createdBy` further down.
   const { userId } = req.auth;
 
-  // The admin check lives on the route (`adminOnly`) like every other shift mutation.
+  // The permission check lives on the route (scheduling:edit) like every other shift mutation.
   // It used to be done here via `utils/userIsAdmin`, which read Clerk
   // `publicMetadata.type` — a field agendo stopped writing once the profile JSON
   // outgrew Clerk's metadata size limit, so it denied genuine admins.

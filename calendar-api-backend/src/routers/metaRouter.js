@@ -1,6 +1,5 @@
 import express from "express";
 import process from "process";
-import requireSession from "../middlewares/requireSession.js";
 import { publicRoute, signedIn } from "../middlewares/requirePermission.js";
 
 // The app's own small endpoints. They lived inline in app.js; a router makes them visible
@@ -15,7 +14,7 @@ metaRouter.get("/", publicRoute, (req, res) =>
   res.status(200).json({ message: "hey there :-))))" }),
 );
 
-metaRouter.get("/auth-check", signedIn, requireSession, (req, res) =>
+metaRouter.get("/auth-check", signedIn, (req, res) =>
   res.status(200).json({ message: "authenticated" }),
 );
 
@@ -33,7 +32,7 @@ metaRouter.get("/auth-check", signedIn, requireSession, (req, res) =>
  *
  * From a signed-in browser, the frontend's /api rewrite reaches it at /api/version.
  */
-metaRouter.get("/version", signedIn, requireSession, (req, res) =>
+metaRouter.get("/version", signedIn, (req, res) =>
   res.status(200).json({
     commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? "unknown",
     startedAt: startedAt.toISOString(),

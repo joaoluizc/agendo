@@ -109,7 +109,8 @@ export default async function mcpAuth(req, res, next) {
     return res.status(500).json({ error: "could not verify permissions" });
   }
 
-  // Fails closed exactly like adminOnly: a Clerk account with no agendo user is nobody.
+  // Fails closed exactly like the REST permission markers: a Clerk account with no agendo
+  // user is nobody.
   if (!mongoUser) {
     return forbidden(
       req,
