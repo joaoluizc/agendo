@@ -1,6 +1,7 @@
 import cors from "cors";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import mcpAuth from "./lib/mcpAuth.js";
+import { mcpRoute, publicRoute } from "../middlewares/requirePermission.js";
 import { createMcpServer } from "./server.js";
 import {
   clientMetadataDocument,
@@ -114,24 +115,27 @@ export function mountMcpRoutes(app) {
   // Public, unauthenticated — this is how a client finds out it needs a token.
   app.get(
     "/.well-known/oauth-protected-resource/mcp",
+    publicRoute,
     mcpCors,
     protectedResourceHandler,
   );
   app.get(
     "/.well-known/oauth-protected-resource",
+    publicRoute,
     mcpCors,
     protectedResourceHandler,
   );
   app.get(
     "/.well-known/oauth-authorization-server",
+    publicRoute,
     mcpCors,
     authorizationServerHandler,
   );
-  app.get(MCP_CLIENT_METADATA_PATH, mcpCors, clientMetadataHandler);
+  app.get(MCP_CLIENT_METADATA_PATH, publicRoute, mcpCors, clientMetadataHandler);
 
   // Authenticated. `app.all` so GET and DELETE get a protocol-shaped answer from the
   // transport instead of an Express 404.
-  app.all("/mcp", mcpCors, mcpAuth, mcpHandler);
+  app.all("/mcp", mcpRoute, mcpCors, mcpAuth, mcpHandler);
 
   console.log("[mcp] mounted /mcp and OAuth discovery routes");
 }

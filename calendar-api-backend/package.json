@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npx nodemon app.js",
     "start": "node app.js",
-    "test": "node --test \"src/**/*.test.js\""
+    "test": "node --test --experimental-test-module-mocks \"src/**/*.test.js\""
   },
   "author": "",
   "license": "ISC",

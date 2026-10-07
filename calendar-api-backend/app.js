@@ -6,27 +6,11 @@ import process from "process";
 import { clerkMiddleware } from "@clerk/express";
 
 import connectDB from "./src/database/db.js";
-import requireSession from "./src/middlewares/requireSession.js";
-import userRouter from "./src/routers/userRouter.js";
-import gCalendarRouter from "./src/controllers/gCalendarController.js";
-import slingRouter from "./src/routers/slingRouter.js";
-import positionRouter from "./src/routers/positionRouters.js";
-import coverageMeterRouter from "./src/routers/coverageMeterRouter.js";
-import shiftRouter from "./src/routers/shiftRouter.js";
-import locationRouter from "./src/routers/locationRouter.js";
-import skillRouter from "./src/routers/skillRouter.js";
-import dnsRouter from "./src/routers/dnsRouter.js";
 import addRequestId from "./src/middlewares/addRequestId.js";
 import { mountSwagger } from "./src/swagger/swagger.js";
-// DiscovAI search — self-contained module, see src/discovai/README.md to remove.
-import discovaiRouter from "./src/discovai/discovaiRouter.js";
-// Jira backlog — self-contained module, see src/jiraBacklog/README.md to remove.
-import jiraBacklogRouter from "./src/jiraBacklog/jiraBacklogRouter.js";
 import { startJiraBacklogScheduler } from "./src/jiraBacklog/scheduler.js";
-// Reports — self-contained module, see src/reports/README.md to remove.
-import reportsRouter from "./src/reports/reportsRouter.js";
-// Performance — self-contained module, see src/performance/README.md to remove.
-import performanceRouter from "./src/performance/performanceRouter.js";
+// Every REST router and its mount path — see src/routes.js.
+import { mountApiRoutes } from "./src/routes.js";
 // MCP server — self-contained module, see src/mcp/README.md to remove.
 import { mountMcpRoutes } from "./src/mcp/mcpRouter.js";
 
@@ -41,9 +25,6 @@ process.on("uncaughtException", (error) => {
 });
 
 const port = process.env.PORT || 3001;
-
-// Stamped once at boot so /version can report how long this build has been serving.
-const startedAt = new Date();
 
 const corsOrigin =
   process.env.NODE_ENV === "production"
@@ -85,59 +66,7 @@ connectDB();
 // Jira backlog: register the daily 00:00 UTC "Sync from Jira" job (self-contained module).
 startJiraBacklogScheduler();
 
-app.use("/gcalendar", gCalendarRouter);
-app.use("/sling", requireSession, slingRouter);
-app.use("/position", requireSession, positionRouter);
-// Coverage targets for the schedule page. Admin-only is enforced inside the router.
-app.use("/coverage-meter", requireSession, coverageMeterRouter);
-app.use("/user", userRouter);
-app.use("/shift", requireSession, shiftRouter);
-app.use("/location", requireSession, locationRouter);
-app.use("/skills", requireSession, skillRouter);
-
-app.use("/dns", dnsRouter);
-
-// DiscovAI search (public, no auth — like /ada and /dns). Self-contained module.
-app.use("/discovai", discovaiRouter);
-
-// Jira backlog (self-contained module). Signed-in like the rest of /app; admin-only
-// mutations are enforced inside the router via agendo's adminOnly middleware.
-app.use("/jira-backlog", requireSession, jiraBacklogRouter);
-
-// Reports (self-contained module). Admin-only end to end via adminOnly middleware.
-app.use("/reports", requireSession, reportsRouter);
-
-// Performance (self-contained module). Gated in src/performance/lib/access.js (admin-only).
-app.use("/performance", requireSession, performanceRouter);
-
-app.get("/auth-check", requireSession, (req, res) =>
-  res.status(200).json({ message: "authenticated" }),
-);
-
-app.get("/", (req, res) =>
-  res.status(200).json({ message: "hey there :-))))" }),
-);
-
-/**
- * Which build is actually serving — the question "is my change live yet?" had no answer
- * short of the Render dashboard, because nothing the API returns distinguishes one
- * deploy from the next. Render sets RENDER_GIT_COMMIT itself; running anywhere else
- * reports "unknown", which is the honest answer and a useful signal on its own.
- *
- * Behind requireSession like everything but `/`. The sha is not a secret — the repo is
- * public — but pinning a live deployment to an exact tree tells anyone probing which
- * known advisories still apply to it and which are already patched out, and that is
- * worth nothing to an anonymous caller. Short sha and boot time only: no env names, no
- * dependency versions, nothing that grows into a recon aid.
- *
- * From a signed-in browser, the frontend's /api rewrite reaches it at /api/version.
- */
-app.get("/version", requireSession, (req, res) =>
-  res.status(200).json({
-    commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? "unknown",
-    startedAt: startedAt.toISOString(),
-  }),
-);
+mountApiRoutes(app);
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Calendar api backend running on ${port}`);

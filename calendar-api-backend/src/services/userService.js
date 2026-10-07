@@ -1,6 +1,7 @@
 import { clerkClient } from "@clerk/express";
 import { User } from "../models/UserModel.js";
 import redisClient from "../database/redisClient.js";
+import { defaultPermissions } from "../permissions/evaluate.js";
 
 // Returns { user, created } so callers can tell an actual insert apart from a
 // no-op on an already-existing user (the clerk webhook logs which one happened).
@@ -20,6 +21,11 @@ const createUser = async (userData) => {
     email,
     slingId,
     clerkId,
+    // A new user starts with the registry's defaults (permissions/registry.js), stamped
+    // so it's clear nobody granted them by hand.
+    permissions: defaultPermissions(),
+    permissionsUpdatedAt: new Date(),
+    permissionsUpdatedBy: "provisioning",
   });
 
   // const salt = await bcrypt.genSalt(10);

@@ -1,6 +1,7 @@
 import express from "express";
 import coverageMeterController from "../controllers/coverageMeterController.js";
 import adminOnly from "../middlewares/adminOnly.js";
+import { requirePermission } from "../middlewares/requirePermission.js";
 
 const coverageMeterRouter = express.Router();
 
@@ -10,7 +11,7 @@ const coverageMeterRouter = express.Router();
 //
 // The whole list is written at once (PUT /) rather than per-item CRUD, because the
 // settings card batches every edit behind a single "Save changes" button.
-coverageMeterRouter.get("/", adminOnly, coverageMeterController.getMeters);
-coverageMeterRouter.put("/", adminOnly, coverageMeterController.replaceMeters);
+coverageMeterRouter.get("/", requirePermission("scheduling", "edit"), adminOnly, coverageMeterController.getMeters);
+coverageMeterRouter.put("/", requirePermission("scheduling", "edit"), adminOnly, coverageMeterController.replaceMeters);
 
 export default coverageMeterRouter;

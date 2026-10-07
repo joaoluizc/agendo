@@ -1,4 +1,5 @@
 import process from "process";
+import { getAuth } from "@clerk/express";
 import userService from "./userService.js";
 
 /**
@@ -53,4 +54,59 @@ export async function isAdminRequest(clerkUserId) {
   return isAdmin;
 }
 
-export default { resolveUser, adminBypassEnabled, isAdminRequest };
+/**
+ * The caller shape the permission evaluator (`permissions/evaluate.js`) works on, built
+ * from a Mongo user. `isAdmin` comes from `type` and nothing else. Used as-is by MCP and
+ * scripts; REST goes through `getCaller`, which adds the ADMIN_BYPASS opt-in on top.
+ */
+export function callerFromUser(mongoUser, clerkId = mongoUser?.clerkId) {
+  return { clerkId, mongoUser, isAdmin: mongoUser?.type === "admin" };
+}
+
+const CALLER_PROMISE = Symbol("agendo.caller");
+
+/**
+ * Who is making this REST request: `null` (no session), `{ clerkId, noAccount: true }`
+ * (a Clerk identity with no agendo user), or `callerFromUser(...)`.
+ *
+ * Resolved once per request and memoized — the promise on a private key, the settled
+ * value on `req.caller` — so any number of checks cost a single Mongo read.
+ *
+ * Identity is read from a **session token only**, the same rule as `requireSession`:
+ * Clerk's middleware accepts any token type, and an MCP OAuth token must never act on
+ * REST. ADMIN_BYPASS=1 marks the caller admin here and nowhere else; MCP builds its caller
+ * with `callerFromUser` and so keeps ignoring the bypass, as before.
+ */
+export function getCaller(req) {
+  if (!req[CALLER_PROMISE]) {
+    req[CALLER_PROMISE] = resolveCaller(req).then((caller) => {
+      req.caller = caller;
+      return caller;
+    });
+  }
+  return req[CALLER_PROMISE];
+}
+
+async function resolveCaller(req) {
+  const { userId } = getAuth(req, { acceptsToken: "session_token" });
+  if (!userId) {
+    return null;
+  }
+  const { mongoUser } = await resolveUser(userId);
+  if (!mongoUser) {
+    return { clerkId: userId, noAccount: true };
+  }
+  const caller = callerFromUser(mongoUser, userId);
+  if (adminBypassEnabled()) {
+    caller.isAdmin = true;
+  }
+  return caller;
+}
+
+export default {
+  resolveUser,
+  adminBypassEnabled,
+  isAdminRequest,
+  callerFromUser,
+  getCaller,
+};

@@ -1,6 +1,7 @@
 import express from "express";
 import locationController from "../controllers/locationController.js";
 import adminOnly from "../middlewares/adminOnly.js";
+import { requireAdmin, signedIn } from "../middlewares/requirePermission.js";
 
 const locationRouter = express.Router();
 
@@ -31,7 +32,7 @@ const locationRouter = express.Router();
  *                   name:
  *                     type: string
  */
-locationRouter.get("/all", locationController.getAllLocations);
+locationRouter.get("/all", signedIn, locationController.getAllLocations);
 
 /**
  * @openapi
@@ -66,7 +67,7 @@ locationRouter.get("/all", locationController.getAllLocations);
  *                 [otherProps]:
  *                   type: string
  */
-locationRouter.post("/new", adminOnly, locationController.createLocation);
+locationRouter.post("/new", requireAdmin, adminOnly, locationController.createLocation);
 
 /**
  * @openapi
@@ -98,7 +99,7 @@ locationRouter.post("/new", adminOnly, locationController.createLocation);
  *       404:
  *         description: Location not found
  */
-locationRouter.get("/:id", locationController.getLocationById);
+locationRouter.get("/:id", signedIn, locationController.getLocationById);
 
 /**
  * @openapi
@@ -141,7 +142,7 @@ locationRouter.get("/:id", locationController.getLocationById);
  *       404:
  *         description: Location not found
  */
-locationRouter.put("/:id", adminOnly, locationController.updateLocation);
+locationRouter.put("/:id", requireAdmin, adminOnly, locationController.updateLocation);
 
 /**
  * @openapi
@@ -162,7 +163,7 @@ locationRouter.put("/:id", adminOnly, locationController.updateLocation);
  *       404:
  *         description: Location not found
  */
-locationRouter.delete("/:id", adminOnly, locationController.deleteLocation);
+locationRouter.delete("/:id", requireAdmin, adminOnly, locationController.deleteLocation);
 
 /**
  * @openapi
