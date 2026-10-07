@@ -14,10 +14,10 @@ const SyncUserGCalBtn = ({
   userEmail,
   userName,
 }: SyncUserGCalBtnProps) => {
-  const { type: userType } = useUserSettings();
+  const canEditSchedule = useUserSettings().can("scheduling", "edit");
   const [isLoading, setIsLoading] = useState(false);
 
-  if (userType !== "admin") return null;
+  if (!canEditSchedule) return null;
 
   const syncUserShifts = async (e: React.MouseEvent) => {
     e.stopPropagation();

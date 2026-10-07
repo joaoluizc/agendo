@@ -27,8 +27,8 @@ const UNWATCHED_EXEMPT = /break|lunch|unavailab|meeting/i;
 const UNWATCHED_SHOWN = 8;
 
 /**
- * Settings → Coverage Targets. Admin-only; the parent gates on `type === "admin"`
- * and the API refuses non-admins independently.
+ * Settings → Coverage Targets. Needs scheduling:edit; the parent gates on it
+ * and the API refuses everyone else independently.
  *
  * Every edit is local until Save, which replaces the whole list in one request —
  * that is why the meters live in `useUserSettings` alongside `positionsToSync`:

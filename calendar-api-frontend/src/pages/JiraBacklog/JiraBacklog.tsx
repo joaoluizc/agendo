@@ -86,8 +86,9 @@ function loadHiddenColumns(email: string): HiddenColumns {
 const REFRESH_CONCURRENCY = 5;
 
 export default function JiraBacklog() {
-  const { type, email } = useUserSettings();
-  const canEdit = type === "admin";
+  const { can, isAdmin, email } = useUserSettings();
+  // bugs:edit changes rows and tasks; the board's statuses and MRR overrides are admin-only.
+  const canEdit = can("bugs", "edit");
 
   usePageFavicon(favicon);
   usePageTitle("Bug Tracker");
@@ -248,7 +249,7 @@ export default function JiraBacklog() {
         }
         const msg =
           e instanceof ApiError && e.status === 403
-            ? "Only admins can edit."
+            ? "You need Bug tracking: edit to change this."
             : e instanceof Error
               ? e.message
               : "Update failed";
@@ -551,7 +552,7 @@ export default function JiraBacklog() {
         <h1 className="text-2xl font-semibold">Bug Tracker</h1>
         <p className="text-sm text-muted-foreground">
           Triage board for SUP bug tickets.{" "}
-          {canEdit ? "Click a row to open and edit it." : "Read-only — ask an admin for edit access."}
+          {canEdit ? "Click a row to open and edit it." : "Read-only — an agendo admin can give you edit access."}
         </p>
       </div>
 
@@ -611,7 +612,7 @@ export default function JiraBacklog() {
               needs about 1350px, which overflows a 1280 and even a 1366 viewport — and the
               labels are the only part that can be given up without removing a control. The
               `title` carries the name while collapsed, so nothing becomes unidentifiable. */}
-          {canEdit && (
+          {isAdmin && (
             <>
               <Button
                 variant="outline"
@@ -633,6 +634,10 @@ export default function JiraBacklog() {
                   <span className={TOOLBAR_LABEL}>MRR overrides</span>
                 </Button>
               )}
+            </>
+          )}
+          {canEdit && (
+            <>
               <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} title="Add row">
                 <Plus className="h-4 w-4" />
                 <span className={TOOLBAR_LABEL}>Add row</span>
@@ -757,7 +762,7 @@ export default function JiraBacklog() {
         />
       )}
 
-      {canEdit && (
+      {isAdmin && (
         <ManageStatusesDialog
           open={manageOpen}
           onOpenChange={setManageOpen}
@@ -766,7 +771,7 @@ export default function JiraBacklog() {
         />
       )}
 
-      {canEdit && mrrConfigured && (
+      {isAdmin && mrrConfigured && (
         <ManageMrrOverridesDialog open={mrrOverridesOpen} onOpenChange={setMrrOverridesOpen} />
       )}
     </div>

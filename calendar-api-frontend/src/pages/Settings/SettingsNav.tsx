@@ -1,22 +1,23 @@
 import { Link, NavLink } from "react-router-dom";
 import { useUserSettings } from "@/providers/useUserSettings";
+import { Requirement } from "@/permissions/permissions";
 import { cn } from "@/lib/utils";
 
 /**
  * General's sections, in the order they render. Each `id` must match the section card's
  * own `id` — a link with no target silently does nothing, which is how "Manage Locations"
- * went dead and "Positions" never got a link at all. `adminOnly` mirrors the section's own
- * gate in Settings.tsx, so a normal user is not offered links to cards they cannot see.
+ * went dead and "Positions" never got a link at all. `requires` mirrors the section's own
+ * gate in Settings.tsx, so nobody is offered links to cards they cannot see.
  */
-const SECTIONS = [
-  { id: "shifts-to-add-to-cal", label: "Synced shifts", adminOnly: false },
-  { id: "timezone", label: "Your timezone", adminOnly: false },
-  { id: "generate-api-token", label: "API Token", adminOnly: true },
-  { id: "manage-locations", label: "Locations", adminOnly: true },
-  { id: "manage-positions", label: "Positions", adminOnly: true },
-  { id: "coverage-targets", label: "Coverage targets", adminOnly: true },
-  { id: "report-groups", label: "Report groups", adminOnly: true },
-] as const;
+const SECTIONS: { id: string; label: string; requires: Requirement | null }[] = [
+  { id: "shifts-to-add-to-cal", label: "Synced shifts", requires: null },
+  { id: "timezone", label: "Your timezone", requires: null },
+  { id: "generate-api-token", label: "API Token", requires: "admin" },
+  { id: "manage-locations", label: "Locations", requires: "admin" },
+  { id: "manage-positions", label: "Positions", requires: "admin" },
+  { id: "coverage-targets", label: "Coverage targets", requires: "scheduling:edit" },
+  { id: "report-groups", label: "Report groups", requires: "reports:edit" },
+];
 
 const pageLink = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -38,8 +39,7 @@ const pageLink = ({ isActive }: { isActive: boolean }) =>
  * Developer); each group then becomes a top-level entry here.
  */
 export default function SettingsNav() {
-  const { type } = useUserSettings();
-  const isAdmin = type === "admin";
+  const { isAdmin, meets } = useUserSettings();
 
   return (
     <nav className="grid gap-1 text-sm md:sticky md:top-20" aria-label="Settings">
@@ -47,7 +47,7 @@ export default function SettingsNav() {
         General
       </NavLink>
       <div className="mb-2 grid gap-0.5">
-        {SECTIONS.filter((section) => !section.adminOnly || isAdmin).map(
+        {SECTIONS.filter((section) => !section.requires || meets(section.requires)).map(
           (section) => (
             <Link
               key={section.id}

@@ -1,10 +1,21 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useCallback, useRef } from "react";
 import { Position } from "@/types/positionTypes.ts";
 import { UserSafeInfo } from "@/types/userTypes";
 import { CoverageMeter } from "@/types/coverageTypes";
 import { Location } from "@/types/locationTypes";
 import { getCoverageMeters } from "@/pages/Settings/CoverageTargets/coverageUtils";
 import { useAuth } from "@clerk/clerk-react"; // Assuming you are using Clerk's useAuth hook
+import {
+  AreaKey,
+  LevelOf,
+  NO_PERMISSIONS,
+  PREVIEW_PRESETS,
+  Permissions,
+  Requirement,
+  hasLevel,
+  meets as meetsRequirement,
+  normalizePermissions,
+} from "@/permissions/permissions";
 
 type UserSettingsProviderProps = {
   children: React.ReactNode;
@@ -16,21 +27,31 @@ type UserSettingsProviderState = {
   email: string;
   slingId: string;
   /**
-   * The role the UI renders for: `"admin"` or `"user"`. Normally the server's answer; on
-   * localhost an admin can switch it to `"user"` to preview the agent's view — see
-   * `viewAsAgent`. Gate UI on this.
+   * Whether the UI renders for an admin. The server's answer (`/user/info`), except while a
+   * local preview is on — see `previewKey`. Admins pass every `can`.
    */
-  type: string;
-  /** What the server says, whatever `viewAsAgent` is doing to `type`. */
-  realType: string;
+  isAdmin: boolean;
+  /** What the server says, whatever a preview is doing to `isAdmin`. */
+  realIsAdmin: boolean;
   /**
-   * Local development only: an admin is previewing the app as an agent. Purely a UI
-   * switch — the server still knows you as an admin, so anything a screen asks for still
-   * succeeds; what changes is everything that renders (or fetches) behind `type`.
+   * The caller's effective level in each area, computed by the server (an admin's is the
+   * top level everywhere). Gate UI with `can` / `meets`, never on a user's `type`.
    */
-  viewAsAgent: boolean;
-  /** Stored per browser and applied by reloading, so every screen starts from the new role. */
-  setViewAsAgent: (value: boolean) => void;
+  permissions: Permissions;
+  /** At least `level` in `area`? Admins: always. The server enforces the same rule. */
+  can: <A extends AreaKey>(area: A, level: LevelOf<A>) => boolean;
+  /** The same for a page/control requirement: "admin" or "<area>:<level>". */
+  meets: (requirement: Requirement) => boolean;
+  /**
+   * Local development only: an admin previewing the app as someone else (a key of
+   * PREVIEW_PRESETS), or null. Purely a UI switch — the server still knows you as an
+   * admin, so anything a screen asks for still succeeds; what changes is what renders.
+   */
+  previewKey: string | null;
+  /** Stored per browser and applied by reloading, so every screen starts from the new view. */
+  setPreviewKey: (key: string | null) => void;
+  /** Fetch `/user/info` again — after a permission change, or when the tab comes back. */
+  refreshUserInfo: () => Promise<void>;
   userInfoLoaded: boolean;
   /**
    * The agent's stored IANA timezone (e.g. "America/Sao_Paulo"), from Mongo.
@@ -57,7 +78,6 @@ type UserSettingsProviderState = {
   setLastName: (value: string) => void;
   setEmail: (value: string) => void;
   setSlingId: (value: string) => void;
-  setType: (value: string) => void;
   setAllPositions: (value: Position[]) => void;
   /**
    * Bump a position's `lastUsedAt` to today, locally.
@@ -83,40 +103,53 @@ export const UserSettingsContext = createContext<
   UserSettingsProviderState | undefined
 >(undefined);
 
-const VIEW_AS_AGENT_KEY = "agendo.viewAsAgent";
+const PREVIEW_KEY = "agendo.previewAccess";
 
 /** Only ever on in a dev build: production ignores whatever the key holds. */
-const readViewAsAgent = () => {
-  if (!import.meta.env.DEV) return false;
+const readPreviewKey = (): string | null => {
+  if (!import.meta.env.DEV) return null;
   try {
-    return localStorage.getItem(VIEW_AS_AGENT_KEY) === "on";
+    const key = localStorage.getItem(PREVIEW_KEY);
+    return PREVIEW_PRESETS.some((preset) => preset.key === key) ? key : null;
   } catch {
-    return false;
+    return null;
   }
 };
 
-const storeViewAsAgent = (on: boolean) => {
+const storePreviewKey = (key: string | null) => {
   try {
-    if (on) localStorage.setItem(VIEW_AS_AGENT_KEY, "on");
-    else localStorage.removeItem(VIEW_AS_AGENT_KEY);
+    if (key) localStorage.setItem(PREVIEW_KEY, key);
+    else localStorage.removeItem(PREVIEW_KEY);
   } catch {
-    // Blocked storage: the reload below then simply comes back in the old role.
+    // Blocked storage: the reload below then simply comes back in the old view.
   }
 };
+
+/** A tab that comes back after this long re-reads /user/info, so a grant lands without a reload. */
+const USER_INFO_STALE_MS = 60_000;
 
 export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [slingId, setSlingId] = useState("");
-  const [type, setType] = useState("");
-  const [viewAsAgent] = useState(readViewAsAgent);
-  // Only an admin can be previewing an agent: anyone else is one already.
-  const effectiveType = viewAsAgent && type === "admin" ? "user" : type;
-  const setViewAsAgent = (on: boolean) => {
-    storeViewAsAgent(on);
-    // A reload rather than a state flip: the admin-only data already loaded (coverage
-    // meters, calendar events) would otherwise stay on screen in the agent's view.
+  const [realIsAdmin, setRealIsAdmin] = useState(false);
+  const [realPermissions, setRealPermissions] = useState<Permissions>(NO_PERMISSIONS);
+  const [previewKey] = useState(readPreviewKey);
+  // Only an admin can preview someone else: anyone else already sees exactly their own.
+  const preview = realIsAdmin
+    ? PREVIEW_PRESETS.find((preset) => preset.key === previewKey)
+    : undefined;
+  const isAdmin = preview ? false : realIsAdmin;
+  const permissions = preview ? preview.permissions : realPermissions;
+  const can = <A extends AreaKey>(area: A, level: LevelOf<A>) =>
+    isAdmin || hasLevel(permissions, area, level);
+  const meets = (requirement: Requirement) => meetsRequirement({ isAdmin, permissions }, requirement);
+  const canEditSchedule = can("scheduling", "edit");
+  const setPreviewKey = (key: string | null) => {
+    storePreviewKey(key);
+    // A reload rather than a state flip: data loaded for the real view (coverage meters,
+    // calendar events) would otherwise stay on screen in the preview.
     window.location.reload();
   };
   const [userInfoLoaded, setUserInfoLoaded] = useState(false);
@@ -159,39 +192,43 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const [userGoogleInfo, setUserGoogleInfo] = useState("");
   const [unsavedChangesAlertOpen, setUnsavedChangesAlertOpen] = useState(false);
   const { isSignedIn } = useAuth();
+  const userInfoFetchedAt = useRef(0);
+
+  const refreshUserInfo = useCallback(async () => {
+    userInfoFetchedAt.current = Date.now();
+    try {
+      const response = await fetch("/api/user/info", {
+        method: "GET",
+        mode: "cors",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFirstName(data.firstName);
+        setLastName(data.lastName);
+        setEmail(data.email);
+        setSlingId(data.slingId);
+        setRealIsAdmin(data.isAdmin === true);
+        setRealPermissions(normalizePermissions(data.permissions));
+        // `timezone` is the real field; `timeZone` is the legacy camelCase key the
+        // API still mirrors, kept only so a client mid-deploy is not left blank.
+        setTimezone(data.timezone ?? data.timeZone ?? "UTC");
+      } else {
+        console.error("Failed to get user settings");
+      }
+    } catch (e) {
+      console.error("Failed to get user settings", e);
+    } finally {
+      // Mark loaded even on failure so route guards stop waiting and degrade gracefully
+      // (a failed load is treated as "no access", not an infinite spinner).
+      setUserInfoLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
-    const getUserSettings = async () => {
-      try {
-        const response = await fetch("/api/user/info", {
-          method: "GET",
-          mode: "cors",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setFirstName(data.firstName);
-          setLastName(data.lastName);
-          setEmail(data.email);
-          setSlingId(data.slingId);
-          setType(data.type);
-          // `timezone` is the real field; `timeZone` is the legacy camelCase key the
-          // API still mirrors, kept only so a client mid-deploy is not left blank.
-          setTimezone(data.timezone ?? data.timeZone ?? "UTC");
-        } else {
-          console.error("Failed to get user settings");
-        }
-      } catch (e) {
-        console.error("Failed to get user settings", e);
-      } finally {
-        // Mark loaded even on failure so admin route guards stop waiting and degrade
-        // gracefully (a failed load is treated as "not admin", not an infinite spinner).
-        setUserInfoLoaded(true);
-      }
-    };
     const getPositions = async () => {
       const response = await fetch("/api/position/all", {
         method: "GET",
@@ -241,19 +278,35 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
     };
     if (isSignedIn) {
-      getUserSettings();
+      refreshUserInfo();
       getPositions();
       getUsers();
       getLocations();
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, refreshUserInfo]);
 
-  // Coverage meters are admin-only on both ends, and `type` only lands once
+  // Access is read once at sign-in; a tab that comes back after a while re-reads it, so a
+  // permission an admin just granted (or removed) shows without signing out.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const onVisible = () => {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - userInfoFetchedAt.current > USER_INFO_STALE_MS
+      ) {
+        refreshUserInfo();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [isSignedIn, refreshUserInfo]);
+
+  // Coverage meters need scheduling:edit on both ends, and access only lands once
   // /api/user/info resolves — so this can't ride along with the fetches above.
   // `originalCoverageMeters` is the baseline the Settings card diffs against for
   // its dirty state and Reset, mirroring positionsToSync.
   useEffect(() => {
-    if (!userInfoLoaded || effectiveType !== "admin") return;
+    if (!userInfoLoaded || !canEditSchedule) return;
 
     const loadCoverageMeters = async () => {
       try {
@@ -265,17 +318,21 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
       }
     };
     loadCoverageMeters();
-  }, [userInfoLoaded, effectiveType]);
+  }, [userInfoLoaded, canEditSchedule]);
 
   const value = {
     firstName,
     lastName,
     email,
     slingId,
-    type: effectiveType,
-    realType: type,
-    viewAsAgent,
-    setViewAsAgent,
+    isAdmin,
+    realIsAdmin,
+    permissions,
+    can,
+    meets,
+    previewKey: preview ? preview.key : null,
+    setPreviewKey,
+    refreshUserInfo,
     userInfoLoaded,
     timezone,
     setTimezone,
@@ -294,7 +351,6 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     setLastName,
     setEmail,
     setSlingId,
-    setType,
     setAllPositions,
     markPositionUsed,
     setAllUsers,

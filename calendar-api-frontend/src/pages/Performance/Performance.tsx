@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Info, Lock, Plus, RefreshCw, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -27,7 +27,6 @@ import LocationFilter from "@/components/ScheduleCalendar/calendar-components/Lo
 import { WARNING_TEXT } from "./format";
 import { ALL_LOCATIONS, countsByLocation, makeRegionFilter } from "./regionFilter";
 import { usePageTitle } from "./use-page-title";
-import { usePerformanceAccess } from "./access";
 import LeaderboardTab from "./LeaderboardTab";
 import LeadsBillingTab from "./LeadsBillingTab";
 import InteractionsTab from "./InteractionsTab";
@@ -62,16 +61,15 @@ function currentQuarter() {
 }
 
 /**
- * Admin-only agent performance per quarter: the CRO's Agent Performance Score computed
- * from imported tickets/chats/screen-shares and agendo's own shift hours, under a
- * versioned methodology. See the backend's src/performance/README.md.
+ * Agent performance per quarter: the CRO's Agent Performance Score computed from imported
+ * tickets/chats/screen-shares and agendo's own shift hours, under a versioned methodology.
+ * See the backend's src/performance/README.md.
+ *
+ * Needs performance:edit (admins have it): main.tsx guards the route, so nothing here loads
+ * for anyone else. Agents never see the score — there is no self level.
  */
-/** The page behind its access check (see access.ts), so nothing loads for anyone else. */
 export default function Performance() {
   usePageTitle("Performance");
-  const allowed = usePerformanceAccess();
-  if (allowed === null) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
-  if (!allowed) return <Navigate to="/" replace />;
   return <PerformancePage />;
 }
 

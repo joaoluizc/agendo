@@ -38,16 +38,18 @@ needed**. The correct setup is `pluginReact.configs.flat['jsx-runtime']` placed
 after `recommended`, plus `settings: { react: { version: 'detect' } }` to
 silence the version warning. (Fixed 2026-06-23.)
 
-## Local dev: previewing the agent view
+## Local dev: previewing someone else's access
 
-In a dev build the red **localhost** badge in the header is a switch: click it (as an
-admin) to see the app as an agent, click it again to go back. The choice is kept in
-`localStorage` (`agendo.viewAsAgent`) and applied by reloading, so every screen starts
-over in the new role. Production builds ignore the key.
+In a dev build the red **localhost** badge in the header opens a **Preview as** menu (for
+admins): Agent, Scheduler, Bug triager, Lead or No access — presets in
+`permissions/permissions.ts` (`PREVIEW_PRESETS`) — or back to yourself. The choice is kept
+in `localStorage` (`agendo.previewAccess`) and applied by reloading, so every screen starts
+over in the new view. Production builds ignore the key.
 
-It is a **UI-only** switch (`user-settings-provider`: `type` becomes `"user"`, `realType`
-keeps the server's answer). Everything gated on `type` — admin controls, admin routes,
-the coverage meters and calendar events that are only fetched for admins — behaves as it
-would for an agent. The server still knows you as an admin, though, so anything it filters
-by role on its own side (drafts in the day's shifts, admin-only fields in the user list)
-still comes back as it would for an admin. Check those as a real agent account.
+It is a **UI-only** switch (`user-settings-provider`: `isAdmin` becomes false and
+`permissions` becomes the preset; `realIsAdmin` keeps the server's answer). Everything gated
+on `can` / `meets` — routes, nav links, edit controls, the coverage meters and calendar
+events only fetched for those who can see them — behaves as it would for that person. The
+server still knows you as an admin, though, so anything it shapes on its own side (drafts in
+the day's shifts, the fields in the user list, your report's rows) still comes back as it
+would for an admin. Check those as a real account with those levels.

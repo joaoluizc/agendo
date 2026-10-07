@@ -16,11 +16,11 @@ import { ListChecks } from "lucide-react";
  * than a mode you step into and back out of.
  */
 function ToggleBulkSelector() {
-  const { type } = useUserSettings();
+  const canEditSchedule = useUserSettings().can("scheduling", "edit");
   const { isBulkSelectorActive, setIsBulkSelectorActive, exitBulkSelect } =
     useSchedule();
 
-  if (type !== "admin") return null;
+  if (!canEditSchedule) return null;
 
   return (
     <div className="flex items-center gap-2">

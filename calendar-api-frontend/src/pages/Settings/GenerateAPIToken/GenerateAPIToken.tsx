@@ -16,9 +16,9 @@ import { Copy } from "lucide-react";
 function GenerateAPIToken() {
   const { getToken } = useAuth();
   const [token, setToken] = useState("");
-  const { type: userType } = useUserSettings();
+  const { isAdmin } = useUserSettings();
 
-  if (userType === "admin") {
+  if (isAdmin) {
     const handleGenerateToken = async () => {
       let response;
       try {

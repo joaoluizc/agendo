@@ -23,7 +23,9 @@ export default function Settings() {
     coverageMeters,
     originalCoverageMeters,
     setUnsavedChangesAlertOpen,
-    type,
+    meets,
+    isAdmin,
+    permissions,
   } = useUserSettings();
 
   const hasUnsavedChanges = () => {
@@ -77,13 +79,13 @@ export default function Settings() {
   // The sidebar's section links are `/app/settings#id`, followed from any settings page.
   // React Router doesn't scroll to a hash after navigating, so do it once the cards exist.
   // Keyed on the navigation, not just the hash, so clicking the same section again after
-  // scrolling away still jumps back. Admin cards render only once `type` has loaded, hence
-  // that dependency too.
+  // scrolling away still jumps back. Gated cards render only once access has loaded, hence
+  // those dependencies too.
   const { hash, key } = useLocation();
   useEffect(() => {
     if (!hash) return;
     document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
-  }, [hash, key, type]);
+  }, [hash, key, isAdmin, permissions]);
 
   return (
     <>
@@ -91,15 +93,17 @@ export default function Settings() {
         {/* <GoogleIntegration></GoogleIntegration> */}
         <ShiftsToAddToCal />
         <TimezoneCard />
-        {type === "admin" && (
+        {/* Each card is gated on what its API needs — the same requirements SettingsNav
+            uses for its links. Locations, positions and the API token are admin-only. */}
+        {isAdmin && (
           <div className="grid gap-6">
             <GenerateAPIToken />
             <ManageLocations />
             <ManagePositions />
-            <CoverageTargets />
-            <ReportGroups />
           </div>
         )}
+        {meets("scheduling:edit") && <CoverageTargets />}
+        {meets("reports:edit") && <ReportGroups />}
       </div>
       {blocker.state === "blocked" ? (
         <ProceedWithUnsavedChanges

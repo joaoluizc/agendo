@@ -26,7 +26,8 @@ type EmptySlotProps = {
 
 function EmptySlot(props: EmptySlotProps) {
   const { userId, currentHour, selectedDate, onRequestCreate } = props;
-  const { type: userType, allUsers, allPositions } = useUserSettings();
+  const { can, allUsers, allPositions } = useUserSettings();
+  const canEditSchedule = can("scheduling", "edit");
   const {
     shiftInDrag,
     setShiftInDrag,
@@ -179,7 +180,7 @@ function EmptySlot(props: EmptySlotProps) {
   // One cell per hour, sitting underneath the shift lanes as a full-height click and
   // drop target. The row's hour lines and tint are drawn by AgentRow, so these cells
   // stay transparent — they exist for the interaction, not the paint.
-  if (userType !== "admin") return <div key={`key-${currentHour}`} />;
+  if (!canEditSchedule) return <div key={`key-${currentHour}`} />;
 
   return (
     <div

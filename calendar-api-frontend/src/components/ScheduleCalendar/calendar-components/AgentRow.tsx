@@ -120,9 +120,10 @@ const AgentRow = ({
     focusedPositionIds,
   } = useSchedule();
 
-  const { type: userType } = useUserSettings();
+  // Schedule builders (scheduling:edit) drag to create and read the manager notes.
+  const canEditSchedule = useUserSettings().can("scheduling", "edit");
   const { clock } = useTimeFormat();
-  const showPreferences = userType === "admin" && hasPreferences(user);
+  const showPreferences = canEditSchedule && hasPreferences(user);
 
   /** The range being drawn by a press-and-drag on empty space, while the pointer is down. */
   const [createDrag, setCreateDrag] = useState<HourRange | null>(null);
@@ -247,7 +248,7 @@ const AgentRow = ({
     // Anything left armed by a gesture whose click never arrived dies here, so it can never
     // swallow the press that follows.
     suppressClick.current = false;
-    if (userType !== "admin" || isBulkSelectorActive) return;
+    if (!canEditSchedule || isBulkSelectorActive) return;
     // Mouse only: a touch press here has to stay a tap-to-create, and claiming the gesture
     // would fight the grid's own horizontal scroll.
     if (event.pointerType !== "mouse" || event.button !== 0) return;

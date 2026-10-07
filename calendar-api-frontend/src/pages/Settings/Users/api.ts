@@ -1,3 +1,5 @@
+import type { AreaKey, Permissions } from "@/permissions/permissions";
+
 /**
  * Thin client for the admin-only user endpoints behind Settings → Users. Same calling
  * convention as the rest of agendo (see pages/Reports/api.ts): same-origin "/api" proxy +
@@ -50,7 +52,7 @@ export type SavedPreferences = {
 
 export const usersApi = {
   /**
-   * Set an agent's timezone. Admin-only server-side (`adminOnly` on
+   * Set an agent's timezone. Admin-only server-side (`requireAdmin` on
    * `PUT /user/:clerkId/timezone`), not merely hidden in this UI.
    */
   setTimezone: (userId: string, timezone: string) =>
@@ -64,4 +66,35 @@ export const usersApi = {
       method: "PUT",
       body: { preferences },
     }),
+  /**
+   * Change someone's access: their area levels and/or admin flag. Admin-only server-side;
+   * the server also refuses changing your own access (403) and demoting the last admin
+   * (409). `permissions` may be partial — it is merged over what they have.
+   */
+  setAccess: (userId: string, body: { type?: "admin" | "normal"; permissions?: Partial<Permissions> }) =>
+    request<SavedAccess>(`/${encodeURIComponent(userId)}/permissions`, {
+      method: "PUT",
+      body,
+    }),
+  /** Areas, levels and their copy, for the access editor. Any signed-in user may read it. */
+  getPermissionRegistry: () => request<PermissionRegistry>("/permission-registry"),
+};
+
+export type SavedAccess = {
+  id: string;
+  type: "admin" | "normal";
+  permissions: Partial<Permissions> | null;
+  permissionsUpdatedAt: string | null;
+  permissionsUpdatedBy: string | null;
+  effectivePermissions: Permissions;
+};
+
+export type PermissionRegistry = {
+  version: number;
+  areas: {
+    key: AreaKey;
+    label: string;
+    levels: { key: string; description: string }[];
+    defaultForNewUsers: string;
+  }[];
 };

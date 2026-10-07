@@ -13,6 +13,7 @@ import {
 import { useUserSettings } from "@/providers/useUserSettings";
 import { UserSafeInfo } from "@/types/userTypes";
 import { cn } from "@/lib/utils";
+import PermissionsCard from "./PermissionsCard";
 import PreferencesCard from "./PreferencesCard";
 import SyncedPositionsCard from "./SyncedPositionsCard";
 import UserTimezoneCard from "./UserTimezoneCard";
@@ -23,12 +24,13 @@ const initials = (user: UserSafeInfo) =>
   `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`;
 
 /**
- * Settings → Users. Admin-only (the route sits under AdminRoute; the write endpoint is
- * admin-gated on its own). A page of its own rather than another card on General, which
+ * Settings → Users. Admin-only (the route needs "admin" in main.tsx; every write endpoint
+ * is admin-gated on its own). A page of its own rather than another card on General, which
  * is long enough already; SettingsLayout supplies the frame and the shared sidebar.
  *
- * Pick an agent on the left; the right side holds their manager-only preferences and a
- * read-only view of what syncs to their calendar. The pick lives in `?user=<clerkId>`, so
+ * Pick an agent on the left; the right side holds their access (admin flag and a level per
+ * area), their managers' notes, their timezone and a read-only view of what syncs to their
+ * calendar. The pick lives in `?user=<clerkId>`, so
  * a refresh keeps it and the schedule's hover card can link straight to an agent.
  *
  * The roster is `allUsers` from the settings provider — its admin shape already carries
@@ -154,7 +156,8 @@ export default function Users() {
         <div>
           <h2 className="text-xl font-semibold">Users</h2>
           <p className="text-sm text-muted-foreground">
-            Managers’ notes on each agent, and what syncs to their calendar.
+            Who can access what, managers’ notes on each agent, and what syncs to their
+            calendar.
           </p>
         </div>
 
@@ -262,6 +265,7 @@ export default function Users() {
                     </p>
                   </div>
                 </div>
+                <PermissionsCard user={selected} />
                 <PreferencesCard
                   user={selected}
                   editorKey={`${selected.id}:${editorVersion}`}

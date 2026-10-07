@@ -102,8 +102,8 @@ function GroupPicker({ options, onAdd }: { options: string[]; onAdd: (name: stri
 }
 
 /**
- * Settings → Report Groups. Admin-only; the parent gates on `type === "admin"` and the
- * API refuses non-admins independently. Deliberately self-contained (own fetch, own
+ * Settings → Report Groups. Needs reports:edit; the parent gates on it and the
+ * API refuses everyone else independently. Deliberately self-contained (own fetch, own
  * Save/Reset) rather than wired into the page-wide unsaved-changes blocker that
  * Coverage Targets uses — this is meant to stay small: two named lists, nothing more.
  */

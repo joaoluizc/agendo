@@ -8,7 +8,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy/PrivacyPolicy.tsx";
 import Schedule from "./pages/Schedule/Schedule.tsx";
 import NotFound from "./NotFound.tsx";
 import ProtectedRoute from "./routes/ProtectedRoute.tsx";
-import AdminRoute from "./routes/AdminRoute.tsx";
+import RequirePermission from "./permissions/RequirePermission.tsx";
 import Settings from "./pages/Settings/Settings.tsx";
 import SettingsLayout from "./pages/Settings/SettingsLayout.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
@@ -39,29 +39,43 @@ const router = createBrowserRouter([
       {
         element: <ProtectedRoute />,
         path: "/app",
+        // Each area's pages need its level (see permissions/pages.ts for the nav). The API
+        // checks the same thing on every call; these guards just spare people a page of 403s.
         children: [
-          { path: "/app/sling-schedule", element: <SlingSchedule /> },
-          { path: "/app/schedule", element: <Schedule /> },
-          // Not under AdminRoute: access is a named allowlist the page checks itself.
-          { path: "/app/performance", element: <Performance /> },
-          // Every settings page shares SettingsLayout's sidebar. Users is admin-only.
+          {
+            element: <RequirePermission requires="scheduling:view" />,
+            children: [
+              { path: "/app/sling-schedule", element: <SlingSchedule /> },
+              { path: "/app/schedule", element: <Schedule /> },
+            ],
+          },
+          {
+            element: <RequirePermission requires="bugs:view" />,
+            children: [
+              { path: "/app/jira-backlog", element: <JiraBacklog /> },
+              { path: "/app/tasks", element: <Tasks /> },
+            ],
+          },
+          {
+            // Everyone sees their own report by default; reports:edit sees everyone's.
+            element: <RequirePermission requires="reports:self" />,
+            children: [{ path: "/app/reports", element: <Reports /> }],
+          },
+          {
+            element: <RequirePermission requires="performance:edit" />,
+            children: [{ path: "/app/performance", element: <Performance /> }],
+          },
+          // Every settings page shares SettingsLayout's sidebar. Users (access and notes) is
+          // admin-only.
           {
             path: "/app/settings",
             element: <SettingsLayout />,
             children: [
               { index: true, element: <Settings /> },
               {
-                element: <AdminRoute />,
+                element: <RequirePermission requires="admin" />,
                 children: [{ path: "/app/settings/users", element: <Users /> }],
               },
-            ],
-          },
-          {
-            element: <AdminRoute />,
-            children: [
-              { path: "/app/jira-backlog", element: <JiraBacklog /> },
-              { path: "/app/tasks", element: <Tasks /> },
-              { path: "/app/reports", element: <Reports /> },
             ],
           },
         ],

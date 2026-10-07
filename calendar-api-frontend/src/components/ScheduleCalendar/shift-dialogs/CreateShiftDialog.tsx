@@ -882,8 +882,8 @@ const AgentPickRow = ({
   onResolve,
 }: AgentPickRowProps) => {
   const { clock } = useTimeFormat();
-  const { type } = useUserSettings();
-  const showPreferences = type === "admin" && hasPreferences(agent.user);
+  const canEditSchedule = useUserSettings().can("scheduling", "edit");
+  const showPreferences = canEditSchedule && hasPreferences(agent.user);
   const options = resolutionOptions(status.kind);
   const showResolve = isSelected && status.kind !== "clear";
 

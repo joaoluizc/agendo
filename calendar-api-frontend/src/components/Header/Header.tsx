@@ -2,7 +2,8 @@ import { Link, NavLink } from "react-router-dom";
 import { Clock, Menu, Sun, Moon } from "lucide-react";
 import { useTheme } from "../../providers/useTheme";
 import { useUserSettings } from "@/providers/useUserSettings";
-import { usePerformanceAccess } from "@/pages/Performance/access";
+import { AREA_PAGES, SCHEDULE_REQUIREMENT } from "@/permissions/pages";
+import { PREVIEW_PRESETS } from "@/permissions/permissions";
 import { TimeFormatPreference, useTimeFormat } from "@/utils/timeFormat";
 import agendoLogoLight from "../../resources/agendo-logo.svg";
 import agendoLogoDark from "../../resources/agendo-logo-dark.svg";
@@ -18,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { SignedIn, SignedOut, UserButton, useAuth } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -71,10 +72,11 @@ const MobileNavLink = ({
 
 const Header = () => {
   const { setTheme, theme } = useTheme();
-  const { type, realType, viewAsAgent, setViewAsAgent } = useUserSettings();
-  const { isSignedIn } = useAuth();
-  // Performance is an allowlist, not an admin perk; hidden while previewing the agent view.
-  const showPerformance = usePerformanceAccess(Boolean(isSignedIn)) === true && !viewAsAgent;
+  const { meets, realIsAdmin, previewKey, setPreviewKey } = useUserSettings();
+  // Only pages the caller can open are offered (the same rule main.tsx's guards apply).
+  const canSeeSchedule = meets(SCHEDULE_REQUIREMENT);
+  const areaPages = AREA_PAGES.filter((page) => meets(page.requires));
+  const previewLabel = PREVIEW_PRESETS.find((preset) => preset.key === previewKey)?.label;
   const {
     preference: timeFormat,
     setPreference: setTimeFormat,
@@ -169,6 +171,7 @@ const Header = () => {
             </NavigationMenuItem>
 
             <SignedIn>
+              {canSeeSchedule && (
               <NavigationMenuItem>
                 <NavigationMenuTrigger
                   onPointerMove={(e) => e.preventDefault()}
@@ -188,6 +191,7 @@ const Header = () => {
                   </ul>
                 </NavigationMenuContent>
               </NavigationMenuItem>
+              )}
               <NavigationMenuItem>
                 <NavLink
                   to="/app/settings"
@@ -202,56 +206,10 @@ const Header = () => {
                   </NavigationMenuLink>
                 </NavLink>
               </NavigationMenuItem>
-              {type === "admin" && (
-                <>
-                  <NavigationMenuItem>
-                    <NavLink
-                      to="/app/jira-backlog"
-                      className={({ isActive }) =>
-                        `${
-                          isActive ? "text-foreground" : "text-muted-foreground"
-                        } transition-colors hover:text-foreground`
-                      }
-                    >
-                      <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                        Bug Tracker
-                      </NavigationMenuLink>
-                    </NavLink>
-                  </NavigationMenuItem>
-                  <NavigationMenuItem>
-                    <NavLink
-                      to="/app/tasks"
-                      className={({ isActive }) =>
-                        `${
-                          isActive ? "text-foreground" : "text-muted-foreground"
-                        } transition-colors hover:text-foreground`
-                      }
-                    >
-                      <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                        Bug Tasks
-                      </NavigationMenuLink>
-                    </NavLink>
-                  </NavigationMenuItem>
-                  <NavigationMenuItem>
-                    <NavLink
-                      to="/app/reports"
-                      className={({ isActive }) =>
-                        `${
-                          isActive ? "text-foreground" : "text-muted-foreground"
-                        } transition-colors hover:text-foreground`
-                      }
-                    >
-                      <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                        Reports
-                      </NavigationMenuLink>
-                    </NavLink>
-                  </NavigationMenuItem>
-                </>
-              )}
-              {showPerformance && (
-                <NavigationMenuItem>
+              {areaPages.map((page) => (
+                <NavigationMenuItem key={page.to}>
                   <NavLink
-                    to="/app/performance"
+                    to={page.to}
                     className={({ isActive }) =>
                       `${
                         isActive ? "text-foreground" : "text-muted-foreground"
@@ -259,11 +217,11 @@ const Header = () => {
                     }
                   >
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                      Performance
+                      {page.label}
                     </NavigationMenuLink>
                   </NavLink>
                 </NavigationMenuItem>
-              )}
+              ))}
             </SignedIn>
           </NavigationMenuList>
         </NavigationMenu>
@@ -298,35 +256,24 @@ const Header = () => {
               {/* agendo's own schedule first: the Sling one is on its way out, so it is
                   the second place to look rather than the first. */}
               <SignedIn>
-                <MobileNavLink to="/app/schedule" onNavigate={closeMenu}>
-                  Schedule
-                </MobileNavLink>
-              </SignedIn>
-              <MobileNavLink to="/app/sling-schedule" onNavigate={closeMenu}>
-                Sling Schedule
-              </MobileNavLink>
-              <SignedIn>
-                <MobileNavLink to="/app/settings" onNavigate={closeMenu}>
-                  Settings
-                </MobileNavLink>
-                {type === "admin" && (
+                {canSeeSchedule && (
                   <>
-                    <MobileNavLink to="/app/jira-backlog" onNavigate={closeMenu}>
-                      Bug Tracker
+                    <MobileNavLink to="/app/schedule" onNavigate={closeMenu}>
+                      Schedule
                     </MobileNavLink>
-                    <MobileNavLink to="/app/tasks" onNavigate={closeMenu}>
-                      Bug Tasks
-                    </MobileNavLink>
-                    <MobileNavLink to="/app/reports" onNavigate={closeMenu}>
-                      Reports
+                    <MobileNavLink to="/app/sling-schedule" onNavigate={closeMenu}>
+                      Sling Schedule
                     </MobileNavLink>
                   </>
                 )}
-                {showPerformance && (
-                  <MobileNavLink to="/app/performance" onNavigate={closeMenu}>
-                    Performance
+                <MobileNavLink to="/app/settings" onNavigate={closeMenu}>
+                  Settings
+                </MobileNavLink>
+                {areaPages.map((page) => (
+                  <MobileNavLink key={page.to} to={page.to} onNavigate={closeMenu}>
+                    {page.label}
                   </MobileNavLink>
-                )}
+                ))}
               </SignedIn>
             </nav>
           </SheetContent>
@@ -334,30 +281,47 @@ const Header = () => {
         {/* Pushed to the right edge at every width. On a phone it used to sit straight
             after the hamburger, which left the avatar and the theme menu mid-header. */}
         <div className="ml-auto flex w-fit items-center gap-4 md:gap-2 lg:gap-4">
-          {/* Doubles as the switch between your own admin view and an agent's, for
-              checking what a screen looks like to someone who cannot edit. Centred in the
-              header on a phone, where the right side has no room for it. */}
+          {/* Doubles as a preview switch: an admin can render the app as someone with less
+              access (UI only — the server still knows you). Centred in the header on a
+              phone, where the right side has no room for it. */}
           {IS_LOCALHOST && (
-            <button
-              type="button"
-              disabled={realType !== "admin"}
-              onClick={() => setViewAsAgent(!viewAsAgent)}
-              title={
-                viewAsAgent
-                  ? "Viewing as an agent — click to switch back to admin"
-                  : realType === "admin"
-                    ? "Click to preview this screen as an agent (non-admin)"
-                    : undefined
-              }
-              className="whitespace-nowrap rounded-md bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-red-700 shadow-sm enabled:hover:opacity-90 dark:bg-black dark:text-red-300 max-md:absolute max-md:left-1/2 max-md:-translate-x-1/2"
-            >
-              localhost
-              {viewAsAgent && (
-                <>
-                  {" "}· agent<span className="max-md:hidden"> view</span>
-                </>
-              )}
-            </button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild disabled={!realIsAdmin}>
+                <button
+                  type="button"
+                  title={
+                    realIsAdmin
+                      ? "Preview this app as someone with less access"
+                      : undefined
+                  }
+                  className="whitespace-nowrap rounded-md bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-red-700 shadow-sm enabled:hover:opacity-90 dark:bg-black dark:text-red-300 max-md:absolute max-md:left-1/2 max-md:-translate-x-1/2"
+                >
+                  localhost
+                  {previewLabel && (
+                    <>
+                      {" "}· {previewLabel}
+                      <span className="max-md:hidden"> view</span>
+                    </>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-56">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Preview as (UI only)
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={previewKey ?? "off"}
+                  onValueChange={(value) => setPreviewKey(value === "off" ? null : value)}
+                >
+                  <DropdownMenuRadioItem value="off">Yourself (admin)</DropdownMenuRadioItem>
+                  {PREVIEW_PRESETS.map((preset) => (
+                    <DropdownMenuRadioItem key={preset.key} value={preset.key}>
+                      {preset.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <SignedIn>
             <UserButton />
