@@ -6,31 +6,6 @@ const slingRouter = express.Router();
 
 /**
  * @openapi
- * /sling/positions:
- *   get:
- *     summary: Retrieve a list of positions.
- *     tags:
- *       - From sling
- *     responses:
- *       200:
- *         description: A list of positions.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 response:
- *                   type: array
- *                   items:
- *                     type: object
- */
-slingRouter.get("/positions", requirePermission("scheduling", "view"), async (req, res) => {
-  const positions = slingController.getPositions();
-  res.status(200).json({ response: positions });
-});
-
-/**
- * @openapi
  * /sling/users:
  *   get:
  *     summary: Retrieve a list of users.

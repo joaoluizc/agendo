@@ -1,6 +1,8 @@
 # Reports (self-contained module)
 
-Admin-only reporting on top of agendo's schedule data. First (and so far only) report:
+Reporting on top of agendo's schedule data. Everyone sees their own row by default
+(`reports: self`); `reports: edit` sees everyone's and edits the report groups (see
+`docs/knowledge/permissions.md`). First (and so far only) report:
 total hours worked per agent over a date range, broken into three groups — Tickets,
 Chats, Other — plus a per-group and grand total. Everything for the backend half lives
 in this one folder so it can be added or removed without touching the rest of agendo

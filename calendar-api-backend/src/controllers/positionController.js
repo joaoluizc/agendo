@@ -86,7 +86,7 @@ const getUserPositionsToSync = async (req, res) => {
 // };
 
 /**
- * Admin-only: how every position resolves for one agent — enforced, their own
+ * For schedule builders (scheduling:edit): how every position resolves for one agent — enforced, their own
  * preference, and the resulting verdict.
  *
  * `/sync` answers this for the caller only, which left an admin unable to tell whether
@@ -167,16 +167,6 @@ const setUserDefaultEventColorId = async (req, res) => {
   }
 };
 
-async function getPosition(req, res) {
-  const positionId = req.params.positionId;
-  try {
-    const position = await positionService.getPositionById(positionId);
-    res.status(200).json(position);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-}
-
 async function deletePosition(req, res) {
   const positionId = req.params.positionId;
   try {
@@ -202,6 +192,5 @@ export default {
   // setUserPositionsToSync_cl,
   getUserDefaultEventColorId,
   setUserDefaultEventColorId,
-  getPosition,
   deletePosition,
 };

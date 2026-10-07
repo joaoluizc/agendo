@@ -43,8 +43,9 @@ Two services run via docker-compose:
 
 - **Auth:** Clerk. Account type is `normal` | `admin`, stored on the Mongo
   `User.type` — **Mongo is the only authority; Clerk `publicMetadata` is not read**
-  (see [Clerk / Mongo boundary](clerk-mongo-boundary.md)). Admin-only API routes use
-  an `adminOnly` middleware.
+  (see [Clerk / Mongo boundary](clerk-mongo-boundary.md)). On top of that, admins grant
+  each user a level per area (scheduling, bugs, reports, performance), and every API route
+  declares the level it needs — see [Permissions](permissions.md).
 - **Data:** MongoDB via Mongoose. **Supabase** backs a separate AI vector-search
   module (`discovai`). Redis/Upstash is used for caching.
 - **External integrations:** the **Sling API** (shift source) and the **Google

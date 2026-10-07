@@ -8,8 +8,8 @@ assemble a Google Sheet by hand:
   previous quarter.
 
 The CRO then proposed a scoring model on top, the APS. Performance (`/app/performance`,
-open to a named allowlist set in the backend's `PERFORMANCE_ACCESS_EMAILS` env var, not to all
-admins) replaces the sheet's assembly and computes the score.
+open to admins and to anyone granted `performance: edit`; agents never see the score — see
+[Permissions](permissions.md)) replaces the sheet's assembly and computes the score.
 
 ## How it fits together
 

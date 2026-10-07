@@ -1,4 +1,3 @@
-import requireSession from "./middlewares/requireSession.js";
 import userRouter from "./routers/userRouter.js";
 import gCalendarRouter from "./controllers/gCalendarController.js";
 import slingRouter from "./routers/slingRouter.js";
@@ -24,36 +23,32 @@ import performanceRouter from "./performance/performanceRouter.js";
  * mount table rather than a copy of it. The MCP routes (mcp/mcpRouter.js) and Swagger are
  * mounted separately in app.js because of the CORS ordering they need.
  *
- * `gate` is the legacy sign-in gate kept during the permissions shadow phase; each route's
- * own requirement marker is what will enforce once phase 2 lands.
+ * There is no router-level gate: every route authenticates and authorizes through its own
+ * requirement marker (middlewares/requirePermission.js); routeRequirements.test.js proves none is missing.
  */
 export const API_ROUTERS = [
   { path: "/gcalendar", router: gCalendarRouter },
-  { path: "/sling", gate: requireSession, router: slingRouter },
-  { path: "/position", gate: requireSession, router: positionRouter },
-  { path: "/coverage-meter", gate: requireSession, router: coverageMeterRouter },
+  { path: "/sling", router: slingRouter },
+  { path: "/position", router: positionRouter },
+  { path: "/coverage-meter", router: coverageMeterRouter },
   { path: "/user", router: userRouter },
-  { path: "/shift", gate: requireSession, router: shiftRouter },
-  { path: "/location", gate: requireSession, router: locationRouter },
-  { path: "/skills", gate: requireSession, router: skillRouter },
+  { path: "/shift", router: shiftRouter },
+  { path: "/location", router: locationRouter },
+  { path: "/skills", router: skillRouter },
   // Public on purpose: used outside agendo.
   { path: "/dns", router: dnsRouter },
   // DiscovAI search (public, no auth — like /dns). Self-contained module.
   { path: "/discovai", router: discovaiRouter },
-  { path: "/jira-backlog", gate: requireSession, router: jiraBacklogRouter },
-  { path: "/reports", gate: requireSession, router: reportsRouter },
-  { path: "/performance", gate: requireSession, router: performanceRouter },
+  { path: "/jira-backlog", router: jiraBacklogRouter },
+  { path: "/reports", router: reportsRouter },
+  { path: "/performance", router: performanceRouter },
   // Last: `/`, `/auth-check`, `/version`.
   { path: "/", router: metaRouter },
 ];
 
 export function mountApiRoutes(app) {
-  for (const { path, gate, router } of API_ROUTERS) {
-    if (gate) {
-      app.use(path, gate, router);
-    } else {
-      app.use(path, router);
-    }
+  for (const { path, router } of API_ROUTERS) {
+    app.use(path, router);
   }
 }
 

@@ -16,8 +16,8 @@ rule.**
 
 ### Clerk owns — and only this
 
-1. **Session identity** — `getAuth(req).userId`, behind the `requireSession` gate
-   (`src/middlewares/requireSession.js`). **Never Clerk's `requireAuth()` or
+1. **Session identity** — `getAuth(req).userId`, read by `getCaller(req)` behind each
+   route's requirement marker (`src/middlewares/requirePermission.js`). **Never Clerk's `requireAuth()` or
    `req.auth.userId`:** both accept *any* Clerk token type, including the MCP bridge's
    OAuth access token, while `getAuth(req)` defaults to session tokens only. REST routes
    take session tokens (browser cookie, Settings › API Token); OAuth tokens belong to
@@ -43,17 +43,17 @@ One function, `src/services/authz.js`:
 const { mongoUser, isAdmin } = await resolveUser(clerkUserId);
 ```
 
-`adminOnly` uses it, the MCP perimeter uses it, and `getCaller(req)` (same file) wraps it
-for REST: one session-only, memoized lookup per request that the per-area permission
+The MCP perimeter uses it, and `getCaller(req)` (same file) wraps it for REST: one session-only, memoized lookup per request that the per-area permission
 checks read (see [permissions](permissions.md)). That is the whole point of having
 exactly one. It returns `{ mongoUser: null, isAdmin: false }` for a Clerk user with no
 Mongo document, so a missing user always fails closed.
 
 ### Local development
 
-`adminOnly` enforces the role check in **every** environment. To work on an admin route
-without an admin account, set `ADMIN_BYPASS=1` — it skips the check and logs a warning on
-every request. Otherwise give your Clerk user `type: "admin"` in `dev-users`.
+Permission checks run in **every** environment. To work on an admin route without an
+admin account, set `ADMIN_BYPASS=1` — `getCaller` then treats every REST caller as an
+admin (the MCP ignores it). Otherwise give your Clerk user `type: "admin"`, or the levels
+you need, in `dev-users`.
 
 It is deliberately a separate flag from `NODE_ENV`. `NODE_ENV` also selects the Mongo
 collection (`dev-users` vs `users`), and while the bypass was keyed on it, pointing at

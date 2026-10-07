@@ -1,6 +1,5 @@
 import express from "express";
 import locationController from "../controllers/locationController.js";
-import adminOnly from "../middlewares/adminOnly.js";
 import { requireAdmin, signedIn } from "../middlewares/requirePermission.js";
 
 const locationRouter = express.Router();
@@ -67,7 +66,7 @@ locationRouter.get("/all", signedIn, locationController.getAllLocations);
  *                 [otherProps]:
  *                   type: string
  */
-locationRouter.post("/new", requireAdmin, adminOnly, locationController.createLocation);
+locationRouter.post("/new", requireAdmin, locationController.createLocation);
 
 /**
  * @openapi
@@ -142,7 +141,7 @@ locationRouter.get("/:id", signedIn, locationController.getLocationById);
  *       404:
  *         description: Location not found
  */
-locationRouter.put("/:id", requireAdmin, adminOnly, locationController.updateLocation);
+locationRouter.put("/:id", requireAdmin, locationController.updateLocation);
 
 /**
  * @openapi
@@ -163,7 +162,7 @@ locationRouter.put("/:id", requireAdmin, adminOnly, locationController.updateLoc
  *       404:
  *         description: Location not found
  */
-locationRouter.delete("/:id", requireAdmin, adminOnly, locationController.deleteLocation);
+locationRouter.delete("/:id", requireAdmin, locationController.deleteLocation);
 
 /**
  * @openapi

@@ -102,12 +102,12 @@ the same inputs and config score.
 
 ## Routes
 
-Every route is gated by `lib/access.js`: a named allowlist, not all admins. Access goes to the
-agendo users whose email is in the `PERFORMANCE_ACCESS_EMAILS` env var (comma-separated).
-Unset means nobody; `ADMIN_BYPASS=1` lets a local run through. The list lives in the
-environment because this repository is public. `GET /performance/access` (any signed-in user)
-returns `{ allowed }`, so the frontend can hide the page. `lib/access.js` is the one file to
-change for finer roles.
+Every route needs `performance: edit` (see `docs/knowledge/permissions.md`): admins have it,
+and admins grant it to whoever else should run Performance. There is no self level — agents
+never see the score. The `PERFORMANCE_ACCESS_EMAILS` allowlist that gated this before was
+folded into those grants by the permissions backfill. `GET /performance/access` (any
+signed-in user) still returns `{ allowed }` for the current frontend, which hides the page
+with it.
 
 Routes:
 

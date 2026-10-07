@@ -34,11 +34,10 @@ const EXPECTED = {
   "POST /user/clerk/new": "webhook",
   "PUT /user/me/timezone": "signedIn",
   "PUT /user/:clerkId/timezone": "admin",
+  "PUT /user/:clerkId/permissions": "admin",
   "PUT /user/:clerkId/preferences": "admin",
 
   // Google Calendar
-  "GET /gcalendar/calendars": "signedIn", // broken; deleted in phase 2
-  "GET /gcalendar/events": "signedIn", // broken; deleted in phase 2
   "GET /gcalendar/all-events": "admin", // everyone's personal calendars
   "POST /gcalendar/days-shifts-to-gcal": "admin", // bulk sync
   "POST /gcalendar/user-day-shifts-to-gcal": "signedIn", // own calendar
@@ -47,14 +46,12 @@ const EXPECTED = {
   "GET /gcalendar/all-events-excluding-platform": "admin",
 
   // Sling (legacy)
-  "GET /sling/positions": "scheduling:view", // broken; deleted in phase 2
   "GET /sling/users": "admin", // raw Sling roster, no frontend caller
   "GET /sling/calendar": "scheduling:view",
 
   // Positions
   "GET /position/all": "signedIn",
   "POST /position/new": "admin",
-  "GET /position": "signedIn", // broken; deleted in phase 2
   "GET /position/sync": "signedIn",
   "PUT /position/sync": "signedIn",
   "GET /position/sync-rules": "scheduling:edit",
@@ -231,5 +228,5 @@ test("the route → requirement map matches the reviewed contract", () => {
     .filter((key) => key in actual && actual[key] !== EXPECTED[key])
     .map((key) => `${key}: expected ${EXPECTED[key]}, got ${actual[key]}`);
   assert.deepEqual({ missing, unexpected, changed }, { missing: [], unexpected: [], changed: [] });
-  assert.equal(routes.length, 110);
+  assert.equal(routes.length, 107);
 });

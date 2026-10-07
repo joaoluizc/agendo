@@ -29,8 +29,9 @@ event name inside the JSON `event` field.
 | POST   | `/discovai/chat` | SSE search stream, default `duda` dataset (`{ query, refreshCache?, debug? }`) | none |
 | POST   | `/discovai/:dataset/chat` | Same, scoped to `:dataset` (unknown key → `error` event) | none |
 
-The route is mounted **public** (no `requireSession`), like `/dns`. To require sign-in,
-change the mount in `app.js` to `app.use("/discovai", requireSession, discovaiRouter)`.
+The routes are **public on purpose** (marked `publicRoute`), like `/dns` — both have
+consumers outside agendo. To require sign-in, swap the marker for `signedIn` in
+`discovaiRouter.js` and update `permissions/routeRequirements.test.js`.
 
 ## Datasets
 

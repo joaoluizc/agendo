@@ -14,7 +14,7 @@ that prompt conflicted with how agendo already works, agendo wins:
 
 | Spec said | This module does |
 | --- | --- |
-| Google Sign-In, `@duda.co` gate, `ADMIN_EMAILS` env var | Nothing — auth is Clerk (mounted behind `requireSession`); admin vs. normal comes from agendo's existing `UserModel.type`, enforced by the shared `adminOnly` middleware |
+| Google Sign-In, `@duda.co` gate, `ADMIN_EMAILS` env var | Nothing — auth is Clerk; access is agendo's per-area permissions: `bugs: view` to read, `bugs: edit` to change, admin for statuses and MRR overrides (see `docs/knowledge/permissions.md`) |
 | In-app user-management screen (promote/demote) | Dropped — agendo manages roles through Clerk |
 | Store issues as JSON records in an "internal DB" | MongoDB via Mongoose, with the same dev/prod collection split agendo uses elsewhere |
 | Parse the seed `jiras_seed.pdf` at runtime | Seed is exported + cleaned from the live "SUP Jiras Backlog" Google Sheet into `seed/jiraBacklogSeed.js`, so the backend ships no parser |
@@ -53,8 +53,9 @@ idempotent, `$set status` + `$unset` the booleans, targeting `dev-jira-issues` /
 
 ## Endpoints
 
-All mounted under `/jira-backlog` behind `requireSession`, and every route also requires
-an admin via `adminOnly` — reads included (see `jiraBacklogRouter.js`).
+All mounted under `/jira-backlog`. Each route declares its level (see `jiraBacklogRouter.js`):
+reads need `bugs: view`, changes need `bugs: edit`, and bug/task statuses and MRR overrides
+are admin-only.
 
 | Method | Path | Purpose | Admin? |
 | --- | --- | --- | --- |
@@ -98,9 +99,9 @@ an admin via `adminOnly` — reads included (see `jiraBacklogRouter.js`).
 > the UI uses it to flag a status that may have drifted. `refresh-zd` and `refresh-mrr` touch
 > neither field, so neither can bring a stale Jira status up to date.
 
-> `adminOnly` enforces the role check in every environment. Set `ADMIN_BYPASS=1` locally
-> to skip it (it logs a warning on every request); otherwise your Clerk user needs
-> `type: "admin"` in `dev-users`.
+> Permission checks run in every environment. Set `ADMIN_BYPASS=1` locally to be treated
+> as an admin; otherwise your Clerk user needs `type: "admin"` or the `bugs` level you
+> need in `dev-users`.
 
 ## Urgency score
 
@@ -118,7 +119,7 @@ instant feedback; the server is authoritative on save.
 Tasks (`taskModel.js`, `taskService.js`) are first-class: a task may be **linked to a bug or
 standalone** (`issueId` is optional), carries an optional **`deadline`**, and is fully
 editable. `getAllTasks` keeps standalone tasks (only true orphans — a linked issue that was
-deleted — are dropped). Task routes (all `adminOnly`): `POST /tasks` (standalone create),
+deleted — are dropped). Task routes (`bugs: edit`; task statuses are admin-only): `POST /tasks` (standalone create),
 `POST /issues/:id/tasks` (linked create), `PATCH /tasks/:taskId`, `DELETE /tasks/:taskId`,
 plus the kanban `task-statuses` CRUD and `PUT /task-statuses/order` (bulk reorder).
 
@@ -334,7 +335,7 @@ log lines: `starting — N linked of M bug(s)` … `done — X synced, Y failed`
 
 ```
 jiraBacklog/
-├── jiraBacklogRouter.js       routes (+ adminOnly on mutations)
+├── jiraBacklogRouter.js       routes, each with its permission marker
 ├── jiraBacklogController.js    req/res handlers
 ├── jiraBacklogService.js       DB ops, seeding, urgency-override rules, ZD orchestration
 ├── jiraBacklogModel.js         Mongoose schema (dev/prod collection split)

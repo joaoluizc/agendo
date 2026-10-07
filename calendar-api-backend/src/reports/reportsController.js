@@ -1,4 +1,7 @@
 import reportsService from "./reportsService.js";
+import { getCaller } from "../services/authz.js";
+import { scopeFor } from "../permissions/evaluate.js";
+import { scopeReportRows } from "../permissions/shaping.js";
 
 const MAX_NAME_LENGTH = 120;
 const MAX_NAMES_PER_GROUP = 200;
@@ -73,18 +76,23 @@ const getHoursReport = async (req, res) => {
   }
 
   try {
+    // reports:self sees only their own row; reports:edit (and admins) see everyone. The
+    // team-wide report is computed and cached once either way, then narrowed — scoping
+    // never forks the cache.
+    const scope = scopeFor(await getCaller(req), "reports");
+    const seesEveryone = scope === "all";
     // `?refresh=true` recomputes instead of reading the Redis entry — the escape hatch
-    // for a range whose shifts changed inside the cache's TTL. Admin-only along with the
-    // rest of this router, and it is the expensive path, so it stays opt-in.
+    // for a range whose shifts changed inside the cache's TTL. It is the expensive path,
+    // so it stays opt-in, and only for those who see the whole report.
     const report = await reportsService.getHoursReport({
       start,
       end,
       groupByLocation: groupByLocation === "true",
-      refresh: refresh === "true",
+      refresh: refresh === "true" && seesEveryone,
     });
     // `{ rows, computedAt, fromCache }` rather than a bare array: the client shows how old
     // the figures are, which it cannot infer from its own fetch time on a cache hit.
-    res.status(200).json(report);
+    res.status(200).json(scopeReportRows(report, scope));
   } catch (error) {
     console.error(`[reports] getHoursReport failed: ${error.message}`);
     res.status(500).json({ message: `caught error: ${error.message}` });
