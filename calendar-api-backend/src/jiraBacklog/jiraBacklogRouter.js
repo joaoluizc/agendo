@@ -4,11 +4,10 @@ import taskController from "./taskController.js";
 import adminOnly from "../middlewares/adminOnly.js";
 
 /**
- * Routes for the Jira backlog feature. Mounted in app.js behind requireAuth(), so every
- * endpoint requires a signed-in agendo user (any user may read). Mutations and Jira
- * fetches additionally require an admin via agendo's existing `adminOnly` middleware —
- * this replaces the spec's ADMIN_EMAILS scheme, since agendo already models admin vs
- * normal users (UserModel.type) through Clerk.
+ * Routes for the Jira backlog feature. Mounted in app.js behind requireSession, so every
+ * endpoint requires a signed-in session, and every route below also requires an admin via
+ * agendo's `adminOnly` middleware — this replaces the spec's ADMIN_EMAILS scheme, since
+ * agendo already models admin vs normal users (Mongo UserModel.type).
  */
 const jiraBacklogRouter = express.Router();
 

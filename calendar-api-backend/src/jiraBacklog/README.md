@@ -14,7 +14,7 @@ that prompt conflicted with how agendo already works, agendo wins:
 
 | Spec said | This module does |
 | --- | --- |
-| Google Sign-In, `@duda.co` gate, `ADMIN_EMAILS` env var | Nothing — auth is Clerk (mounted behind `requireAuth()`); admin vs. normal comes from agendo's existing `UserModel.type`, enforced by the shared `adminOnly` middleware |
+| Google Sign-In, `@duda.co` gate, `ADMIN_EMAILS` env var | Nothing — auth is Clerk (mounted behind `requireSession`); admin vs. normal comes from agendo's existing `UserModel.type`, enforced by the shared `adminOnly` middleware |
 | In-app user-management screen (promote/demote) | Dropped — agendo manages roles through Clerk |
 | Store issues as JSON records in an "internal DB" | MongoDB via Mongoose, with the same dev/prod collection split agendo uses elsewhere |
 | Parse the seed `jiras_seed.pdf` at runtime | Seed is exported + cleaned from the live "SUP Jiras Backlog" Google Sheet into `seed/jiraBacklogSeed.js`, so the backend ships no parser |
@@ -53,8 +53,8 @@ idempotent, `$set status` + `$unset` the booleans, targeting `dev-jira-issues` /
 
 ## Endpoints
 
-All mounted under `/jira-backlog` behind `requireAuth()` (any signed-in agendo user can
-read). Mutations and Jira fetches additionally require an admin via `adminOnly`.
+All mounted under `/jira-backlog` behind `requireSession`, and every route also requires
+an admin via `adminOnly` — reads included (see `jiraBacklogRouter.js`).
 
 | Method | Path | Purpose | Admin? |
 | --- | --- | --- | --- |

@@ -43,7 +43,7 @@ Two layers, both needed:
 **Adding a read of `preferences` anywhere else means adding the `+preferences` select there —
 and making sure that response only reaches admins.**
 
-The one write is `PUT /user/:clerkId/preferences` (`requireAuth()` + `adminOnly`), body
+The one write is `PUT /user/:clerkId/preferences` (`requireSession` + `adminOnly`), body
 `{ preferences }`, a string of at most 20,000 characters. Markup with no text in it
 (`<p></p>`) is stored as `""`. Last write wins: two managers editing the same agent at once
 overwrite each other, which is fine for a short note.

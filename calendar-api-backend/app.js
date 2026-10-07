@@ -3,9 +3,10 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import process from "process";
-import { clerkMiddleware, requireAuth } from "@clerk/express";
+import { clerkMiddleware } from "@clerk/express";
 
 import connectDB from "./src/database/db.js";
+import requireSession from "./src/middlewares/requireSession.js";
 import userRouter from "./src/routers/userRouter.js";
 import gCalendarRouter from "./src/controllers/gCalendarController.js";
 import slingRouter from "./src/routers/slingRouter.js";
@@ -85,31 +86,31 @@ connectDB();
 startJiraBacklogScheduler();
 
 app.use("/gcalendar", gCalendarRouter);
-app.use("/sling", requireAuth(), slingRouter);
-app.use("/position", requireAuth(), positionRouter);
+app.use("/sling", requireSession, slingRouter);
+app.use("/position", requireSession, positionRouter);
 // Coverage targets for the schedule page. Admin-only is enforced inside the router.
-app.use("/coverage-meter", requireAuth(), coverageMeterRouter);
+app.use("/coverage-meter", requireSession, coverageMeterRouter);
 app.use("/user", userRouter);
-app.use("/shift", requireAuth(), shiftRouter);
-app.use("/location", requireAuth(), locationRouter);
-app.use("/skills", requireAuth(), skillRouter);
+app.use("/shift", requireSession, shiftRouter);
+app.use("/location", requireSession, locationRouter);
+app.use("/skills", requireSession, skillRouter);
 
 app.use("/dns", dnsRouter);
 
 // DiscovAI search (public, no auth — like /ada and /dns). Self-contained module.
 app.use("/discovai", discovaiRouter);
 
-// Jira backlog (self-contained module). Authed like the rest of /app; admin-only
+// Jira backlog (self-contained module). Signed-in like the rest of /app; admin-only
 // mutations are enforced inside the router via agendo's adminOnly middleware.
-app.use("/jira-backlog", requireAuth(), jiraBacklogRouter);
+app.use("/jira-backlog", requireSession, jiraBacklogRouter);
 
 // Reports (self-contained module). Admin-only end to end via adminOnly middleware.
-app.use("/reports", requireAuth(), reportsRouter);
+app.use("/reports", requireSession, reportsRouter);
 
 // Performance (self-contained module). Gated in src/performance/lib/access.js (admin-only).
-app.use("/performance", requireAuth(), performanceRouter);
+app.use("/performance", requireSession, performanceRouter);
 
-app.get("/auth-check", requireAuth(), (req, res) =>
+app.get("/auth-check", requireSession, (req, res) =>
   res.status(200).json({ message: "authenticated" }),
 );
 
@@ -123,7 +124,7 @@ app.get("/", (req, res) =>
  * deploy from the next. Render sets RENDER_GIT_COMMIT itself; running anywhere else
  * reports "unknown", which is the honest answer and a useful signal on its own.
  *
- * Behind requireAuth like everything but `/`. The sha is not a secret — the repo is
+ * Behind requireSession like everything but `/`. The sha is not a secret — the repo is
  * public — but pinning a live deployment to an exact tree tells anyone probing which
  * known advisories still apply to it and which are already patched out, and that is
  * worth nothing to an anonymous caller. Short sha and boot time only: no env names, no
@@ -131,7 +132,7 @@ app.get("/", (req, res) =>
  *
  * From a signed-in browser, the frontend's /api rewrite reaches it at /api/version.
  */
-app.get("/version", requireAuth(), (req, res) =>
+app.get("/version", requireSession, (req, res) =>
   res.status(200).json({
     commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? "unknown",
     startedAt: startedAt.toISOString(),

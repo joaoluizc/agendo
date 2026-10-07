@@ -16,7 +16,12 @@ rule.**
 
 ### Clerk owns — and only this
 
-1. **Session identity** — `getAuth(req).userId`, `requireAuth()`.
+1. **Session identity** — `getAuth(req).userId`, behind the `requireSession` gate
+   (`src/middlewares/requireSession.js`). **Never Clerk's `requireAuth()` or
+   `req.auth.userId`:** both accept *any* Clerk token type, including the MCP bridge's
+   OAuth access token, while `getAuth(req)` defaults to session tokens only. REST routes
+   take session tokens (browser cookie, Settings › API Token); OAuth tokens belong to
+   `/mcp` alone (`mcp/lib/mcpAuth.js`).
 2. **Google OAuth access tokens** — `clerkClient.users.getUserOauthAccessToken(clerkId,
    "oauth_google")`. Genuinely Clerk-only; there is no Mongo equivalent.
 3. **Account lifecycle** — the svix-verified `user.created` webhook that provisions the
