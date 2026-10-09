@@ -7,9 +7,13 @@ lives in this folder; `app.js` touches it in exactly one line.
 
 Design and rationale: [`docs/mcp-server-plan.md`](../../../docs/mcp-server-plan.md).
 
-**Status: Phase 0 (auth spike).** One tool — `whoami`. The point of this phase is to prove
-the riskiest assumption end to end (Clerk OAuth → Render → a real MCP client) before any
-tool design is committed. Read tools are Phase 1.
+**Status: in production.** Eleven tools: `whoami`, five read tools open to everyone
+(`find_shifts` is the general query the other four are special cases of), and five admin
+tools — `find_coverage_gaps` plus create/update/delete/list confined to **draft** shifts,
+so nothing here can reach a published schedule or Google Calendar. Clients connect through
+the `mcp-remote` bridge, identified by CIMD, with no credential on anyone's machine. Still
+open: publishing agendo in the claude.ai org connector directory, which would retire the
+bridge.
 
 ## Endpoints
 

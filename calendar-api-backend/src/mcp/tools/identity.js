@@ -22,7 +22,7 @@ export function registerIdentityTools(server, caller) {
       const lines = [
         `Name: ${[mongoUser.firstName, mongoUser.lastName].filter(Boolean).join(" ") || "(not set)"}`,
         `Email: ${mongoUser.email}`,
-        `Role: ${isAdmin ? "admin — may read the schedule and (once write tools ship) change it" : "normal — read-only"}`,
+        `Role: ${isAdmin ? "admin — may read the schedule and create, change or delete draft shifts" : "normal — read-only"}`,
         `Timezone: ${mongoUser.timezone || "UTC"}`,
         `Connected client: ${clientId}`,
       ];
