@@ -205,7 +205,7 @@ export function registerScheduleTools(server, caller) {
 
   registerTool(server, caller, {
     name: "get_my_schedule",
-    level: "user",
+    requires: "signedIn",
     title: "My schedule",
     description:
       "The signed-in agent's own shifts over a date range: when they work, which position, " +
@@ -244,7 +244,7 @@ export function registerScheduleTools(server, caller) {
 
   registerTool(server, caller, {
     name: "get_agent_schedule",
-    level: "user",
+    requires: "scheduling:view",
     title: "A colleague's schedule",
     description:
       "Another support agent's shifts over a date range, found by name. The whole team's " +
@@ -301,7 +301,7 @@ export function registerScheduleTools(server, caller) {
 
   registerTool(server, caller, {
     name: "get_coverage_at",
-    level: "user",
+    requires: "scheduling:view",
     title: "Who is working right now",
     description:
       "Who is on shift at a given moment, grouped by position — the answer to " +
@@ -369,7 +369,7 @@ export function registerScheduleTools(server, caller) {
 
   registerTool(server, caller, {
     name: "summarize_shifts",
-    level: "user",
+    requires: "scheduling:view",
     title: "Hours over a period",
     description:
       "Total scheduled hours across a date range, broken down by agent and by position — " +
@@ -524,12 +524,12 @@ export function registerScheduleTools(server, caller) {
 
   registerTool(server, caller, {
     name: "find_coverage_gaps",
-    level: "admin",
+    requires: "scheduling:edit",
     title: "Coverage gaps for a day",
     description:
       "Half-hour stretches of a day where scheduled headcount falls below a coverage " +
-      "meter's target. Admin-only, matching the coverage rows on the schedule page, which " +
-      "are admin-only there too. Targets are stored in UTC, so gaps are reported in UTC.",
+      "meter's target. Needs Scheduling: edit, matching the coverage rows on the schedule " +
+      "page, which need it there too. Targets are stored in UTC, so gaps are reported in UTC.",
     inputSchema: {
       date: z
         .string()

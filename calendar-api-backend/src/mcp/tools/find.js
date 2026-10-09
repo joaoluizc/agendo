@@ -19,6 +19,7 @@ import {
   textResult,
   cap,
 } from "../lib/format.js";
+import { can, levelOf } from "../../permissions/evaluate.js";
 
 /**
  * The general shift query. One tool, composable filters, three ways of answering.
@@ -36,8 +37,8 @@ import {
  *    always the answer, and the caller can ask for rows when they are not.
  *  - **Ranges are capped**, tighter for `list` than for `summary`, since the cost of a
  *    wide summary is bounded by the number of agents and positions rather than shifts.
- *  - **Drafts are admin-only**, matching the rest of agendo. An unpublished shift is a
- *    plan, and plans about people's working hours are not team-readable by default.
+ *  - **Drafts need Scheduling: edit**, matching the rest of agendo. An unpublished shift
+ *    is a plan, and plans about people's working hours are not team-readable by default.
  */
 
 /** A `list` spanning more days than this is refused rather than truncated. */
@@ -114,7 +115,7 @@ export function registerFindTools(server, caller) {
 
   registerTool(server, caller, {
     name: "find_shifts",
-    level: "user",
+    requires: "scheduling:view",
     title: "Query shifts",
     description:
       "The general shift query — use it for anything the narrower tools do not cover " +
@@ -161,7 +162,7 @@ export function registerFindTools(server, caller) {
         .enum(["published", "draft", "any"])
         .optional()
         .describe(
-          "Default 'published'. Drafts are admin-only — an unpublished shift is a plan.",
+          "Default 'published'. Drafts need Scheduling: edit — an unpublished shift is a plan.",
         ),
       synced: z
         .boolean()
@@ -189,10 +190,11 @@ export function registerFindTools(server, caller) {
       const format = args.format || "summary";
       const status = args.status || "published";
 
-      if (status !== "published" && !ctx.isAdmin) {
+      if (status !== "published" && !can(ctx, "scheduling", "edit")) {
         return textResult(
-          `Draft shifts are admin-only — you are signed in as ${ctx.mongoUser.email} ` +
-            `(role: ${ctx.mongoUser.type}). Drop the status filter to query published shifts.`,
+          `Draft shifts need Scheduling: edit — you are signed in as ${ctx.mongoUser.email} ` +
+            `with Scheduling: ${levelOf(ctx, "scheduling")}. Drop the status filter to query ` +
+            `published shifts.`,
         );
       }
 

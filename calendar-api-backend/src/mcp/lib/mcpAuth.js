@@ -1,6 +1,6 @@
 import process from "process";
 import { getAuth } from "@clerk/express";
-import { resolveUser } from "../../services/authz.js";
+import { callerFromUser, resolveUser } from "../../services/authz.js";
 import { publicOrigin, MCP_REQUIRED_SCOPES } from "./clerkOauth.js";
 
 /**
@@ -101,9 +101,8 @@ export default async function mcpAuth(req, res, next) {
   }
 
   let mongoUser;
-  let isAdmin;
   try {
-    ({ mongoUser, isAdmin } = await resolveUser(authData.userId));
+    ({ mongoUser } = await resolveUser(authData.userId));
   } catch (err) {
     console.error(`[${req.requestId}] - [mcp] could not resolve caller: ${err.message}`);
     return res.status(500).json({ error: "could not verify permissions" });
@@ -127,10 +126,10 @@ export default async function mcpAuth(req, res, next) {
     );
   }
 
+  // The same caller shape the REST permission checks use (permissions/evaluate.js), so a
+  // tool and a route answer "may they?" identically. ADMIN_BYPASS is not honoured here.
   const caller = {
-    clerkId: authData.userId,
-    mongoUser,
-    isAdmin,
+    ...callerFromUser(mongoUser, authData.userId),
     clientId: authData.clientId || "unknown-client",
     scopes: authData.scopes || [],
     requestId: req.requestId,
@@ -148,7 +147,7 @@ export default async function mcpAuth(req, res, next) {
   };
 
   console.log(
-    `[${req.requestId}] - [mcp] authenticated ${mongoUser.email} (${isAdmin ? "admin" : "normal"}) via client ${caller.clientId}`,
+    `[${req.requestId}] - [mcp] authenticated ${mongoUser.email} (${caller.isAdmin ? "admin" : "not admin"}) via client ${caller.clientId}`,
   );
 
   return next();
