@@ -1,6 +1,7 @@
 import cors from "cors";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import mcpAuth from "./lib/mcpAuth.js";
+import { toolCallNamesOf } from "./lib/registerTool.js";
 import { mcpRoute, publicRoute } from "../middlewares/requirePermission.js";
 import { createMcpServer } from "./server.js";
 import {
@@ -86,7 +87,10 @@ function clientMetadataHandler(req, res) {
  * without minting a Clerk OAuth token first.
  */
 export async function mcpHandler(req, res) {
-  const server = createMcpServer(req.mcpCaller);
+  // The tools this request calls, so a tool the caller no longer has (a stale client list)
+  // is answered with an explanation rather than "Tool not found" — see registerTool.
+  const caller = { ...req.mcpCaller, toolCallNames: toolCallNamesOf(req.body) };
+  const server = createMcpServer(caller);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });

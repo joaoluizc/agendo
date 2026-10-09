@@ -5,9 +5,8 @@ replaced the admin/normal binary once agendo became the support team's hub. The 
 every decision behind it are in [`docs/permissions-plan.md`](../permissions-plan.md); this
 page is how it works and how to extend it.
 
-**Status:** enforced on the REST API, and the frontend gates on it with an access editor on
-Settings → Users. Still to come: the MCP tools (phase 3). Until then the MCP still splits
-tools by admin vs. normal.
+**Status:** in force everywhere: the REST API, the frontend (with an access editor on
+Settings → Users) and the MCP server's tools.
 
 ## The model
 
@@ -141,6 +140,18 @@ tools when their tool list refreshes (see the plan, §2).
   (`permissions/pages.ts`).
 - In a dev build, an admin can preview the UI as someone else from the **localhost** badge
   (see [Frontend build & lint](frontend-build-and-lint.md)).
+
+## The MCP server
+
+Each tool declares `requires` exactly like a route ("signedIn", "admin" or
+"<area>:<level>") in `registerTool`, which refuses to load a tool without one. A tool the
+caller lacks the level for is left out of their `tools/list` and refused if called anyway
+(a stale client list gets an explanation, not "Tool not found"). Today: `whoami` and
+`get_my_schedule` need only an account, the read tools `scheduling: view`, and the draft
+tools and coverage gaps `scheduling: edit`. See `calendar-api-backend/src/mcp/README.md`.
+
+Permissions never go into OAuth scopes or tokens, so a change needs no reinstall or
+re-login — only the client's tool list refreshing (docs/mcp-team-setup.md).
 
 ## Adding an area
 

@@ -63,26 +63,44 @@ Ask Claude:
 
 > Using agendo, who am I?
 
-You should get your own name, your email, your role (`admin` or `normal`), and your
-timezone. That single answer proves the whole chain — Claude → Google → Clerk → agendo →
+You should get your own name, your email, your access (whether you are an admin, and your
+level in each area), and your timezone. That single answer proves the whole chain — Claude → Google → Clerk → agendo →
 your user record.
 
 Then try something real:
 
 > Using agendo, does anyone have development time this week?
 
-## What you can do depends on who you are
+## What you can do depends on your access
 
-Everyone can read: their own schedule, anyone else's, who is covering a given moment, and
-totals over any period, filtered by person, location, position or status.
+Everyone can ask about **their own schedule**.
 
-**Admins** additionally get tools to create, change and delete shifts. These are limited to
-**draft** shifts — nothing Claude does can touch a published schedule or Google Calendar.
-If you are not an admin, those tools are not merely refused, they are not offered: Claude
-cannot see that they exist.
+With **Scheduling: view** (most people) you can also read anyone else's schedule, who is
+covering a given moment, and totals over any period, filtered by person, location, position
+or status.
 
-Your role comes from agendo itself, the same place the website gets it. Connecting through
-Claude gives you no access you did not already have.
+With **Scheduling: edit** you also get tools to create, change and delete shifts and to
+find coverage gaps. These are limited to **draft** shifts — nothing Claude does can touch a
+published schedule or Google Calendar. Without that level, those tools are not merely
+refused, they are not offered: Claude cannot see that they exist.
+
+Your access comes from agendo itself, the same place the website gets it — an agendo admin
+sets it in Settings → Users. Connecting through Claude gives you no access you did not
+already have.
+
+## When your access changes
+
+You never need to reinstall or log in again. agendo checks your access on every request.
+What can lag is Claude's own list of tools:
+
+- **Claude Desktop** — fully quit it (from the tray or menu bar, not just closing the
+  window) and reopen it. No login needed.
+- **Claude Code** — start a new session, or run `/mcp` and reconnect.
+- **claude.ai** — use "Refresh tools list" on the connector, or wait: it caches the list for
+  about an hour.
+
+If you lose access to a tool, Claude may still offer it until it refreshes; using it then
+just returns a message saying what access it needs.
 
 ## If something goes wrong
 

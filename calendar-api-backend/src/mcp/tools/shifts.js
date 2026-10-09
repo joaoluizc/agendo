@@ -21,9 +21,10 @@ import {
 } from "../lib/format.js";
 
 /**
- * Admin write tools — deliberately confined to the **draft** layer.
+ * Write tools for schedule builders (Scheduling: edit) — deliberately confined to the
+ * **draft** layer.
  *
- * A shift is a draft until an admin publishes it, and publishing is the single act that
+ * A shift is a draft until someone publishes it in agendo, and publishing is the single act that
  * reaches an agent's real Google Calendar (see ShiftModel's class comment). These tools
  * create, change and remove drafts; they never publish, and they refuse to touch a shift
  * that is already published.
@@ -178,12 +179,12 @@ export function registerShiftWriteTools(server, caller) {
 
   registerTool(server, caller, {
     name: "create_shift",
-    level: "admin",
+    requires: "scheduling:edit",
     title: "Draft a shift",
     description:
       "Create a draft shift for one or more agents. Drafts are plans: they do not appear " +
       "on the schedule's published view, are not synced to anyone's Google Calendar, and " +
-      "are not counted as coverage. An admin publishes them in agendo's UI, which is the " +
+      "are not counted as coverage. Someone with Scheduling: edit publishes them in agendo's UI, which is the " +
       "deliberate step that reaches real calendars. Times are UTC.",
     inputSchema: {
       agents: z
@@ -254,7 +255,7 @@ export function registerShiftWriteTools(server, caller) {
 
   registerTool(server, caller, {
     name: "list_draft_shifts",
-    level: "admin",
+    requires: "scheduling:edit",
     title: "Draft shifts for a day",
     description:
       "The unpublished draft shifts on a given UTC day, optionally for one agent. The " +
@@ -323,7 +324,7 @@ export function registerShiftWriteTools(server, caller) {
 
   registerTool(server, caller, {
     name: "update_shift",
-    level: "admin",
+    requires: "scheduling:edit",
     title: "Change a draft shift",
     description:
       "Change the times or position of an existing DRAFT shift, identified by agent and " +
@@ -410,7 +411,7 @@ export function registerShiftWriteTools(server, caller) {
 
   registerTool(server, caller, {
     name: "delete_shift",
-    level: "admin",
+    requires: "scheduling:edit",
     title: "Delete draft shifts",
     description:
       "Delete DRAFT shifts for an agent on a day. Published shifts are never deleted " +

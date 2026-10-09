@@ -1,19 +1,37 @@
 # MCP server (self-contained module)
 
 A remote [Model Context Protocol](https://modelcontextprotocol.io) server that lets the
-support team query agendo's schedule from their own Claude/ChatGPT clients, authorized
-per-user through Clerk OAuth with admin vs. normal resolved from Mongo. Everything for it
+support team query and draft agendo's schedule from their own Claude/ChatGPT clients,
+authorized per-user through Clerk OAuth, with each person's agendo permissions resolved
+from Mongo on every request (docs/knowledge/permissions.md). Everything for it
 lives in this folder; `app.js` touches it in exactly one line.
 
 Design and rationale: [`docs/mcp-server-plan.md`](../../../docs/mcp-server-plan.md).
 
-**Status: in production.** Eleven tools: `whoami`, five read tools open to everyone
-(`find_shifts` is the general query the other four are special cases of), and five admin
-tools — `find_coverage_gaps` plus create/update/delete/list confined to **draft** shifts,
-so nothing here can reach a published schedule or Google Calendar. Clients connect through
-the `mcp-remote` bridge, identified by CIMD, with no credential on anyone's machine. Still
-open: publishing agendo in the claude.ai org connector directory, which would retire the
-bridge.
+**Status: in production.** Eleven tools: `whoami`, five read tools (`find_shifts` is the
+general query the other four are special cases of), and five for schedule builders —
+`find_coverage_gaps` plus create/update/delete/list confined to **draft** shifts, so
+nothing here can reach a published schedule or Google Calendar. Who gets which is decided
+per person by their agendo permissions (below). Clients connect through the `mcp-remote`
+bridge, identified by CIMD, with no credential on anyone's machine. Still open: publishing
+agendo in the claude.ai org connector directory, which would retire the bridge.
+
+## Tools
+
+| Tool | Requires | What |
+| --- | --- | --- |
+| `whoami` | signed in | Name, email, admin flag, a level per area, timezone |
+| `get_my_schedule` | signed in | The caller's own published shifts |
+| `get_agent_schedule` | `scheduling:view` | A colleague's published shifts |
+| `get_coverage_at` | `scheduling:view` | Who is on shift at a moment |
+| `summarize_shifts` | `scheduling:view` | Hours by agent and position over a period |
+| `find_shifts` | `scheduling:view` | The general query; drafts need `scheduling:edit` |
+| `find_coverage_gaps` | `scheduling:edit` | Where headcount falls below coverage targets |
+| `create_shift`, `list_draft_shifts`, `update_shift`, `delete_shift` | `scheduling:edit` | Drafts only — never publish |
+
+A new area's tools go in their own `tools/<area>.js`, each with `requires: "<area>:<level>"`,
+registered in `server.js`. A "self"-level tool must scope with `scopeFor(caller, area)` and
+ignore any agent or user id the client sends.
 
 ## Endpoints
 
@@ -45,14 +63,25 @@ Three gates, all failing closed, in `lib/mcpAuth.js`:
    three uncommitted dashboard settings, and MCP credentials are long-lived and live on
    laptops.
 
-Per-tool permission is enforced by `lib/registerTool.js`, which **requires** a
-`level: "user" | "admin"` and throws at registration time if it is missing — there is no
-mount point covering tools by default, so a forgotten guard would be silent. Admin tools
-are not registered at all for a non-admin caller (absent from `tools/list`), and the
-wrapper re-checks on call. Every tool call logs requestId, caller, client and arguments.
+Per-tool permission is enforced by `lib/registerTool.js`, which **requires**
+`requires: "signedIn" | "admin" | "<area>:<level>"` — the same requirements the REST routes
+use — and throws at registration time if it is missing or misspelled. There is no mount
+point covering tools by default, so a forgotten guard would be silent. A tool the caller
+lacks the level for is not registered at all (absent from `tools/list`), and the wrapper
+re-checks on call. Every tool call logs requestId, caller, client and arguments.
 
-`ADMIN_BYPASS=1` is **not** honoured here — it is an Express-middleware flag. Test MCP
-authorization with a real `type` in `dev-users`.
+**When someone's access changes, nobody reinstalls or logs in again.** Permissions are read
+from Mongo on every request and the OAuth scopes are identity-only (a test pins them), so
+the server's answer changes on the next request. Only the client's cached tool list lags:
+
+- A **revoked** tool still in a stale list gets a one-request stub that explains what is
+  needed (`caller.toolCallNames`, set in `mcpHandler`) instead of "Tool not found".
+- A **granted** tool appears once the client re-lists — quit and reopen Claude Desktop,
+  start a new Claude Code session, or Refresh in claude.ai / ChatGPT. The server says
+  `tools.listChanged: false`: a stateless server has no session to push that on.
+
+`ADMIN_BYPASS=1` is **not** honoured here — it only affects REST. Test MCP authorization
+with real levels in `dev-users`.
 
 ## Layout
 
@@ -62,10 +91,16 @@ mcp/
 ├── server.js           createMcpServer(caller) — one McpServer per request
 ├── lib/
 │   ├── mcpAuth.js      the perimeter: OAuth token → Mongo user → domain → req.mcpCaller
-│   ├── registerTool.js permission-enforcing registration wrapper (level is required)
+│   ├── registerTool.js permission-enforcing registration wrapper (`requires` is mandatory)
+│   ├── roster.js       users, positions and locations for name lookups
+│   ├── format.js       rendering times and tables
 │   └── clerkOauth.js   OAuth discovery metadata (see "No @clerk/mcp-tools" below)
-└── tools/
-    └── identity.js     whoami
+├── tools/
+│   ├── identity.js     whoami
+│   ├── schedule.js     schedules, coverage, totals, coverage gaps
+│   ├── find.js         find_shifts
+│   └── shifts.js       draft writes
+└── mcp.test.js         the server over the SDK's in-memory client: tools per person, refusals
 ```
 
 Two structural choices worth knowing before editing:
@@ -73,7 +108,7 @@ Two structural choices worth knowing before editing:
 - **A fresh `McpServer` per request.** The stateless transport is per-request and an
   `McpServer` holds one transport, so a shared instance would let concurrent requests
   clobber each other. It also lets registration depend on the caller, which is what makes
-  admin tools genuinely invisible rather than listed-then-refused.
+  tools someone lacks access for genuinely invisible rather than listed-then-refused.
 - **Mounted before the global CORS policy in `app.js`.** agendo's global policy is locked
   to the Vercel origin *and answers preflights itself*, so a route mounted after it never
   sees an `OPTIONS` request. MCP needs open CORS with `WWW-Authenticate` exposed, so it is
@@ -106,35 +141,23 @@ Only one new npm dependency: `@modelcontextprotocol/sdk`.
 URL the client actually asked for, character for character. The forwarded headers are
 trusted first; set this if that is ever wrong.
 
-## Enabling it in Clerk — required before any client can connect
+## Clerk setup
 
-The code is live as soon as it deploys, but no client can complete a login until Clerk is
-configured. As of this writing agendo's Clerk instance serves OAuth metadata but has **no
-`registration_endpoint`**, i.e. dynamic client registration is off:
-
-```bash
-curl -s https://<your-fapi-host>/.well-known/oauth-authorization-server | grep registration_endpoint
-```
-
-For the Phase 0 spike, enable DCR in the Clerk Dashboard (OAuth applications), or:
-
-```bash
-npx clerk@latest api instance/oauth_application_settings -X PATCH -d '{"dynamic_oauth_client_registration": true}'
-```
-
-**DCR is a stopgap.** It is deprecated in the MCP spec and creates a public,
-unauthenticated registration endpoint. Before real users connect (Phase 2), switch to
-CIMD — Clerk's *CIMD Clients* tab, with Claude and ChatGPT allowlisted and unknown clients
-blocked. Requesting CIMD beta access from Clerk support takes lead time; start it now.
+Clients are admitted by CIMD: the `mcp-remote` bridge's client id is the URL of
+`/mcp-client.json`, and Clerk's *CIMD Clients* allowlist decides which clients may log in.
+How it is configured, and why not dynamic client registration, is in
+[`docs/mcp-server-setup.md`](../../../docs/mcp-server-setup.md); what a teammate does is in
+[`docs/mcp-team-setup.md`](../../../docs/mcp-team-setup.md).
 
 ## Verifying
 
-No test suite in this repo; these were run by hand and are worth re-running after changes.
+- **Protocol + permissions** — `mcp.test.js` (part of `npm test`) drives a server with
+  synthetic callers over the SDK's own `Client` and `InMemoryTransport`: the exact tool
+  list per access level, `listChanged: false`, the drafts refusal, the stale-tool stub
+  (also over HTTP through `mcpHandler`), registration refusing a missing or misspelled
+  `requires`, and the identity-only OAuth scopes.
 
-- **Protocol + permissions** — build a server with a synthetic caller and drive it with
-  the SDK's own `Client` over `InMemoryTransport`: `tools/list`, `tools/call`, an
-  admin-level tool hidden from a normal caller, a tool with no `level` failing to
-  register, a throwing handler returning `isError` without killing the connection.
+These are still by hand, worth re-running after changes to the HTTP surface or Clerk:
 - **HTTP surface** — import the real `app.js` on a spare port and check: the discovery
   documents, that `resource` follows `x-forwarded-proto`, `401` + a
   `WWW-Authenticate: Bearer resource_metadata="…"` challenge with no token, `401` with a
@@ -142,16 +165,16 @@ No test suite in this repo; these were run by hand and are worth re-running afte
   with `Access-Control-Allow-Origin: *` (this is the check that catches the global-CORS
   ordering trap).
 - **A real client against the deployed instance.** Local success does not prove the OAuth
-  discovery flow. Phase 0 is not done until a Claude client completes login against Render
-  and `whoami` returns the right name, role and timezone — and until a `type: "normal"`
-  user confirms admin tools are both hidden and refused.
+  discovery flow. A Claude client should complete login against Render and `whoami`
+  should return the right name, access and timezone; someone without `scheduling:edit`
+  should see the draft tools neither listed nor callable.
 
 ## Remove it
 
 1. Delete this folder (`calendar-api-backend/src/mcp/`).
 2. In `app.js`, delete the `mountMcpRoutes` import and its call.
 3. `npm uninstall @modelcontextprotocol/sdk`.
-4. In the Clerk Dashboard, turn dynamic client registration back off and revoke any
+4. In the Clerk Dashboard, remove the bridge from the CIMD clients and revoke any
    authorized OAuth clients.
 
 No other part of agendo imports this module. It reads `services/authz.js` and
