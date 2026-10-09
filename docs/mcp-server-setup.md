@@ -124,12 +124,10 @@ client's identity. That's inherent to desktop OAuth, not a Clerk flaw, and CIMD 
 it either. Worth knowing; not worth blocking on, given the data is shift schedules and MCP
 grants nothing a user can't already see in the browser.
 
-## Prerequisites before anything can connect
+## Operating notes
 
-Roughly in order. None of these are code changes.
-
-**1. Know which Clerk instance is which.** You now have an OAuth app on both. Clerk's
-dashboard has a dev/prod switcher and they're completely separate installs:
+**Know which Clerk instance is which.** The dashboard has a dev/prod switcher and they are
+completely separate installs:
 
 - **Development** — `verified-bream-74.clerk.accounts.dev`, used by your local backend
   (the `pk_test_` key in `calendar-api-backend/.env`).
@@ -137,32 +135,27 @@ dashboard has a dev/prod switcher and they're completely separate installs:
   vars). To see its hostname: base64-decode the part of the publishable key after
   `pk_live_`; the result is the host, with a trailing `$` to drop.
 
-A client connecting to `agendo-backend.onrender.com` must use the **production** app's
-credentials. Dev credentials only work against a locally running backend.
+CIMD admission is configured per instance, so a client allowlisted on one is unknown to the
+other. Dev credentials only work against a locally running backend.
 
-**2. Register the client's redirect URL on the app(s).** For claude.ai this is expected to
-be `https://claude.ai/api/mcp/auth_callback` — confirm it rather than trusting that string:
-Claude's connector dialog shows it, and if it's wrong Clerk rejects the login with a
-redirect-URI-mismatch error naming the exact URL it received.
+**There is no client secret to look after.** This used to be a prerequisite — keep it out
+of `.env`, out of Render, out of the repo. It no longer applies: the bridge identifies
+itself by the URL of `/mcp-client.json` and nothing secret exists to leak, rotate or
+accidentally commit. agendo never sees a secret either way; it only validates tokens Clerk
+already issued.
 
-**3. Keep the client secret out of agendo.** agendo never sees it and doesn't need it — it
-only validates tokens Clerk already issued. It goes into the *client's* connector settings
-and your password manager. Not `.env`, not Render, not the repo.
+**Redirect URLs come from the metadata document**, not from a hand-maintained list on an
+OAuth app — see `clientMetadataDocument()` in `lib/clerkOauth.js` for which ones and why
+each is there. Changing them means a deploy plus **Refresh metadata** on the Clerk entry.
 
-**4. Make sure your own user is set up.** Your Clerk account needs a matching document in
-Mongo with a `duda.co` email — `users` for production, `dev-users` for local. Note that
-`ADMIN_BYPASS=1` does **not** apply to MCP (it's an Express-middleware flag), so local
-testing uses your real `type`. That's deliberate: it's the only way role bugs show up
-before production.
+**Your own user has to exist.** Your Clerk account needs a matching document in Mongo with
+a `duda.co` email — `users` for production, `dev-users` for local. `ADMIN_BYPASS=1` does
+**not** apply to MCP (it is an Express-middleware flag), so local testing uses your real
+`type`. That is deliberate: it is the only way role bugs show up before production.
 
-**5. Deploy.** The code is on the `feat/schedule-shift-dialogs` branch and isn't committed
-yet. Until it ships to Render, `https://agendo-backend.onrender.com/mcp` returns 404 —
-which is exactly what it does right now.
-
-**6. Check the Render plan.** A free-tier instance sleeps after idling and takes ~30–60s to
-wake. In a browser that's an annoyance; in an MCP client it reads as a hard failure, and
-you'll debug auth that isn't broken. Yours answered in 0.4s when checked, so it was awake —
-but that doesn't tell us the plan. Worth confirming in the Render dashboard.
+**Render is on a paid plan**, so the instance does not sleep and there is no cold start to
+mistake for a broken connection. If that ever changes, the first symptom will be MCP
+clients reporting auth failures that are really a 30–60s wake-up.
 
 ## Connecting, and what success looks like
 
@@ -219,14 +212,16 @@ safe thing to be wrong about.
 
 - **MCP** — Model Context Protocol. The standard that lets an AI client call tools on a
   server like this one.
-- **OAuth application / client ID / client secret** — how Clerk identifies the *program*
-  connecting, separately from the person using it.
+- **OAuth application / client ID** — how Clerk identifies the *program* connecting,
+  separately from the person using it. agendo's client id is a URL (see CIMD below); the
+  client *secret* that used to go with it is gone, and nothing needs one.
 - **Redirect URI** — where the authorization server sends the browser after login. Must be
   registered in advance, or the login is rejected.
 - **DCR** — Dynamic Client Registration. Clients register themselves at a public endpoint.
   Convenient, unauthenticated, deprecated in MCP.
 - **CIMD** — Client ID Metadata Documents. A client's ID is a URL serving its own metadata,
-  which lets you keep an allowlist of specific clients. GA at Clerk since 2026-09-17.
+  which lets you keep an allowlist of specific clients. GA at Clerk since 2026-09-17, and
+  how agendo's bridge identifies itself — agendo serves the document at `/mcp-client.json`.
 - **Scopes** (`email`, `profile`, `offline_access`) — what the client asks Clerk for.
   `offline_access` is the one that matters day to day: it grants a refresh token, without
   which connections silently die when the access token expires. Scopes never decide what

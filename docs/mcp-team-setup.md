@@ -55,8 +55,7 @@ to download — which is deliberate, not an omission. See
 Quit Claude Desktop completely and reopen it. A browser tab opens asking you to sign in
 with Google, then shows a Clerk consent screen. Approve it.
 
-**Be patient on the first connection.** agendo's backend sleeps when idle and can take
-30–60 seconds to wake up. The first attempt may look like it failed when it is only slow.
+That is the only time you have to log in. The connection renews itself afterwards.
 
 ## Check that it worked
 
