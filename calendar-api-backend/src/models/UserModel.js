@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 import { initialPositions } from "../database/seeds/initialPositions.js";
 import { PERMISSION_AREAS, AREA_KEYS } from "../permissions/registry.js";
+// Registers the Skill model, which the pre-save hook below looks up by name. Without it a
+// script that creates users outside the app (where some router has loaded it) fails.
+import "./SkillModel.js";
 const { Schema } = mongoose;
 
 const GapiTokenSchema = new Schema({
@@ -88,9 +91,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // Not required: a Google account can have no family name, and Mongoose's `required`
+  // rejects "", which made such a person impossible to provision.
   lastName: {
     type: String,
-    required: true,
+    default: "",
   },
   email: {
     type: String,

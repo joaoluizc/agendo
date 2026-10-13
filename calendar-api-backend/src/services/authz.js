@@ -1,6 +1,7 @@
 import process from "process";
 import { getAuth } from "@clerk/express";
 import userService from "./userService.js";
+import { provisionFromClerk } from "./onboardingService.js";
 
 /**
  * The single authority for "who is this caller, and are they an admin?".
@@ -24,6 +25,30 @@ export async function resolveUser(clerkUserId) {
     return { mongoUser: null, isAdmin: false };
   }
   return { mongoUser, isAdmin: mongoUser.type === "admin" };
+}
+
+/**
+ * `resolveUser`, and if this Clerk account has no agendo user yet, try to create one —
+ * the backstop for a Clerk `user.created` webhook that never arrived. Whether it may is
+ * decided in `permissions/onboarding.js`: only a brand-new Clerk account, or an email an
+ * admin invited, so an agendo user deleted to cut someone off stays deleted.
+ *
+ * Never throws for a failed provisioning: that caller just has no account (fails closed).
+ */
+export async function resolveOrProvisionUser(clerkUserId, { requestId } = {}) {
+  const resolved = await resolveUser(clerkUserId);
+  if (resolved.mongoUser || !clerkUserId) {
+    return resolved;
+  }
+  let mongoUser = null;
+  try {
+    mongoUser = await provisionFromClerk(clerkUserId, { requestId });
+  } catch (err) {
+    console.error(
+      `[${requestId}]: could not provision ${clerkUserId} on their first request: ${err.message}`,
+    );
+  }
+  return mongoUser ? { mongoUser, isAdmin: mongoUser.type === "admin" } : resolved;
 }
 
 /**
@@ -52,7 +77,8 @@ const CALLER_PROMISE = Symbol("agendo.caller");
 
 /**
  * Who is making this REST request: `null` (no session), `{ clerkId, noAccount: true }`
- * (a Clerk identity with no agendo user), or `callerFromUser(...)`.
+ * (a Clerk identity with no agendo user, and none could be provisioned — see
+ * `resolveOrProvisionUser`), or `callerFromUser(...)`.
  *
  * Resolved once per request and memoized — the promise on a private key, the settled
  * value on `req.caller` — so any number of checks cost a single Mongo read.
@@ -77,7 +103,7 @@ async function resolveCaller(req) {
   if (!userId) {
     return null;
   }
-  const { mongoUser } = await resolveUser(userId);
+  const { mongoUser } = await resolveOrProvisionUser(userId, { requestId: req.requestId });
   if (!mongoUser) {
     return { clerkId: userId, noAccount: true };
   }
@@ -90,6 +116,7 @@ async function resolveCaller(req) {
 
 export default {
   resolveUser,
+  resolveOrProvisionUser,
   adminBypassEnabled,
   callerFromUser,
   getCaller,

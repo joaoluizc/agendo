@@ -7,7 +7,8 @@ import { publicRegistry } from "../permissions/registry.js";
 import { rosterShapeFor } from "../permissions/shaping.js";
 import { planAccessChange, storedPermissions } from "../permissions/accessChange.js";
 import { PermissionAudit } from "../models/PermissionAuditModel.js";
-import utils from "../utils/utils.js";
+import { identityFromWebhook } from "../permissions/onboarding.js";
+import onboardingService from "../services/onboardingService.js";
 
 // The authoritative profile endpoint. Mongo owns every field returned here — Clerk
 // publicMetadata is not read (see docs/knowledge/clerk-mongo-boundary.md).
@@ -71,50 +72,10 @@ const getPermissionRegistry = (req, res) => {
   res.status(200).json(publicRegistry());
 };
 
-// Creates the mongo user behind a verified clerk "user created" webhook. Runs after
-// the webhook has already been acked, so its only output is the log line it ends on —
-// every path through here must log exactly one outcome.
-const provisionClerkUser = async ({
-  requestId,
-  firstName,
-  lastName,
-  userEmail,
-  clerkId,
-}) => {
-  let slingId;
-  try {
-    slingId = await utils.getSlingIdByEmail(userEmail);
-    if (!slingId) {
-      console.warn(
-        `[${requestId}]: newClerkUser - no sling user matches ${userEmail}; continuing without a slingId`,
-      );
-    }
-  } catch (err) {
-    // A sling outage must not block the signup — slingId is optional on the model
-    // and must currently be corrected by hand in Mongo (the old bulk backfill routes
-    // were removed - they seeded from Clerk publicMetadata, which is no longer written).
-    console.error(
-      `[${requestId}]: newClerkUser - sling lookup failed for ${userEmail}: ${err.message}. Continuing without a slingId.`,
-    );
-  }
-
-  const { created } = await userService.createUser({
-    firstName,
-    lastName,
-    email: userEmail,
-    slingId,
-    clerkId,
-  });
-  // await userService.addPositionsToSyncNewUser(clerkId);
-  // await userService.addBasicPropertiesToNewUser(clerkId, userEmail);
-
-  console.log(
-    created
-      ? `[${requestId}]: newClerkUser - created user ${userEmail} (clerkId: ${clerkId}, slingId: ${slingId ?? "none"})`
-      : `[${requestId}]: newClerkUser - user ${userEmail} already existed (clerkId: ${clerkId}); nothing to do`,
-  );
-};
-
+// Clerk's `user.created` webhook (svix-signed). It provisions the agendo user: with the
+// access an admin invited this email with, or the new-user defaults. The rules are in
+// permissions/onboarding.js; the first-request backstop in services/authz.js catches a
+// delivery that never arrives. Acked before provisioning, so its outcome is a log line.
 const newClerkUser = async (req, res) => {
   const svixHeaders = {
     "svix-id": req.headers["svix-id"],
@@ -122,11 +83,11 @@ const newClerkUser = async (req, res) => {
     "svix-signature": req.headers["svix-signature"],
   };
 
-  let msg;
+  let event;
   try {
     // Webhook() itself throws on a missing/malformed secret, so it belongs in here too.
     const wh = new Webhook(process.env.CLERK_WEBHOOK_NEW_USER_CREATED_SECRET);
-    msg = wh.verify(req.rawBody, svixHeaders).data;
+    event = wh.verify(req.rawBody, svixHeaders);
   } catch (e) {
     console.error(
       `[${req.requestId}]: newClerkUser - webhook verification failed: ${e.message}`,
@@ -134,38 +95,92 @@ const newClerkUser = async (req, res) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  const { first_name: firstName, last_name: lastName } = msg;
-  const userEmail = msg.email_addresses?.[0]?.email_address;
-  const clerkId = msg.id;
+  // Only account creation provisions. Ack anything else the endpoint is subscribed to, so
+  // svix doesn't retry it.
+  if (event.type && event.type !== "user.created") {
+    console.log(`[${req.requestId}]: newClerkUser - ignoring a ${event.type} event`);
+    return res.status(200).json({ message: `ignored: ${event.type}` });
+  }
 
-  if (!userEmail) {
+  const identity = identityFromWebhook(event.data);
+  if (!identity.email) {
     console.error(
-      `[${req.requestId}]: newClerkUser - payload for clerkId ${clerkId} has no email address; ignoring`,
+      `[${req.requestId}]: newClerkUser - payload for clerkId ${identity.clerkId} has no email address; ignoring`,
     );
     return res.status(200).json({ message: "ignored: no email address" });
   }
 
   // Ack before provisioning: svix gives the endpoint only a few seconds, and the sling
-  // lookup below is a network round trip. The outcome is logged, never returned.
+  // lookup is a network round trip. The outcome is logged, never returned.
   console.log(
-    `[${req.requestId}]: newClerkUser - accepted webhook for ${userEmail} (clerkId: ${clerkId}); provisioning`,
+    `[${req.requestId}]: newClerkUser - accepted webhook for ${identity.email} (clerkId: ${identity.clerkId}); provisioning`,
   );
   res.status(200).json({ message: "accepted" });
 
   try {
-    await provisionClerkUser({
+    await onboardingService.provisionIdentity(identity, {
+      source: "webhook",
       requestId: req.requestId,
-      firstName,
-      lastName,
-      userEmail,
-      clerkId,
     });
   } catch (err) {
-    // Nothing to return to clerk at this point — the log is the only signal, so make it loud.
+    // Nothing to return to clerk at this point — the log is the only signal, so make it
+    // loud. Their first request will try again (services/authz.js).
     console.error(
-      `[${req.requestId}]: newClerkUser - FAILED to provision ${userEmail} (clerkId: ${clerkId}) after acking the webhook: ${err.message}`,
+      `[${req.requestId}]: newClerkUser - FAILED to provision ${identity.email} (clerkId: ${identity.clerkId}) after acking the webhook: ${err.message}`,
       err,
     );
+  }
+};
+
+// Pending invites: access set for an email before that person has an agendo user.
+// Admin-only on the route. See docs/knowledge/onboarding.md.
+const listInvites = async (req, res) => {
+  try {
+    res.status(200).json(await onboardingService.listInvites());
+  } catch (err) {
+    console.error(`[${req.requestId}]: listInvites failed: ${err.message}`);
+    res.status(500).json({ error: `Could not load invites: ${err.message}` });
+  }
+};
+
+// Create or update the invite for an email. If they already have a Clerk account they
+// are provisioned on the spot (`status: "provisioned"`), else it waits (`"pending"`).
+const saveInvite = async (req, res) => {
+  try {
+    const actor = await getCaller(req);
+    const result = await onboardingService.saveInvite({
+      actor,
+      body: req.body,
+      requestId: req.requestId,
+    });
+    if (!result.ok) {
+      const { status, error, details, clerkId } = result;
+      return res.status(status).json({
+        error,
+        ...(details ? { details } : {}),
+        ...(clerkId !== undefined ? { clerkId } : {}),
+      });
+    }
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    console.error(`[${req.requestId}]: saveInvite failed: ${err.message}`);
+    res.status(500).json({ error: `Could not save the invite: ${err.message}` });
+  }
+};
+
+const revokeInvite = async (req, res) => {
+  const { inviteId } = req.params;
+  try {
+    const actor = await getCaller(req);
+    const revoked = await onboardingService.revokeInvite(inviteId);
+    if (!revoked) {
+      return res.status(404).json({ error: "No pending invite with that id" });
+    }
+    console.log(`[${req.requestId}]: revokeInvite - ${actor.clerkId} revoked invite ${inviteId}`);
+    res.status(200).json({ id: inviteId, revoked: true });
+  } catch (err) {
+    console.error(`[${req.requestId}]: revokeInvite failed for ${inviteId}: ${err.message}`);
+    res.status(500).json({ error: `Could not revoke the invite: ${err.message}` });
   }
 };
 
@@ -355,6 +370,9 @@ export default {
   setUserPermissions,
   getPermissionRegistry,
   newClerkUser,
+  listInvites,
+  saveInvite,
+  revokeInvite,
   getAllUsers,
   setUserPreferences,
   setMyTimezone,

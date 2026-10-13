@@ -1,4 +1,5 @@
 import type { AreaKey, Permissions } from "@/permissions/permissions";
+import type { UserSafeInfo } from "@/types/userTypes";
 
 /**
  * Thin client for the admin-only user endpoints behind Settings → Users. Same calling
@@ -9,9 +10,12 @@ const BASE = "/api/user";
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** The rest of the error body, e.g. `clerkId` on an invite for someone already in agendo. */
+  payload: Record<string, unknown> | null;
+  constructor(message: string, status: number, payload: Record<string, unknown> | null = null) {
     super(message);
     this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -38,7 +42,8 @@ async function request<T>(
     const p = payload as { message?: string; error?: string } | null;
     throw new ApiError(
       p?.message || p?.error || `Request failed (${res.status})`,
-      res.status
+      res.status,
+      payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null
     );
   }
   return payload as T;
@@ -78,7 +83,42 @@ export const usersApi = {
     }),
   /** Areas, levels and their copy, for the access editor. Any signed-in user may read it. */
   getPermissionRegistry: () => request<PermissionRegistry>("/permission-registry"),
+  /** The roster again — after an invite provisions someone, so they show up in the list. */
+  getRoster: () => request<UserSafeInfo[]>("/all"),
+  /** Pending invites, newest first. Admin-only server-side. */
+  listInvites: () => request<Invite[]>("/invites"),
+  /**
+   * Create or update the invite for `email` (it is the key). `permissions` may be partial —
+   * merged over the invite being edited, or the new-user defaults. Nothing is sent to the
+   * person. If they already have a Clerk account they're provisioned right away
+   * (`status: "provisioned"`). An email already in agendo is a 409 whose payload carries
+   * their `clerkId`.
+   */
+  saveInvite: (body: { email: string; type?: "admin" | "normal"; permissions?: Partial<Permissions> }) =>
+    request<SavedInvite>("/invites", { method: "POST", body }),
+  revokeInvite: (inviteId: string) =>
+    request<{ id: string; revoked: true }>(`/invites/${encodeURIComponent(inviteId)}`, {
+      method: "DELETE",
+    }),
 };
+
+export type Invite = {
+  id: string;
+  email: string;
+  type: "admin" | "normal";
+  permissions: Partial<Permissions>;
+  invitedBy: string;
+  invitedAt: string;
+  updatedBy: string | null;
+  updatedAt: string | null;
+};
+
+export type SavedInvite =
+  | { status: "pending"; invite: Invite }
+  | {
+      status: "provisioned";
+      user: { id: string; email: string; firstName: string; lastName: string; type: "admin" | "normal" };
+    };
 
 export type SavedAccess = {
   id: string;

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useBlocker, useSearchParams } from "react-router-dom";
-import { Search, Users as UsersIcon } from "lucide-react";
+import { MailPlus, Search, Users as UsersIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import ProceedWithUnsavedChanges from "@/components/modals/ProceedWithUnsavedChanges";
@@ -17,7 +18,8 @@ import PermissionsCard from "./PermissionsCard";
 import PreferencesCard from "./PreferencesCard";
 import SyncedPositionsCard from "./SyncedPositionsCard";
 import UserTimezoneCard from "./UserTimezoneCard";
-import { usersApi } from "./api";
+import { Invite, SavedInvite, usersApi } from "./api";
+import { InviteDialog, PendingInvites } from "./Invites";
 import { usePageTitle } from "./use-page-title";
 
 const initials = (user: UserSafeInfo) =>
@@ -30,7 +32,8 @@ const initials = (user: UserSafeInfo) =>
  *
  * Pick an agent on the left; the right side holds their access (admin flag and a level per
  * area), their managers' notes, their timezone and a read-only view of what syncs to their
- * calendar. The pick lives in `?user=<clerkId>`, so
+ * calendar. "Invite" sets someone's access by email before they've signed in (Invites.tsx).
+ * The pick lives in `?user=<clerkId>`, so
  * a refresh keeps it and the schedule's hover card can link straight to an agent.
  *
  * The roster is `allUsers` from the settings provider — its admin shape already carries
@@ -53,6 +56,17 @@ export default function Users() {
   const [isSaving, setIsSaving] = useState(false);
   /** Remounts the editor so it reloads from the saved note (Reset, switching agents). */
   const [editorVersion, setEditorVersion] = useState(0);
+
+  const [invites, setInvites] = useState<Invite[]>([]);
+  /** The invite dialog: closed, open for a new invite (null), or editing one. */
+  const [inviteDialog, setInviteDialog] = useState<{ invite: Invite | null } | null>(null);
+
+  useEffect(() => {
+    usersApi
+      .listInvites()
+      .then(setInvites)
+      .catch((error) => console.error("Error loading invites:", error));
+  }, []);
 
   const selected = allUsers.find((user) => user.id === selectedId);
   const saved = selected?.preferences ?? "";
@@ -114,6 +128,36 @@ export default function Users() {
     setEditorVersion((version) => version + 1);
   };
 
+  const handleInviteSaved = async (result: SavedInvite) => {
+    setInviteDialog(null);
+    if (result.status === "pending") {
+      const saved = result.invite;
+      setInvites((current) => [saved, ...current.filter((invite) => invite.id !== saved.id)]);
+      toast.success(`Invite saved for ${saved.email}.`, {
+        description: "Nothing was sent to them. They get this access the first time they sign in to agendo.",
+      });
+      return;
+    }
+    // They had already signed in (a Clerk account with no agendo user): they're in now.
+    const { user } = result;
+    setInvites((current) => current.filter((invite) => invite.email !== user.email));
+    toast.success(`${user.firstName} ${user.lastName} is in agendo now.`, {
+      description: "They had already signed in, so their access applied right away.",
+    });
+    try {
+      setAllUsers(await usersApi.getRoster());
+      selectUser(user.id);
+    } catch (error) {
+      console.error("Error reloading the roster:", error);
+    }
+  };
+
+  // An invite for someone who already has an agendo user: open their row instead.
+  const handleAlreadyMember = (clerkId: string | null) => {
+    setInviteDialog(null);
+    if (clerkId) selectUser(clerkId);
+  };
+
   /** Resolves true once the note is saved (or there was nothing to save). */
   const save = async (): Promise<boolean> => {
     if (!selected || draft === null) return true;
@@ -153,13 +197,26 @@ export default function Users() {
   return (
     <>
       <div className="grid gap-6">
-        <div>
-          <h2 className="text-xl font-semibold">Users</h2>
-          <p className="text-sm text-muted-foreground">
-            Who can access what, managers’ notes on each agent, and what syncs to their
-            calendar.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold">Users</h2>
+            <p className="text-sm text-muted-foreground">
+              Who can access what, managers’ notes on each agent, and what syncs to their
+              calendar.
+            </p>
+          </div>
+          <Button onClick={() => setInviteDialog({ invite: null })}>
+            <MailPlus className="mr-1.5 h-4 w-4" /> Invite
+          </Button>
         </div>
+
+        <PendingInvites
+          invites={invites}
+          onEdit={(invite) => setInviteDialog({ invite })}
+          onRevoked={(inviteId) =>
+            setInvites((current) => current.filter((invite) => invite.id !== inviteId))
+          }
+        />
 
         {/* Beside the settings sidebar there's only room for the list and the details side
             by side on wide screens; below that the list sits on top. */}
@@ -282,6 +339,13 @@ export default function Users() {
           </div>
         </div>
       </div>
+      <InviteDialog
+        open={inviteDialog !== null}
+        invite={inviteDialog?.invite ?? null}
+        onOpenChange={(open) => !open && setInviteDialog(null)}
+        onSaved={handleInviteSaved}
+        onAlreadyMember={handleAlreadyMember}
+      />
       {blocker.state === "blocked" ? (
         <ProceedWithUnsavedChanges
           title="Save your changes?"
