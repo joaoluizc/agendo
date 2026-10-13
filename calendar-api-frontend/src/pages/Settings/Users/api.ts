@@ -78,6 +78,34 @@ export const usersApi = {
     }),
   /** Areas, levels and their copy, for the access editor. Any signed-in user may read it. */
   getPermissionRegistry: () => request<PermissionRegistry>("/permission-registry"),
+  /**
+   * Offboard someone: delete them from agendo and from Clerk. Irreversible. Admin-only
+   * server-side; the server also refuses offboarding yourself (403) and the last admin
+   * (409).
+   *
+   * Resolves with a report of what each step did — including a **207**, which means access
+   * was cut but some cleanup failed. `res.ok` covers 207, so a partial failure arrives
+   * here as a resolved promise with a non-empty `errors`; check it rather than assuming
+   * that not throwing means everything worked.
+   */
+  offboard: (userId: string) =>
+    request<OffboardResult>(`/${encodeURIComponent(userId)}`, { method: "DELETE" }),
+};
+
+/** What `DELETE /user/:clerkId` reports back. See services/offboardService.js. */
+export type OffboardResult = {
+  id: string;
+  name: string | null;
+  /** False when there was no agendo user left to delete — a resumed, half-finished offboard. */
+  mongoUserDeleted: boolean;
+  clerkUserDeleted: boolean;
+  /** Clerk had no such account; nothing to do there. */
+  clerkAlreadyGone: boolean;
+  futureShiftsDeleted: number;
+  pastShiftsKept: number;
+  locationsUpdated: number;
+  /** Cleanup that failed after access was already cut. Empty on a clean run. */
+  errors: { step: string; message: string }[];
 };
 
 export type SavedAccess = {

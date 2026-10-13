@@ -119,6 +119,41 @@ const findUsersByClerkIds = async (clerkIds) => {
   return users;
 };
 
+/**
+ * Delete one agendo user. This is the kill switch: every perimeter resolves its caller
+ * through `services/authz.resolveUser` and fails closed when there is no Mongo document,
+ * so the REST API and the MCP server both stop admitting them the moment this returns.
+ * See docs/knowledge/offboarding.md.
+ *
+ * Returns whether a document was actually removed, so a repeat offboard can tell "deleted
+ * it now" from "it was already gone" rather than reporting a no-op as a deletion.
+ */
+const deleteUserByClerkId = async (clerkId) => {
+  const { deletedCount } = await User.deleteOne({ clerkId });
+  return { deleted: deletedCount > 0 };
+};
+
+/**
+ * Delete the Clerk account behind a clerk id — the login itself, and with it the Google
+ * OAuth grant Clerk holds for them.
+ *
+ * A 404 from Clerk is success, not an error: it means the account is already gone, which
+ * is the state this is trying to reach. Anything else is rethrown for the caller to
+ * report, because a Clerk account that outlives its agendo user is a loose end someone
+ * has to close by hand.
+ */
+const deleteClerkUser = async (clerkId) => {
+  try {
+    await clerkClient.users.deleteUser(clerkId);
+    return { deleted: true };
+  } catch (err) {
+    if (err?.status === 404 || err?.errors?.[0]?.code === "resource_not_found") {
+      return { deleted: false, alreadyGone: true };
+    }
+    throw err;
+  }
+};
+
 const getClerkUserById = async (userId) => {
   const user = await clerkClient.users.getUser(userId);
   return user;
@@ -294,8 +329,10 @@ export default {
   getGapiToken,
   getAllUsersSafeInfo,
   setUserPreferences,
+  deleteUserByClerkId,
   // Clerk-backed. These are the only functions that may talk to Clerk.
   getClerkUserById,
   getGoogleOAuthTokenByClerkId,
   getUsersWithGoogleTokens,
+  deleteClerkUser,
 };

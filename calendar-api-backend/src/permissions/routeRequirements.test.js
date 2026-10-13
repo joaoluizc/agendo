@@ -36,6 +36,7 @@ const EXPECTED = {
   "PUT /user/:clerkId/timezone": "admin",
   "PUT /user/:clerkId/permissions": "admin",
   "PUT /user/:clerkId/preferences": "admin",
+  "DELETE /user/:clerkId": "admin", // offboarding — deletes from agendo and Clerk
 
   // Google Calendar
   "GET /gcalendar/all-events": "admin", // everyone's personal calendars
@@ -227,5 +228,5 @@ test("the route → requirement map matches the reviewed contract", () => {
     .filter((key) => key in actual && actual[key] !== EXPECTED[key])
     .map((key) => `${key}: expected ${EXPECTED[key]}, got ${actual[key]}`);
   assert.deepEqual({ missing, unexpected, changed }, { missing: [], unexpected: [], changed: [] });
-  assert.equal(routes.length, 106);
+  assert.equal(routes.length, 107);
 });

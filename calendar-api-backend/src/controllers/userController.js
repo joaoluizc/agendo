@@ -6,6 +6,8 @@ import { effectivePermissions } from "../permissions/evaluate.js";
 import { publicRegistry } from "../permissions/registry.js";
 import { rosterShapeFor } from "../permissions/shaping.js";
 import { planAccessChange, storedPermissions } from "../permissions/accessChange.js";
+import { planOffboard } from "../permissions/offboard.js";
+import { offboardUser } from "../services/offboardService.js";
 import { PermissionAudit } from "../models/PermissionAuditModel.js";
 import utils from "../utils/utils.js";
 
@@ -350,8 +352,84 @@ const setUserPermissions = async (req, res) => {
   }
 };
 
+/**
+ * Offboard someone: delete them from agendo and from Clerk in one step. Admin-only on the
+ * route; the rules (not yourself, not the last admin, a missing Mongo user resumes rather
+ * than 404s) are in permissions/offboard.js, and the ordering and what happens to their
+ * data is in services/offboardService.js.
+ *
+ * Irreversible, so the answer is a full report rather than a bare 204 — the UI reads it
+ * back to the admin. Three outcomes:
+ *
+ *   200  everything went through
+ *   207  access was cut but some cleanup failed — `errors` says what, and the admin has
+ *        to finish it by hand (most often: delete the account in the Clerk dashboard)
+ *   500  the agendo user itself could not be deleted, so nothing was cut and nothing else
+ *        was attempted
+ *
+ * The audit record is written before the deletion, from the loaded document: it is the
+ * only trace that survives the user, and writing it afterwards would mean losing it
+ * entirely if the process died mid-request.
+ */
+const offboardUserById = async (req, res) => {
+  const { clerkId } = req.params;
+  try {
+    const actor = await getCaller(req);
+    const target = await userService.findUserByClerkId(clerkId);
+    const otherAdminCount = target ? await userService.countOtherAdmins(clerkId) : 0;
+    const plan = planOffboard({ actor, target, targetClerkId: clerkId, otherAdminCount });
+    if (!plan.ok) {
+      console.warn(
+        `[${req.requestId}]: offboardUser - refused ${clerkId} for ${actor.clerkId}: ${plan.error}`,
+      );
+      return res.status(plan.status).json({ error: plan.error });
+    }
+
+    const who = target ? `${target.firstName} ${target.lastName} <${target.email}>` : clerkId;
+    console.log(
+      `[${req.requestId}]: offboardUser - ${actor.clerkId} is offboarding ${who}` +
+        `${plan.resume ? " (resuming: no agendo user to delete)" : ""}`,
+    );
+
+    // Written first, and deliberately not rolled back if the offboard then fails: "an
+    // admin ran this against this person at this time" is true either way, and the
+    // report below says how far it got.
+    if (target) {
+      try {
+        await PermissionAudit.create({
+          at: new Date(),
+          via: "web",
+          actorClerkId: actor.clerkId,
+          targetClerkId: target.clerkId,
+          targetUserId: target._id,
+          before: { type: target.type, permissions: storedPermissions(target) },
+          after: { type: "offboarded", permissions: null },
+          requestId: req.requestId,
+        });
+      } catch (err) {
+        console.error(
+          `[${req.requestId}]: offboardUser - AUDIT WRITE FAILED for ${clerkId}: ${err.message}`,
+        );
+      }
+    }
+
+    const report = await offboardUser(clerkId, { requestId: req.requestId });
+    const body = { id: clerkId, name: target ? `${target.firstName} ${target.lastName}` : null, ...report };
+
+    if (!report.mongoUserDeleted && !plan.resume) {
+      // The kill switch itself failed — `offboardService` aborted before any cleanup.
+      return res.status(500).json({ error: "Could not remove the agendo user", ...body });
+    }
+    return res.status(report.errors.length ? 207 : 200).json(body);
+  } catch (err) {
+    console.error(`[${req.requestId}]: offboardUser failed for ${clerkId}: ${err.message}`);
+    res.status(500).json({ error: `Could not offboard: ${err.message}` });
+  }
+};
+
 export default {
   getMyProfile,
+  offboardUserById,
   setUserPermissions,
   getPermissionRegistry,
   newClerkUser,
