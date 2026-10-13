@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useSearchParams } from "react-router-dom";
-import { MailPlus, Search, Users as UsersIcon } from "lucide-react";
+import { AlertTriangle, MailPlus, Search, Users as UsersIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,11 +15,12 @@ import {
 import { useUserSettings } from "@/providers/useUserSettings";
 import { UserSafeInfo } from "@/types/userTypes";
 import { cn } from "@/lib/utils";
+import OffboardCard from "./OffboardCard";
 import PermissionsCard from "./PermissionsCard";
 import PreferencesCard from "./PreferencesCard";
 import SyncedPositionsCard from "./SyncedPositionsCard";
 import UserTimezoneCard from "./UserTimezoneCard";
-import { Invite, SavedInvite, usersApi } from "./api";
+import { Invite, OffboardResult, SavedInvite, usersApi } from "./api";
 import { InviteDialog, PendingInvites } from "./Invites";
 import { usePageTitle } from "./use-page-title";
 
@@ -56,6 +58,15 @@ export default function Users() {
   const [isSaving, setIsSaving] = useState(false);
   /** Remounts the editor so it reloads from the saved note (Reset, switching agents). */
   const [editorVersion, setEditorVersion] = useState(0);
+  /** Cleanup an offboard could not finish, kept on the page until it's dismissed. */
+  const [offboardNotice, setOffboardNotice] = useState<OffboardResult | null>(null);
+  /**
+   * Set while clearing `?user` after an offboard. The leave guard below reads `isDirty`
+   * from the render it was created in, so clearing the draft in the same handler would
+   * not be visible to it in time and it would ask to save a note for someone who no
+   * longer exists.
+   */
+  const skipLeaveGuard = useRef(false);
 
   const [invites, setInvites] = useState<Invite[]>([]);
   /** The invite dialog: closed, open for a new invite (null), or editing one. */
@@ -98,6 +109,10 @@ export default function Users() {
   // Unlike Settings, a change of `search` counts too: picking another agent is a
   // navigation here, and it would silently drop the note being written.
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (skipLeaveGuard.current) {
+      skipLeaveGuard.current = false;
+      return false;
+    }
     const leaving =
       nextLocation.pathname !== currentLocation.pathname ||
       nextLocation.search !== currentLocation.search;
@@ -126,6 +141,39 @@ export default function Users() {
   const reset = () => {
     setDraft(null);
     setEditorVersion((version) => version + 1);
+  };
+
+  /**
+   * An offboard came back. By this point their access is already cut, whether or not
+   * every cleanup step worked — so they come off the roster either way, and what is left
+   * to decide is only how loudly to say what still needs doing by hand.
+   *
+   * A partial failure gets a notice that stays on the page rather than a toast: the
+   * leftover work is usually "delete the account in the Clerk dashboard", which nothing
+   * else will remind anyone about.
+   */
+  const handleOffboarded = (result: OffboardResult) => {
+    const name = result.name ?? "They";
+    setAllUsers(allUsers.filter((user) => user.id !== result.id));
+    skipLeaveGuard.current = true;
+    setDraft(null);
+    setSearchParams({}, { replace: true });
+
+    if (result.errors.length > 0) {
+      setOffboardNotice(result);
+      toast.error(`${name} lost access, but some cleanup failed.`);
+      return;
+    }
+    setOffboardNotice(null);
+    const cancelled = result.futureShiftsDeleted;
+    toast.success(`${name} has been offboarded.`, {
+      description: [
+        cancelled > 0
+          ? `${cancelled} upcoming shift${cancelled === 1 ? "" : "s"} cancelled — check coverage.`
+          : "No upcoming shifts to cancel.",
+        `${result.pastShiftsKept} past shift${result.pastShiftsKept === 1 ? "" : "s"} kept.`,
+      ].join(" "),
+    });
   };
 
   const handleInviteSaved = async (result: SavedInvite) => {
@@ -210,6 +258,43 @@ export default function Users() {
           </Button>
         </div>
 
+        {offboardNotice && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>
+              {offboardNotice.name ?? "That person"} lost access, but some cleanup failed
+            </AlertTitle>
+            <AlertDescription className="grid gap-2">
+              <p>
+                Their agendo account is gone, so they can no longer sign in or reach
+                agendo through Claude. These steps did not finish and need doing by hand:
+              </p>
+              <ul className="grid list-disc gap-0.5 pl-5 marker:text-destructive/70">
+                {offboardNotice.errors.map((failure) => (
+                  <li key={failure.step}>
+                    <span className="font-medium">{failure.step}</span> — {failure.message}
+                  </li>
+                ))}
+              </ul>
+              {!offboardNotice.clerkUserDeleted && !offboardNotice.clerkAlreadyGone && (
+                <p>
+                  Their login still exists. Delete it in the Clerk dashboard — the list
+                  here is built from agendo accounts, so they are no longer on it and
+                  this page can’t retry for you.
+                </p>
+              )}
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOffboardNotice(null)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
         <PendingInvites
           invites={invites}
           onEdit={(invite) => setInviteDialog({ invite })}
@@ -334,6 +419,7 @@ export default function Users() {
                 />
                 <UserTimezoneCard user={selected} />
                 <SyncedPositionsCard user={selected} />
+                <OffboardCard user={selected} onOffboarded={handleOffboarded} />
               </>
             )}
           </div>

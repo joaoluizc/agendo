@@ -89,7 +89,12 @@
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 62.8% 30.6%;
+    /* Brighter than shadcn's stock dark red (0 62.8% 30.6%), which is mixed only as a
+       button background. Against this near-black slate it scores 2.0:1 as text, so the
+       36-odd `text-destructive` error messages and any `border-destructive` were close
+       to invisible in dark mode. At 55% lightness text reads 4.6:1 (AA), and white on it
+       as a button is 4.2:1 — slightly better than the light theme already manages. */
+    --destructive: 0 72% 55%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 217.2 32.6% 17.5%;

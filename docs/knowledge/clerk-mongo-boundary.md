@@ -51,6 +51,9 @@ Mongo document, so a missing user always fails closed. `getCaller` and the MCP p
 call it through `resolveOrProvisionUser`, which first tries to provision that user — only
 for a Clerk account created in the last day or an invited email ([onboarding](onboarding.md)).
 
+That property is what makes deleting the Mongo user a kill switch, and why offboarding
+deletes it before it touches Clerk — see [offboarding](offboarding.md).
+
 ### Local development
 
 Permission checks run in **every** environment. To work on an admin route without an
@@ -87,7 +90,7 @@ Misreading one id-space as another is the recurring failure mode in this codebas
 
 | # | Space | Shape | Lives in |
 |---|---|---|---|
-| 1 | Clerk user id | `user_2abc…` | `req.auth.userId`, `User.clerkId`, `Shift.userId`, `Shift.createdBy` |
+| 1 | Clerk user id | `user_2abc…` | `req.auth.userId`, `User.clerkId`, `Shift.userId`, `Shift.createdBy`, `Location.assignedUsers[]`, `PermissionAudit.actorClerkId`/`targetClerkId` |
 | 2 | Mongo user `_id` | ObjectId / 24-hex | `UsersGCalEvents.userId` |
 | 3 | Sling user id | numeric string | `User.slingId` |
 | 4 | Sling position id | numeric string | `Position.positionId`, `User.positionsToSync[].positionId` |

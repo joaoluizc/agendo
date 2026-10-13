@@ -133,6 +133,13 @@ The user sees a change on their next API call. The frontend re-reads `/user/info
 their tab comes back after a minute, so it shows without a reload. MCP clients see new
 tools when their tool list refreshes (see the plan, §2).
 
+## Removing someone's access entirely
+
+`DELETE /user/:clerkId` (admin) offboards them: it deletes the agendo user — which is what
+every perimeter fails closed on — and the Clerk login with it. Same shape of rules as
+above (not yourself, not the last admin) and the same audit trail. See
+[offboarding](offboarding.md).
+
 ## The frontend
 
 - `useUserSettings()` exposes `isAdmin`, `permissions` (effective, from `/user/info`),

@@ -57,10 +57,14 @@ Three gates, all failing closed, in `lib/mcpAuth.js`:
    "oauth_token"`). A browser session token is rejected.
 2. The Clerk id must resolve to a Mongo user via `services/authz.resolveUser` — the same
    single authority the REST permission checks use. **Deleting the Mongo user is the instant kill switch
-   for MCP access**, independent of Clerk and Google. Put it in the offboarding checklist.
-   (A missing user is re-provisioned on a request only if Clerk created the account in the
-   last day or an admin invited the email — see docs/knowledge/onboarding.md — so for
-   someone on their first day, also delete them in Clerk and revoke any invite.)
+   for MCP access**, independent of Clerk and Google. That is what Settings → Users →
+   Offboard does, first, before anything else — see
+   [`docs/knowledge/offboarding.md`](../../../docs/knowledge/offboarding.md). It deletes
+   the Clerk account too, which matters: a missing Mongo user is re-provisioned on a
+   request if Clerk created the account in the last day or an admin invited the email
+   (see `docs/knowledge/onboarding.md`). So if an offboard reports that the Clerk
+   deletion failed, finish it by hand — for someone on their first day the leftover login
+   is not inert — and revoke any pending invite for their email.
 3. The user's email domain must be allowed (`MCP_ALLOWED_EMAIL_DOMAINS`, default
    `duda.co`). Redundant with Google's Internal-app consent gate on purpose: that gate is
    three uncommitted dashboard settings, and MCP credentials are long-lived and live on

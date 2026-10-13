@@ -50,4 +50,11 @@ userRouter.put(
   userController.setUserPreferences,
 );
 
+// Offboard a departing teammate: delete them from agendo and from Clerk. Irreversible,
+// and the agendo deletion is the access kill switch both the REST and MCP perimeters
+// fail closed on — so admin-only, and never a permission level, for the same reason
+// granting access is admin-only. Not yourself, and not the last admin
+// (permissions/offboard.js). See docs/knowledge/offboarding.md.
+userRouter.delete("/:clerkId", requireAdmin, userController.offboardUserById);
+
 export default userRouter;
