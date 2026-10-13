@@ -145,8 +145,7 @@ export default function OffboardCard({
             <DialogTitle>Offboard {fullName}?</DialogTitle>
             <DialogDescription>
               This deletes their agendo account and their login, and cancels their shifts
-              from today onwards. It can’t be undone — they would have to sign up again
-              and be set up from scratch.
+              from today onwards. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
