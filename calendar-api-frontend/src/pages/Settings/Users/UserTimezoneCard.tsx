@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import TimezoneCombobox, {
   offsetLabel,
@@ -15,6 +9,7 @@ import TimezoneCombobox, {
 import { useUserSettings } from "@/providers/useUserSettings";
 import type { UserSafeInfo } from "@/types/userTypes";
 import { usersApi } from "./api";
+import CollapsibleCard from "./CollapsibleCard";
 
 /**
  * Settings → Users → an agent's timezone.
@@ -61,15 +56,21 @@ export default function UserTimezoneCard({ user }: { user: UserSafeInfo }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Timezone</CardTitle>
-        <CardDescription>
+    <CollapsibleCard
+      title="Timezone"
+      description={
+        <>
           How times are rendered for {user.firstName} outside the browser — in
-          agendo's MCP server, for one. Shifts are stored as absolute instants,
+          agendo’s MCP server, for one. Shifts are stored as absolute instants,
           so this never moves a shift.
-        </CardDescription>
-      </CardHeader>
+        </>
+      }
+      summary={
+        draft !== saved
+          ? "Unsaved changes"
+          : `${timezoneLabel(saved)} (${offsetLabel(saved)})${saved === "UTC" ? " · likely never set" : ""}`
+      }
+    >
       <CardContent className="grid gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <TimezoneCombobox
@@ -91,6 +92,6 @@ export default function UserTimezoneCard({ user }: { user: UserSafeInfo }) {
           {saved === "UTC" ? " — the default, likely never set" : null}
         </p>
       </CardContent>
-    </Card>
+    </CollapsibleCard>
   );
 }

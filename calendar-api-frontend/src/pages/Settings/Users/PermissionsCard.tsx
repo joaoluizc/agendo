@@ -2,13 +2,7 @@ import { useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
@@ -30,6 +24,7 @@ import {
 } from "@/permissions/permissions";
 import type { UserSafeInfo } from "@/types/userTypes";
 import { usersApi } from "./api";
+import CollapsibleCard from "./CollapsibleCard";
 import { LevelPicker, useAreaCopy } from "./LevelPicker";
 
 /**
@@ -55,6 +50,14 @@ export default function PermissionsCard({ user }: { user: UserSafeInfo }) {
   const isLastAdmin = isAdmin && adminCount <= 1;
   const stored: Permissions = normalizePermissions(user.permissions);
   const locked = isSelf || saving !== null;
+
+  // What a collapsed card shows: enough to spot the wrong access without opening it.
+  const granted = AREA_KEYS.filter((area) => stored[area] !== "none");
+  const summary = isAdmin
+    ? "Admin"
+    : granted.length
+      ? granted.map((area) => `${AREA_LABELS[area]} ${stored[area]}`).join(" · ")
+      : "No access";
 
   const apply = async (
     body: { type?: "admin" | "normal"; permissions?: Partial<Permissions> },
@@ -108,14 +111,16 @@ export default function PermissionsCard({ user }: { user: UserSafeInfo }) {
   })();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Access</CardTitle>
-        <CardDescription>
+    <CollapsibleCard
+      title="Access"
+      description={
+        <>
           What {user.firstName} can see and do in agendo. Changes apply right away and are
           recorded.
-        </CardDescription>
-      </CardHeader>
+        </>
+      }
+      summary={summary}
+    >
       <CardContent className="grid gap-5">
         {isSelf && (
           <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -208,6 +213,6 @@ export default function PermissionsCard({ user }: { user: UserSafeInfo }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </CollapsibleCard>
   );
 }
