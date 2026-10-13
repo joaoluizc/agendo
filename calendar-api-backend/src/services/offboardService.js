@@ -1,5 +1,6 @@
 import Shift from "../models/ShiftModel.js";
 import Location from "../models/LocationModel.js";
+import { UserInvite } from "../models/UserInviteModel.js";
 import userService from "./userService.js";
 
 /**
@@ -11,11 +12,21 @@ import userService from "./userService.js";
  * orders fail very differently:
  *
  *  - *Mongo first* — if the Clerk call then fails, the person's **access is already gone**.
- *    Every perimeter resolves its caller through `services/authz.resolveUser`, which fails
- *    closed when no Mongo user exists: REST answers 403 `no_agendo_account`
+ *    Every perimeter resolves its caller through `services/authz.js`, which fails closed
+ *    when no Mongo user exists: REST answers 403 `no_agendo_account`
  *    (`middlewares/requirePermission.js`) and MCP refuses at gate 2
  *    (`mcp/lib/mcpAuth.js`). What is left over is a Clerk login that can authenticate and
- *    then do nothing at all.
+ *    then, in almost every case, do nothing at all.
+ *
+ *    *Almost*, since the onboarding backstop landed: `resolveOrProvisionUser` re-creates a
+ *    Mongo user on first request when the Clerk account is less than a day old, or when a
+ *    pending invite matches the email (`permissions/onboarding.js`). So for someone
+ *    offboarded in their first 24 hours, a failed Clerk deletion is not an inert leftover
+ *    — they would come back as a normal user with the default permissions on their next
+ *    request. That is why step 2 below revokes any pending invite, and why a partial
+ *    failure tells the admin to finish the Clerk deletion rather than treating it as tidying
+ *    up. It does not change the ordering: Clerk-first would leave a *fully privileged*
+ *    user, which is worse in every case.
  *  - *Clerk first* — if the Mongo call then fails, the leftover is a fully privileged
  *    agendo user whose only missing piece is a login, restorable by anyone who can create
  *    a Clerk account on that email.
@@ -59,7 +70,7 @@ import userService from "./userService.js";
  * a partial result is always visible to the admin:
  *
  * `{ mongoUserDeleted, clerkUserDeleted, clerkAlreadyGone, futureShiftsDeleted,
- *    pastShiftsKept, locationsUpdated, errors: [{ step, message }] }`
+ *    pastShiftsKept, invitesRevoked, locationsUpdated, errors: [{ step, message }] }`
  */
 export async function offboardUser(clerkId, { requestId } = {}) {
   const log = (message) => console.log(`[${requestId}] - [offboard] ${clerkId}: ${message}`);
@@ -69,6 +80,7 @@ export async function offboardUser(clerkId, { requestId } = {}) {
     clerkAlreadyGone: false,
     futureShiftsDeleted: 0,
     pastShiftsKept: 0,
+    invitesRevoked: 0,
     locationsUpdated: 0,
     errors: [],
   };
@@ -89,9 +101,11 @@ export async function offboardUser(clerkId, { requestId } = {}) {
   }
 
   // 1. The kill switch, first and alone. Everything below is cleanup.
+  let email = null;
   try {
-    const { deleted } = await userService.deleteUserByClerkId(clerkId);
+    const { deleted, user } = await userService.deleteUserByClerkId(clerkId);
     report.mongoUserDeleted = deleted;
+    email = user?.email ?? null;
     log(deleted ? "agendo user deleted — access cut" : "no agendo user (already gone)");
   } catch (err) {
     // The one failure that aborts: without this, nothing has been cut and the cleanup
@@ -100,7 +114,23 @@ export async function offboardUser(clerkId, { requestId } = {}) {
     return report;
   }
 
-  // 2. Future shifts — the phantom coverage.
+  // 2. Any pending invite for their email. An invite is a standing grant: the backstop
+  // applies it the moment someone with that address signs in, so leaving one behind would
+  // let an offboarded person walk back in with the access it carries. Normally the invite
+  // was consumed at their signup and there is nothing here — this covers the case where
+  // that delete failed (onboardingService logs and continues) and re-invites after an
+  // offboard, which are deliberate and go through the invites UI.
+  if (email) {
+    try {
+      const { deletedCount } = await UserInvite.deleteOne({ email });
+      report.invitesRevoked = deletedCount;
+      if (deletedCount) log(`revoked a pending invite for ${email}`);
+    } catch (err) {
+      fail("revoke pending invite", err);
+    }
+  }
+
+  // 3. Future shifts — the phantom coverage.
   try {
     const { deletedCount } = await Shift.deleteMany({
       userId: clerkId,
@@ -112,7 +142,7 @@ export async function offboardUser(clerkId, { requestId } = {}) {
     fail("cancel future shifts", err);
   }
 
-  // 3. Stale location assignments.
+  // 4. Stale location assignments.
   try {
     const { modifiedCount } = await Location.updateMany(
       { assignedUsers: clerkId },
@@ -124,7 +154,7 @@ export async function offboardUser(clerkId, { requestId } = {}) {
     fail("remove location assignments", err);
   }
 
-  // 4. Clerk — the login and the Google grant with it. Last, because by now they can
+  // 5. Clerk — the login and the Google grant with it. Last, because by now they can
   // already do nothing, and a Clerk outage must not hold up any of the above.
   try {
     const { deleted, alreadyGone } = await userService.deleteClerkUser(clerkId);

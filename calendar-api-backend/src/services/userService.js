@@ -146,11 +146,13 @@ const findUsersByClerkIds = async (clerkIds) => {
  * See docs/knowledge/offboarding.md.
  *
  * Returns whether a document was actually removed, so a repeat offboard can tell "deleted
- * it now" from "it was already gone" rather than reporting a no-op as a deletion.
+ * it now" from "it was already gone" rather than reporting a no-op as a deletion, and the
+ * document itself — the offboard needs the email afterwards to revoke a pending invite,
+ * and this is the last moment it exists.
  */
 const deleteUserByClerkId = async (clerkId) => {
-  const { deletedCount } = await User.deleteOne({ clerkId });
-  return { deleted: deletedCount > 0 };
+  const user = await User.findOneAndDelete({ clerkId });
+  return { deleted: Boolean(user), user };
 };
 
 /**

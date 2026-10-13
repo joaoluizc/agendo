@@ -143,6 +143,8 @@ export type OffboardResult = {
   clerkAlreadyGone: boolean;
   futureShiftsDeleted: number;
   pastShiftsKept: number;
+  /** Pending invites removed for their email — a standing grant that would let them back in. */
+  invitesRevoked: number;
   locationsUpdated: number;
   /** Cleanup that failed after access was already cut. Empty on a clean run. */
   errors: { step: string; message: string }[];

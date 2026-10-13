@@ -29,7 +29,8 @@ all. That asymmetry is what sets the order below.
    that is a coverage hole somebody now has to fill.
 3. **If a red notice stays on the page**, some cleanup failed. Their access is already
    gone; finish the listed steps by hand. Almost always this means deleting the account in
-   the Clerk dashboard.
+   the Clerk dashboard — do that promptly if they joined in the last day, for the backstop
+   reason below.
 4. **Revoke outside agendo too.** Sling, and their Google Workspace account. Deleting the
    Clerk user removes the Google OAuth grant Clerk held, not the Google account itself.
 
@@ -45,22 +46,32 @@ offboarding does not do it.
 | # | Step | On failure |
 |---|---|---|
 | 1 | Delete the agendo `User` | **aborts** — nothing was cut, so nothing else is attempted (500) |
-| 2 | Delete shifts starting from now | reported, run continues |
-| 3 | `$pull` them from `locations.assignedUsers` | reported, run continues |
-| 4 | Delete the Clerk user | reported, run continues |
+| 2 | Delete any pending `UserInvite` for their email | reported, run continues |
+| 3 | Delete shifts starting from now | reported, run continues |
+| 4 | `$pull` them from `locations.assignedUsers` | reported, run continues |
+| 5 | Delete the Clerk user | reported, run continues |
 
 ### Mongo first, Clerk second
 
 Both halves can fail, and the two orders leave very different messes:
 
-- **Mongo first** — if Clerk then fails, access is *already gone*. What is left is an inert
-  login.
+- **Mongo first** — if Clerk then fails, access is *already gone*. What is left is a login
+  that can authenticate and, in almost every case, do nothing.
 - **Clerk first** — if Mongo then fails, what is left is a fully privileged agendo user
   missing only a login, which anyone who can create a Clerk account on that email can
   restore.
 
 One leaves something harmless, the other leaves something live. The Mongo delete also goes
 before the cleanup steps, so no cleanup failure can be the reason access is still open.
+
+**The one caveat, since the onboarding backstop landed.** `resolveOrProvisionUser` re-creates
+a Mongo user on someone's first request when their Clerk account is less than a day old, or
+when a pending invite matches their email (see [onboarding](onboarding.md)). So for a person
+offboarded within their first 24 hours, a *failed* Clerk deletion is not inert: their next
+request brings them back as a normal user with the default permissions. Two things follow:
+step 2 revokes any pending invite, and a 207 that mentions the Clerk account is urgent
+rather than tidying-up. It does not change the ordering — Clerk-first would leave a fully
+privileged user, which is worse in every case.
 
 Everything after step 1 is collected rather than thrown: once access is cut, the rest are
 independent and stopping at the first failure would leave more loose ends, not fewer. The
@@ -95,6 +106,7 @@ The rules are pure and unit-tested in `src/permissions/offboard.js`.
 |---|---|
 | **Past shifts** | **Kept.** They are history — the hours report and performance scores are built from them, and deleting them would silently rewrite finished quarters. `database/scripts/purgeOrphanShifts.js` already treats an ex-employee's old shifts as real history. |
 | **Shifts from now on** | **Deleted.** A shift on next week's grid for someone who has left is not history, it is a false plan: it draws a covered slot and the coverage meter counts it, so the gap their leaving created stays hidden until the day arrives. The count is reported so it can be filled. |
+| **Pending invites** | **Revoked.** An invite is a standing grant applied the moment that address signs in, so one left behind is a way back in. Normally it was already consumed at their signup and there is none. |
 | **Location assignments** | **Removed.** See below. |
 | **Their Google Calendar** | **Untouched.** See below. |
 | **Permission audit records** | **Kept**, and one more is appended with `after.type === "offboarded"`. Once the user document is gone this is the only record of who removed them and when. |

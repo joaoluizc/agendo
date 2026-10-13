@@ -269,10 +269,10 @@ export default function Users() {
                 Their agendo account is gone, so they can no longer sign in or reach
                 agendo through Claude. These steps did not finish and need doing by hand:
               </p>
-              <ul className="grid gap-0.5">
+              <ul className="grid list-disc gap-0.5 pl-5 marker:text-destructive/70">
                 {offboardNotice.errors.map((failure) => (
                   <li key={failure.step}>
-                    · <span className="font-medium">{failure.step}</span> — {failure.message}
+                    <span className="font-medium">{failure.step}</span> — {failure.message}
                   </li>
                 ))}
               </ul>

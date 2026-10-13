@@ -98,22 +98,24 @@ export default function OffboardCard({
         <CardHeader>
           <CardTitle className="text-destructive">Offboard</CardTitle>
           <CardDescription>
-            Remove {user.firstName} from agendo and delete their login. This is how
-            someone leaving loses access — do it once their last day is done.
+            Remove {user.firstName} from agendo and delete their login.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          <ul className="grid gap-1 text-sm text-muted-foreground">
-            <li>· Their agendo account and their Clerk login are deleted.</li>
+        <CardContent className="grid gap-4">
+          {/* The consequences, grouped in their own panel so the card reads as a summary
+              with an action rather than a wall of prose. Real list markers, not a typed
+              "·" — that rendered as a stray speck a third the size of a bullet. */}
+          <ul className="grid list-disc gap-1.5 rounded-md bg-muted/50 py-3 pl-9 pr-4 text-sm text-muted-foreground marker:text-muted-foreground/70">
+            <li>Their agendo account and their Clerk login are deleted.</li>
             <li>
-              · <span className="font-medium text-foreground">Shifts from today onwards
-              are cancelled</span>, so the gap shows up on the schedule and the coverage
-              meter. Past shifts are kept — the hours report and performance scores are
-              built from them.
+              <span className="font-medium text-foreground">
+                Shifts from today onwards are cancelled.
+              </span>{" "}
+              Past shifts are kept.
             </li>
-            <li>· They are removed from every location they were assigned to.</li>
+            <li>They are removed from every location they were assigned to.</li>
             <li>
-              · Their Google Calendar is left alone. To clear it, unpublish their future
+              Their Google Calendar is left alone. To clear it, unpublish their future
               shifts first, then offboard.
             </li>
           </ul>
@@ -122,7 +124,7 @@ export default function OffboardCard({
               {blockedReason}
             </p>
           ) : (
-            <div>
+            <div className="flex justify-end">
               <Button
                 variant="destructive"
                 size="sm"
