@@ -3,40 +3,60 @@ import { User } from "../models/UserModel.js";
 import redisClient from "../database/redisClient.js";
 import { defaultPermissions } from "../permissions/evaluate.js";
 
-// Returns { user, created } so callers can tell an actual insert apart from a
-// no-op on an already-existing user (the clerk webhook logs which one happened).
-const createUser = async (userData) => {
-  // const { firstName, lastName, email, password } = userData;
-  const { firstName, lastName, email, slingId, clerkId } = userData;
-
-  let user = await User.findOne({ email });
-
-  if (user) {
-    return { user, created: false };
-  }
-
-  user = new User({
+/**
+ * Insert a new agendo user. Only `services/onboardingService.js` calls this, after
+ * `permissions/onboarding.js` has decided the access: `permissions` and `type` come from an
+ * invite or the registry's defaults, and `permissionsUpdatedBy` says which ("provisioning"
+ * for the defaults, the inviting admin's Clerk id otherwise).
+ *
+ * Returns { user, created }. `created` is false when a concurrent provisioning of the same
+ * person won the race (the webhook and a first request, or two first requests): the unique
+ * email index refuses the second insert and the winner's document is returned instead.
+ */
+const createUser = async ({
+  firstName,
+  lastName,
+  email,
+  slingId,
+  clerkId,
+  type = "normal",
+  permissions = defaultPermissions(),
+  permissionsUpdatedBy = "provisioning",
+}) => {
+  const user = new User({
     firstName,
     lastName,
     email,
     slingId,
     clerkId,
-    // A new user starts with the registry's defaults (permissions/registry.js), stamped
-    // so it's clear nobody granted them by hand.
-    permissions: defaultPermissions(),
+    type,
+    permissions,
     permissionsUpdatedAt: new Date(),
-    permissionsUpdatedBy: "provisioning",
+    permissionsUpdatedBy,
   });
-
-  // const salt = await bcrypt.genSalt(10);
-  // user.password = await bcrypt.hash(password, salt);
-
-  await user.save();
-  return { user, created: true };
+  try {
+    await user.save();
+    return { user, created: true };
+  } catch (err) {
+    if (err?.code !== 11000) throw err;
+    const winner = (await findUserByClerkId(clerkId)) ?? (await findUserByEmail(email));
+    if (!winner) throw err;
+    return { user: winner, created: false };
+  }
 };
 
+// Case-insensitive: emails typed into an invite and emails Clerk reports can differ in
+// case, and Mongo's string match does not.
 const findUserByEmail = async (email) => {
-  let user = await User.findOne({ email });
+  if (!email) return null;
+  let user = await User.findOne({ email }).collation({ locale: "en", strength: 2 });
+  return user;
+};
+
+/** Point an existing agendo user at a (new) Clerk account. Onboarding's "link" outcome. */
+const linkClerkId = async (user, clerkId) => {
+  user.clerkId = clerkId;
+  await user.save();
   return user;
 };
 
@@ -122,6 +142,23 @@ const findUsersByClerkIds = async (clerkIds) => {
 const getClerkUserById = async (userId) => {
   const user = await clerkClient.users.getUser(userId);
   return user;
+};
+
+/** Does this Clerk account still exist? False only on Clerk's 404; other errors throw. */
+const clerkUserExists = async (clerkId) => {
+  try {
+    await clerkClient.users.getUser(clerkId);
+    return true;
+  } catch (err) {
+    if (err?.status === 404) return false;
+    throw err;
+  }
+};
+
+/** The Clerk accounts holding this email address (at most one: Clerk keeps them unique). */
+const findClerkUsersByEmail = async (email) => {
+  const response = await clerkClient.users.getUserList({ emailAddress: [email] });
+  return response.data;
 };
 
 const getSlingIdByClerkId = async (clerkId) => {
@@ -283,9 +320,11 @@ const getGapiToken = async (email) => {
 
 export default {
   createUser,
+  linkClerkId,
   setUserTimezone,
   isValidTimezone,
   findUser: findUserByEmail,
+  findUserByEmail,
   findAllUsers,
   findUserByClerkId,
   countOtherAdmins,
@@ -296,6 +335,8 @@ export default {
   setUserPreferences,
   // Clerk-backed. These are the only functions that may talk to Clerk.
   getClerkUserById,
+  clerkUserExists,
+  findClerkUsersByEmail,
   getGoogleOAuthTokenByClerkId,
   getUsersWithGoogleTokens,
 };

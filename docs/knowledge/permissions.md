@@ -54,6 +54,7 @@ Settings → Users) and the MCP server's tools.
 | Effective access for the UI | `GET /user/info` → `isAdmin`, `permissions` |
 | Registry for the admin editor | `GET /user/permission-registry` |
 | Change someone's access (admin) | `PUT /user/:clerkId/permissions`, from the Access card on Settings → Users |
+| Preset access by email before they sign in (admin) | `GET/POST /user/invites`, `DELETE /user/invites/:id`; rules in `src/permissions/onboarding.js` — see [onboarding](onboarding.md) |
 | Frontend mirror of the areas and levels; `meets`, preview presets | `calendar-api-frontend/src/permissions/permissions.ts` |
 | Route guard and nav table | `calendar-api-frontend/src/permissions/RequirePermission.tsx`, `pages.ts` |
 
@@ -119,6 +120,10 @@ disagreed with the old gates.
 | An unknown field, area or level | 400 |
 
 Every change is stamped (`permissionsUpdatedAt/By`) and appended to `PermissionAudit`.
+
+For someone who hasn't signed in yet, **invite** them instead (Settings → Users → Invite):
+the access is applied when their agendo user is created, audited as `via: "invite"`. A new
+user without an invite gets the registry defaults. See [onboarding](onboarding.md).
 
 The **Access** card on Settings → Users does this one click at a time: each level change
 saves at once (and is audited); turning admin on or off asks first. It greys out your own

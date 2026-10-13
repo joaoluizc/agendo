@@ -63,7 +63,9 @@ places that each fail closed:
   Google itself refuses consent for anyone outside Duda's Workspace.
 - The Clerk account must map to a user document in agendo's Mongo. No document, no access.
   **This is your kill switch** — deleting the Mongo user cuts MCP access immediately,
-  without touching Clerk or Google. It belongs in the offboarding checklist.
+  without touching Clerk or Google. It belongs in the offboarding checklist. It holds for
+  any account more than a day old: agendo only re-creates a missing user for a brand-new
+  Clerk account or an invited email ([onboarding](knowledge/onboarding.md)).
 - That user's email domain must be `duda.co` (overridable via `MCP_ALLOWED_EMAIL_DOMAINS`).
 
 Admin vs. normal also comes from Mongo (`User.type`), same as the rest of agendo. Today

@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -21,49 +20,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/useUserSettings";
 import {
   AREA_KEYS,
   AREA_LABELS,
-  AREA_LEVELS,
   AreaKey,
   Permissions,
   normalizePermissions,
 } from "@/permissions/permissions";
 import type { UserSafeInfo } from "@/types/userTypes";
-import { PermissionRegistry, usersApi } from "./api";
-
-type AreaCopy = { key: AreaKey; label: string; levels: { key: string; description: string }[] };
-
-/** The registry's copy, fetched once per page load; the built-in levels until it arrives. */
-let registryRequest: Promise<PermissionRegistry> | null = null;
-const fallbackAreas: AreaCopy[] = AREA_KEYS.map((key) => ({
-  key,
-  label: AREA_LABELS[key],
-  levels: AREA_LEVELS[key].map((level) => ({ key: level, description: "" })),
-}));
-
-function useAreaCopy(): AreaCopy[] {
-  const [areas, setAreas] = useState<AreaCopy[]>(fallbackAreas);
-  useEffect(() => {
-    registryRequest ??= usersApi.getPermissionRegistry();
-    let alive = true;
-    registryRequest
-      .then((registry) => {
-        // Only areas this frontend knows how to gate; the server may be a deploy ahead.
-        const known = registry.areas.filter((area) => AREA_KEYS.includes(area.key));
-        if (alive && known.length) setAreas(known);
-      })
-      .catch(() => {
-        registryRequest = null; // fall back to the built-in levels; retry next time
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return areas;
-}
+import { usersApi } from "./api";
+import { LevelPicker, useAreaCopy } from "./LevelPicker";
 
 /**
  * Settings → Users → an agent's access: the admin flag and one level per area.
@@ -135,6 +102,7 @@ export default function PermissionsCard({ user }: { user: UserSafeInfo }) {
     if (!by) return null;
     if (by === "migration") return "the permissions migration";
     if (by === "provisioning") return "the defaults for new users";
+    // An invite's access is stamped with the admin who invited them, so it falls through.
     const admin = allUsers.find((candidate) => candidate.id === by);
     return admin ? `${admin.firstName} ${admin.lastName}` : "an admin";
   })();
@@ -180,42 +148,14 @@ export default function PermissionsCard({ user }: { user: UserSafeInfo }) {
               <div key={area.key} className="grid gap-1.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold">{area.label}</span>
-                  <div
-                    role="radiogroup"
-                    aria-label={area.label}
-                    className={cn(
-                      "inline-flex overflow-hidden rounded-md border border-border",
-                      isAdmin && "opacity-50",
-                    )}
-                  >
-                    {area.levels.map((level) => {
-                      const active = level.key === current;
-                      return (
-                        <button
-                          key={level.key}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          disabled={locked || isAdmin}
-                          onClick={() => setLevel(area.key, level.key)}
-                          title={level.description || undefined}
-                          className={cn(
-                            "px-3 py-1 text-xs font-medium capitalize transition-colors [&:not(:first-child)]:border-l [&:not(:first-child)]:border-border",
-                            active
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background text-muted-foreground enabled:hover:bg-muted enabled:hover:text-foreground",
-                            "disabled:cursor-not-allowed",
-                          )}
-                        >
-                          {saving === area.key && active ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            level.key
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <LevelPicker
+                    area={area}
+                    value={current}
+                    onChange={(level) => setLevel(area.key, level)}
+                    disabled={locked || isAdmin}
+                    dimmed={isAdmin}
+                    busy={saving === area.key}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {isAdmin

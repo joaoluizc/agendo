@@ -1,6 +1,6 @@
 import process from "process";
 import { getAuth } from "@clerk/express";
-import { callerFromUser, resolveUser } from "../../services/authz.js";
+import { callerFromUser, resolveOrProvisionUser } from "../../services/authz.js";
 import { publicOrigin, MCP_REQUIRED_SCOPES } from "./clerkOauth.js";
 
 /**
@@ -10,9 +10,11 @@ import { publicOrigin, MCP_REQUIRED_SCOPES } from "./clerkOauth.js";
  *
  *  1. Clerk must accept the bearer token as an **OAuth** access token
  *     (`acceptsToken: "oauth_token"` — a browser session token is not enough).
- *  2. That Clerk id must resolve to a Mongo user (`services/authz.resolveUser`). This is
- *     also the deprovisioning story: deleting the Mongo user kills MCP access instantly,
- *     independent of Clerk and Google.
+ *  2. That Clerk id must resolve to a Mongo user (`services/authz.resolveOrProvisionUser`).
+ *     This is also the deprovisioning story: deleting the Mongo user kills MCP access
+ *     instantly, independent of Clerk and Google. A Clerk account with no Mongo user is
+ *     only provisioned on a request if Clerk created it in the last day or an admin invited
+ *     its email (permissions/onboarding.js), so a deleted user stays deleted.
  *  3. That user's email must be in an allowed domain.
  *
  * Gate 3 is deliberate belt-and-braces. Access is already limited to Duda accounts by
@@ -102,7 +104,9 @@ export default async function mcpAuth(req, res, next) {
 
   let mongoUser;
   try {
-    ({ mongoUser } = await resolveUser(authData.userId));
+    ({ mongoUser } = await resolveOrProvisionUser(authData.userId, {
+      requestId: req.requestId,
+    }));
   } catch (err) {
     console.error(`[${req.requestId}] - [mcp] could not resolve caller: ${err.message}`);
     return res.status(500).json({ error: "could not verify permissions" });
