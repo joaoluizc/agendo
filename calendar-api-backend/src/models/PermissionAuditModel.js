@@ -3,7 +3,8 @@ const { Schema } = mongoose;
 
 /**
  * Append-only record of every change to who can do what in agendo: a user's
- * `permissions` or `type`. Written by the admin access editor and by migration scripts.
+ * `permissions` or `type`. Written by the admin access editor, by migration scripts, and
+ * when an invite is applied to a new user.
  * Nothing updates or deletes these documents — there are no routes for it.
  *
  * Offboarding writes one too, with `after.type === "offboarded"` and no permissions: it
@@ -29,8 +30,9 @@ const PermissionAuditSchema = new Schema(
   {
     at: { type: Date, required: true, default: Date.now },
     // How the change was made.
-    via: { type: String, required: true, enum: ["web", "migration", "script"] },
-    // Clerk id of the admin who made it, or "migration" for a script run.
+    via: { type: String, required: true, enum: ["web", "migration", "script", "invite"] },
+    // Clerk id of the admin who made it, or "migration" for a script run. For "invite", the
+    // admin who last saved the invite: the access was granted then, applied at signup.
     actorClerkId: { type: String, required: true },
     targetClerkId: { type: String },
     targetUserId: { type: Schema.Types.ObjectId, required: true },

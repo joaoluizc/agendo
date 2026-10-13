@@ -5,9 +5,8 @@ replaced the admin/normal binary once agendo became the support team's hub. The 
 every decision behind it are in [`docs/permissions-plan.md`](../permissions-plan.md); this
 page is how it works and how to extend it.
 
-**Status:** enforced on the REST API, and the frontend gates on it with an access editor on
-Settings → Users. Still to come: the MCP tools (phase 3). Until then the MCP still splits
-tools by admin vs. normal.
+**Status:** in force everywhere: the REST API, the frontend (with an access editor on
+Settings → Users) and the MCP server's tools.
 
 ## The model
 
@@ -55,6 +54,7 @@ tools by admin vs. normal.
 | Effective access for the UI | `GET /user/info` → `isAdmin`, `permissions` |
 | Registry for the admin editor | `GET /user/permission-registry` |
 | Change someone's access (admin) | `PUT /user/:clerkId/permissions`, from the Access card on Settings → Users |
+| Preset access by email before they sign in (admin) | `GET/POST /user/invites`, `DELETE /user/invites/:id`; rules in `src/permissions/onboarding.js` — see [onboarding](onboarding.md) |
 | Frontend mirror of the areas and levels; `meets`, preview presets | `calendar-api-frontend/src/permissions/permissions.ts` |
 | Route guard and nav table | `calendar-api-frontend/src/permissions/RequirePermission.tsx`, `pages.ts` |
 
@@ -121,6 +121,10 @@ disagreed with the old gates.
 
 Every change is stamped (`permissionsUpdatedAt/By`) and appended to `PermissionAudit`.
 
+For someone who hasn't signed in yet, **invite** them instead (Settings → Users → Invite):
+the access is applied when their agendo user is created, audited as `via: "invite"`. A new
+user without an invite gets the registry defaults. See [onboarding](onboarding.md).
+
 The **Access** card on Settings → Users does this one click at a time: each level change
 saves at once (and is audited); turning admin on or off asks first. It greys out your own
 access and the last admin's switch, as the server refuses both.
@@ -148,6 +152,18 @@ above (not yourself, not the last admin) and the same audit trail. See
   (`permissions/pages.ts`).
 - In a dev build, an admin can preview the UI as someone else from the **localhost** badge
   (see [Frontend build & lint](frontend-build-and-lint.md)).
+
+## The MCP server
+
+Each tool declares `requires` exactly like a route ("signedIn", "admin" or
+"<area>:<level>") in `registerTool`, which refuses to load a tool without one. A tool the
+caller lacks the level for is left out of their `tools/list` and refused if called anyway
+(a stale client list gets an explanation, not "Tool not found"). Today: `whoami` and
+`get_my_schedule` need only an account, the read tools `scheduling: view`, and the draft
+tools and coverage gaps `scheduling: edit`. See `calendar-api-backend/src/mcp/README.md`.
+
+Permissions never go into OAuth scopes or tokens, so a change needs no reinstall or
+re-login — only the client's tool list refreshing (docs/mcp-team-setup.md).
 
 ## Adding an area
 

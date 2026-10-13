@@ -12,7 +12,11 @@ const USERS = {
   user_agent: { clerkId: "user_agent", type: "normal", permissions: { scheduling: "view" } },
   user_admin: { clerkId: "user_admin", type: "admin" },
 };
+// What the first-request backstop (onboardingService.provisionFromClerk) does per Clerk id.
+// The rules behind it are tested in permissions/onboarding.test.js.
+const PROVISIONED = { user_brand_new: { clerkId: "user_brand_new", type: "normal" } };
 let lookups = [];
+let provisionAttempts = [];
 let authz;
 
 before(async () => {
@@ -24,11 +28,21 @@ before(async () => {
       },
     },
   });
+  mock.module(new URL("./onboardingService.js", import.meta.url).href, {
+    namedExports: {
+      provisionFromClerk: async (clerkId) => {
+        provisionAttempts.push(clerkId);
+        if (clerkId === "user_clerk_down") throw new Error("Clerk is unavailable");
+        return PROVISIONED[clerkId] ?? null;
+      },
+    },
+  });
   authz = await import("./authz.js");
 });
 
 beforeEach(() => {
   lookups = [];
+  provisionAttempts = [];
   delete process.env.ADMIN_BYPASS;
 });
 afterEach(() => {
@@ -66,11 +80,32 @@ test("no session resolves to nobody", async () => {
   assert.equal(await authz.getCaller(requestWith({ userId: null, tokenType: "session_token" })), null);
 });
 
-test("a Clerk identity with no agendo user is marked noAccount", async () => {
+test("a Clerk identity with no agendo user, that can't be provisioned, is marked noAccount", async () => {
   assert.deepEqual(await authz.getCaller(session("user_stranger")), {
     clerkId: "user_stranger",
     noAccount: true,
   });
+  assert.deepEqual(provisionAttempts, ["user_stranger"]);
+});
+
+test("a first request provisions the agendo user when onboarding allows it", async () => {
+  const caller = await authz.getCaller(session("user_brand_new"));
+  assert.equal(caller.clerkId, "user_brand_new");
+  assert.equal(caller.mongoUser, PROVISIONED.user_brand_new);
+  assert.equal(caller.isAdmin, false);
+});
+
+test("a provisioning failure fails closed as noAccount, it doesn't throw", async () => {
+  assert.deepEqual(await authz.getCaller(session("user_clerk_down")), {
+    clerkId: "user_clerk_down",
+    noAccount: true,
+  });
+});
+
+test("an existing agendo user never triggers provisioning", async () => {
+  await authz.getCaller(session("user_agent"));
+  await authz.resolveOrProvisionUser("user_admin");
+  assert.deepEqual(provisionAttempts, []);
 });
 
 test("resolved once per request, then memoized on req.caller", async () => {

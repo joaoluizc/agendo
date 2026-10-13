@@ -14,6 +14,14 @@ userRouter.get(
   userController.getPermissionRegistry,
 );
 userRouter.post("/clerk/new", webhookRoute, userController.newClerkUser);
+
+// Invites: an admin sets someone's access by email before they have an agendo user; it
+// applies when they first sign in (or right away, if they already have a Clerk account).
+// Nothing is sent to them. Rules in permissions/onboarding.js.
+userRouter.get("/invites", requireAdmin, userController.listInvites);
+userRouter.post("/invites", requireAdmin, userController.saveInvite);
+userRouter.delete("/invites/:inviteId", requireAdmin, userController.revokeInvite);
+
 // An agent's own timezone. Self-service on purpose — needing an admin is how the field
 // stayed on its default for everyone. Agendo's MCP server renders every time in this
 // value, so until it is set a time is labelled UTC because that is what it honestly is.

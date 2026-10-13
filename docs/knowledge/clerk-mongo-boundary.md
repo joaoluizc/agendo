@@ -25,7 +25,8 @@ rule.**
 2. **Google OAuth access tokens** — `clerkClient.users.getUserOauthAccessToken(clerkId,
    "oauth_google")`. Genuinely Clerk-only; there is no Mongo equivalent.
 3. **Account lifecycle** — the svix-verified `user.created` webhook that provisions the
-   Mongo user (`userController.newClerkUser`).
+   Mongo user (`userController.newClerkUser`), with a first-request backstop for brand-new
+   accounts and admin invites by email. See [onboarding](onboarding.md).
 4. **Avatar / display name** — `imageUrl`, `hasImage`. **Display only, never
    authorization.** These have no Mongo equivalent, so `/user/all` joins them from Clerk.
 
@@ -46,7 +47,9 @@ const { mongoUser, isAdmin } = await resolveUser(clerkUserId);
 The MCP perimeter uses it, and `getCaller(req)` (same file) wraps it for REST: one session-only, memoized lookup per request that the per-area permission
 checks read (see [permissions](permissions.md)). That is the whole point of having
 exactly one. It returns `{ mongoUser: null, isAdmin: false }` for a Clerk user with no
-Mongo document, so a missing user always fails closed.
+Mongo document, so a missing user always fails closed. `getCaller` and the MCP perimeter
+call it through `resolveOrProvisionUser`, which first tries to provision that user — only
+for a Clerk account created in the last day or an invited email ([onboarding](onboarding.md)).
 
 That property is what makes deleting the Mongo user a kill switch, and why offboarding
 deletes it before it touches Clerk — see [offboarding](offboarding.md).

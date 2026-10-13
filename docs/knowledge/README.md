@@ -6,6 +6,7 @@ teammates. Keep entries tight and skimmable; one topic per file.
 
 - [Agendo overview](agendo-overview.md) — what agendo is, its relationship to Sling, and where it's headed
 - [Clerk / Mongo boundary](clerk-mongo-boundary.md) — which store owns which user field, the id spaces, and why `publicMetadata` is banned
+- [Onboarding](onboarding.md) — how a Clerk sign-in becomes an agendo user: the `user.created` webhook, the first-request backstop (new accounts only, so the kill switch holds), and silent invites that preset someone's access by email
 - [Permissions](permissions.md) — per-user area levels granted by admins: the registry, the evaluator, a requirement marker on every route (the only REST gate, and the test that enforces it), changing access, adding an area, the backfill
 - [Offboarding](offboarding.md) — the checklist for someone leaving: one action that deletes them from agendo and Clerk, why Mongo goes first, what happens to their shifts and location assignments, and how to finish a partial failure
 - [Calendar sync paths](agendo-sync-paths.md) — the two ways shifts reach Google Calendar, why each only deletes its own events, and the position id-space gotcha

@@ -1,33 +1,68 @@
+import { decide, levelOf, parseRequirement } from "../../permissions/evaluate.js";
+import { PERMISSION_AREAS } from "../../permissions/registry.js";
+
 /**
  * The only way a tool gets registered on agendo's MCP server.
  *
  * Unlike an Express router there is no mount point that covers every tool by default, so
- * a forgotten guard would be a silent hole rather than a visible one. `level` is
- * therefore required and validated at registration time: a tool that does not state
- * whether it is for any user or for admins only fails to load the server at all.
+ * a forgotten guard would be a silent hole rather than a visible one. `requires` is
+ * therefore mandatory and validated at registration time: a tool that does not state what
+ * it needs fails to load the server at all. It takes the same requirements as the REST
+ * route markers (permissions/evaluate.js): "signedIn", "admin", or "<area>:<level>"
+ * — e.g. "scheduling:edit". MCP grants exactly what the web app grants.
  *
- * Two enforcement points, deliberately:
- *  - **Visibility** — an admin tool is not registered for a non-admin caller, so it never
- *    appears in `tools/list`. (The server is built per request, from the resolved
- *    caller — see server.js.)
- *  - **Execution** — the wrapper re-checks `level` on every call. Redundant today, and
- *    kept that way: the day someone registers tools before resolving the caller, this is
- *    the check that still holds.
+ * Enforcement, deliberately in two places:
+ *  - **Visibility** — a tool the caller can't use is not registered, so it never appears in
+ *    `tools/list`. (The server is built per request, from the caller resolved from Mongo
+ *    on that request — see server.js — so a permission change shows on the client's next
+ *    `tools/list`, with no reinstall or re-login.)
+ *  - **Execution** — the wrapper re-checks on every call. Redundant today, and kept that
+ *    way: the day someone registers tools before resolving the caller, this still holds.
+ *
+ * **A stale client list.** Clients cache `tools/list`, so someone whose access was just
+ * revoked may still call a tool they no longer have. Rather than the SDK's bare "Tool X
+ * not found", a request that calls such a tool gets a one-request stub under the same
+ * name that explains what is needed. It only exists on that `tools/call` request
+ * (`caller.toolCallNames`), so it never shows up in a listing.
  */
 
-const LEVELS = new Set(["user", "admin"]);
+/** The caller kinds a tool may require. Public/webhook/mcp are route-only declarations. */
+const TOOL_REQUIREMENT_KINDS = new Set(["signedIn", "admin", "level"]);
 
 /** A tool result that reads as an error to the client rather than crashing the call. */
 function toolError(text) {
   return { content: [{ type: "text", text }], isError: true };
 }
 
+/** "Scheduling: edit" from "scheduling:edit"; "admin" stays "agendo admin". */
+export function describeRequirement(requires) {
+  if (requires === "admin") return "agendo admin";
+  if (requires === "signedIn") return "an agendo account";
+  const [area, level] = requires.split(":");
+  return `${PERMISSION_AREAS[area]?.label ?? area}: ${level}`;
+}
+
+/** Why `caller` can't use a tool needing `requires`, phrased for the person and their LLM. */
+export function refusalText(name, requires, parsed, caller) {
+  const who = caller?.mongoUser?.email ?? "this account";
+  const have =
+    parsed.kind === "level"
+      ? `you have ${describeRequirement(`${parsed.area}:${levelOf(caller, parsed.area)}`)}`
+      : `${who} is not an admin`;
+  return (
+    `"${name}" needs ${describeRequirement(requires)} — ${have}. ` +
+    `An agendo admin can change access in Settings → Users. ` +
+    `If access was just granted, restart or refresh your MCP client so its tool list updates.`
+  );
+}
+
 /**
  * @param {import("@modelcontextprotocol/sdk/server/mcp.js").McpServer} server
- * @param {{clerkId: string, mongoUser: object, isAdmin: boolean, clientId: string, requestId: string}} caller
+ * @param {{clerkId: string, mongoUser: object, isAdmin: boolean, clientId: string,
+ *   requestId: string, toolCallNames?: string[]}} caller
  * @param {{
  *   name: string,
- *   level: "user" | "admin",
+ *   requires: string,
  *   description: string,
  *   title?: string,
  *   inputSchema?: object,
@@ -36,24 +71,40 @@ function toolError(text) {
  * }} definition
  */
 export function registerTool(server, caller, definition) {
-  const { name, level, title, description, inputSchema, annotations, handler } =
+  const { name, requires, title, description, inputSchema, annotations, handler } =
     definition;
 
   if (!name) {
     throw new Error("registerTool: every tool needs a name");
   }
-  if (!LEVELS.has(level)) {
+  if (!requires) {
     throw new Error(
-      `registerTool: tool "${name}" must declare level: "user" or "admin"`,
+      `registerTool: tool "${name}" must declare requires: "signedIn", "admin" or "<area>:<level>"`,
+    );
+  }
+  // Throws on an unknown area or level — a typo fails the server load, not a call.
+  const parsed = parseRequirement(requires);
+  if (!TOOL_REQUIREMENT_KINDS.has(parsed.kind)) {
+    throw new Error(
+      `registerTool: tool "${name}" requires "${requires}", which is for routes only — use "signedIn", "admin" or "<area>:<level>"`,
     );
   }
   if (typeof handler !== "function") {
     throw new Error(`registerTool: tool "${name}" needs a handler function`);
   }
 
-  // Hidden from listing, not just refused on call.
-  if (level === "admin" && !caller.isAdmin) {
-    return null;
+  if (!decide(caller, parsed).allowed) {
+    // Hidden from listing, not just refused on call — unless this very request is calling
+    // it (a stale client list): then a stub explains instead of "Tool not found".
+    if (!caller?.toolCallNames?.includes(name)) {
+      return null;
+    }
+    return server.registerTool(name, { description }, async () => {
+      console.warn(
+        `[${caller.requestId}] - [mcp] denied ${name} for ${caller.mongoUser?.email}: requires ${requires} (stale tool list)`,
+      );
+      return toolError(refusalText(name, requires, parsed, caller));
+    });
   }
 
   const config = { description };
@@ -73,13 +124,11 @@ export function registerTool(server, caller, definition) {
       `[${caller.requestId}] - [mcp] tool=${name} caller=${caller.mongoUser.email} client=${caller.clientId} args=${JSON.stringify(args)}`,
     );
 
-    if (level === "admin" && !caller.isAdmin) {
+    if (!decide(caller, parsed).allowed) {
       console.warn(
-        `[${caller.requestId}] - [mcp] denied ${name} for ${caller.mongoUser.email}: not an admin`,
+        `[${caller.requestId}] - [mcp] denied ${name} for ${caller.mongoUser.email}: requires ${requires}`,
       );
-      return toolError(
-        `"${name}" is restricted to agendo admins. You are signed in as ${caller.mongoUser.email} (role: ${caller.mongoUser.type}).`,
-      );
+      return toolError(refusalText(name, requires, parsed, caller));
     }
 
     try {
@@ -93,6 +142,17 @@ export function registerTool(server, caller, definition) {
       return toolError(`${name} failed: ${err.message}`);
     }
   });
+}
+
+/**
+ * The tool names a JSON-RPC body calls (one message or a batch), so registerTool can stub
+ * tools this caller no longer has. Anything malformed simply yields no names.
+ */
+export function toolCallNamesOf(body) {
+  const messages = Array.isArray(body) ? body : [body];
+  return messages
+    .filter((message) => message?.method === "tools/call" && typeof message.params?.name === "string")
+    .map((message) => message.params.name);
 }
 
 export default registerTool;
