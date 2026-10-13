@@ -1,15 +1,11 @@
 import { Suspense, lazy } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { hasPreferences } from "@/components/UserPreferences/PreferencesContent";
 import { UserSafeInfo } from "@/types/userTypes";
 import { useUserSettings } from "@/providers/useUserSettings";
 import { useTimeFormat } from "@/utils/timeFormat";
+import CollapsibleCard from "./CollapsibleCard";
 
 // Loaded on first use of this card only, so Tiptap stays out of the bundle every other
 // page (and every non-admin) downloads. See PreferencesEditor.
@@ -29,6 +25,8 @@ type PreferencesCardProps = {
 /**
  * One agent's preferences, editable. The draft lives in the parent (Users), because that is
  * where the unsaved-changes guard has to see it; this card only renders and reports edits.
+ *
+ * The one card on the page that starts open: it's what managers come here to read.
  */
 export default function PreferencesCard({
   user,
@@ -46,14 +44,19 @@ export default function PreferencesCard({
     : undefined;
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
-        <CardTitle>Preferences</CardTitle>
-        <CardDescription>
+    <CollapsibleCard
+      defaultOpen
+      title="Preferences"
+      description={
+        <>
           How {user.firstName} likes to be scheduled. Only admins can see this — it
           shows when you hover {user.firstName}’s name on the schedule.
-        </CardDescription>
-      </CardHeader>
+        </>
+      }
+      summary={
+        isDirty ? "Unsaved changes" : hasPreferences(user) ? undefined : "None yet"
+      }
+    >
       <CardContent>
         <Suspense
           fallback={
@@ -98,6 +101,6 @@ export default function PreferencesCard({
           </Button>
         </div>
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }

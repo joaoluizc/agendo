@@ -2,13 +2,7 @@ import { useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Loader2, UserMinus } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +17,7 @@ import {
 import { useUserSettings } from "@/providers/useUserSettings";
 import type { UserSafeInfo } from "@/types/userTypes";
 import { OffboardResult, usersApi } from "./api";
+import CollapsibleCard from "./CollapsibleCard";
 
 /**
  * Settings → Users → offboard a departing teammate: delete them from agendo and from
@@ -94,13 +89,12 @@ export default function OffboardCard({
 
   return (
     <>
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle className="text-destructive">Offboard</CardTitle>
-          <CardDescription>
-            Remove {user.firstName} from agendo and delete their login.
-          </CardDescription>
-        </CardHeader>
+      <CollapsibleCard
+        className="border-destructive/40"
+        title="Offboard"
+        titleClassName="text-destructive"
+        description={<>Remove {user.firstName} from agendo and delete their login.</>}
+      >
         <CardContent className="grid gap-4">
           {/* The consequences, grouped in their own panel so the card reads as a summary
               with an action rather than a wall of prose. Real list markers, not a typed
@@ -137,7 +131,7 @@ export default function OffboardCard({
             </div>
           )}
         </CardContent>
-      </Card>
+      </CollapsibleCard>
 
       <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
         <DialogContent>

@@ -32,9 +32,11 @@ const initials = (user: UserSafeInfo) =>
  * is admin-gated on its own). A page of its own rather than another card on General, which
  * is long enough already; SettingsLayout supplies the frame and the shared sidebar.
  *
- * Pick an agent on the left; the right side holds their access (admin flag and a level per
- * area), their managers' notes, their timezone and a read-only view of what syncs to their
- * calendar. "Invite" sets someone's access by email before they've signed in (Invites.tsx).
+ * Pick an agent on the left; the right side holds their managers' notes, their access (admin
+ * flag and a level per area), their timezone, a read-only view of what syncs to their
+ * calendar and offboarding. Notes come first and start open — they're what managers come
+ * here for; the rest start collapsed (CollapsibleCard).
+ * "Invite" sets someone's access by email before they've signed in (Invites.tsx).
  * The pick lives in `?user=<clerkId>`, so
  * a refresh keeps it and the schedule's hover card can link straight to an agent.
  *
@@ -407,7 +409,6 @@ export default function Users() {
                     </p>
                   </div>
                 </div>
-                <PermissionsCard user={selected} />
                 <PreferencesCard
                   user={selected}
                   editorKey={`${selected.id}:${editorVersion}`}
@@ -417,6 +418,7 @@ export default function Users() {
                   onReset={reset}
                   onSave={save}
                 />
+                <PermissionsCard user={selected} />
                 <UserTimezoneCard user={selected} />
                 <SyncedPositionsCard user={selected} />
                 <OffboardCard user={selected} onOffboarded={handleOffboarded} />
