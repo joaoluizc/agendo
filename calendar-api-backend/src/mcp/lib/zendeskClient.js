@@ -24,8 +24,13 @@ import process from "process";
  *    `/api/v2/audit_logs.json` if one asked. Which endpoints are read is decided by the
  *    tools' fixed paths. That Zendesk GETs are side-effect-free is Zendesk's promise, not
  *    ours to verify.
- *  - **Credentials only ever reach the configured Zendesk host,** and redirects are never
- *    followed.
+ *  - **Credentials only ever reach the configured Zendesk host.** A JSON read never follows a
+ *    redirect. `download()` is the one exception, because Zendesk serves attachments from a
+ *    redirect to storage: it starts only from `https://<host>/attachments/…`, sends the
+ *    credential on that first request alone, follows at most a few hops and only to https
+ *    names that are real (not IP addresses, `localhost`, single labels or internal-looking
+ *    names, a trailing dot included), reads at most a fixed number of bytes, never retries,
+ *    and never logs the address (its path carries a secret).
  *  - **A request budget, shared fairly.** Zendesk's rate limit is per *account* and shared
  *    by every integration on it (Duda's Jira-backlog sync included). The process-wide
  *    budget is a fraction of the lowest plan limit, and each caller gets a smaller share of
@@ -95,6 +100,8 @@ export const DEFAULT_LIMITS = Object.freeze({
   requestTimeoutMs: 20_000,
   overallDeadlineMs: 25_000,
   maxBodyChars: 5_000_000,
+  maxDownloadBytes: 3_000_000,
+  maxDownloadRedirects: 3,
 });
 
 /**
@@ -250,6 +257,136 @@ function errorForStatus(status, detail) {
   }
   return new ZendeskError(`Zendesk returned an unexpected response (HTTP ${status}).`, { status });
 }
+
+/** The only shape of file address a download starts from: a plain path under `/attachments/`. */
+const ATTACHMENT_PATH_PATTERN = /^\/attachments\/[A-Za-z0-9_\-./]*$/;
+
+const refusedAddress = () =>
+  new ZendeskError(
+    "Refused: that is not a file on this agendo server's Zendesk account, and credentials are never sent anywhere else.",
+  );
+
+/**
+ * The address a download starts from, or a refusal. It must be `https://<the configured Zendesk
+ * host>/attachments/…`: no other host (an attachment's `content_url` can point outside Zendesk,
+ * and a customer may have chosen where), no port, no userinfo, no path outside `/attachments/`,
+ * no dot or empty segments, no encoded separators. A query is allowed: Zendesk puts the file's
+ * name there.
+ */
+export function attachmentUrl(settings, raw) {
+  let url;
+  try {
+    url = new URL(String(raw));
+  } catch {
+    throw refusedAddress();
+  }
+  const segments = url.pathname.split("/").slice(1);
+  const plain =
+    ATTACHMENT_PATH_PATTERN.test(url.pathname) &&
+    !segments.some((segment, index) => segment === "." || segment === ".." || (segment === "" && index < segments.length - 1));
+  if (
+    url.protocol !== "https:" ||
+    url.hostname.toLowerCase() !== settings.host ||
+    url.port ||
+    url.username ||
+    url.password ||
+    !plain
+  ) {
+    throw refusedAddress();
+  }
+  return url;
+}
+
+/**
+ * Where a redirect may lead, or a refusal. The `Location` came from Zendesk, but it is followed
+ * without credentials and so only to a place that looks like the public web: https, the default
+ * port, no userinfo, and a host that is a real name — not an IP address in any spelling (the URL
+ * parser has already turned hex, octal and decimal forms into dotted ones), not `localhost`, not
+ * a single label, not a name that says it is internal. This does not stop a public name that
+ * resolves to a private address; it narrows what a bad redirect can reach, and the redirect is
+ * Zendesk's to give, not a customer's.
+ */
+export function resolveRedirect(location, from) {
+  // A redirect with no destination is malformed; an empty one would resolve to where we already are.
+  if (typeof location !== "string" || !location.trim()) {
+    throw new ZendeskError("The file's download link redirected somewhere that is not an address.");
+  }
+  let url;
+  try {
+    url = new URL(String(location), from);
+  } catch {
+    throw new ZendeskError("The file's download link redirected somewhere that is not an address.");
+  }
+  // A trailing dot names the same host ("evil.localhost." is "evil.localhost"), so it cannot hide one.
+  const host = url.hostname.toLowerCase().replace(/\.+$/, "");
+  const internal =
+    host === "localhost" ||
+    !host.includes(".") ||
+    host.startsWith("[") ||
+    host.includes(":") ||
+    /^[0-9.]+$/.test(host) ||
+    /\.(localhost|local|localdomain|internal|intranet|private|lan|home|corp|arpa)$/.test(host);
+  if (url.protocol !== "https:" || (url.port && url.port !== "443") || url.username || url.password || internal) {
+    throw new ZendeskError(
+      "The file's download link redirected to a place this connection will not fetch from, so it was not followed.",
+    );
+  }
+  return url;
+}
+
+/** Let go of a body nobody will read, so its connection is not held open. */
+async function discardBody(response) {
+  try {
+    await response.body?.cancel?.();
+  } catch {
+    // nothing useful to do with a body we did not want
+  }
+}
+
+/** A response body as bytes, read up to `maxBytes` and no further. */
+async function readBounded(response, maxBytes) {
+  const tooBig = () =>
+    new ZendeskError(`The file is larger than the ${Math.round(maxBytes / 1_000_000)} MB this connection will download.`);
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await discardBody(response);
+    throw tooBig();
+  }
+
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxBytes) throw tooBig();
+    return bytes;
+  }
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value: chunk } = await reader.read();
+    if (done) break;
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw tooBig();
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+/** `image/png` from `Image/PNG; charset=x`, or null if it is not a media type. */
+function cleanContentType(header) {
+  const type = String(header ?? "").split(";")[0].trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/.test(type) && type.length <= 100 ? type : null;
+}
+
+/** Zendesk said 429: how long to wait, and whose limit it is. */
+const rateLimited = (waitSeconds, status) =>
+  new ZendeskError(
+    `Zendesk is rate-limiting requests (HTTP 429). Try again in about ${waitSeconds} seconds — ` +
+      "the limit is shared by Duda's whole Zendesk account, not just agendo.",
+    { status, retryAfterSeconds: waitSeconds },
+  );
 
 const tooSlow = () =>
   new ZendeskError("Zendesk took too long to answer. Try again, or ask for less.");
@@ -421,8 +558,14 @@ export function createZendeskClient({
 
   let rateLimit = null;
 
-  /** One attempt: the response, with its body read inside the slot. */
-  async function attempt(url, settings, { callerKey, deadlineAt, signal }) {
+  /**
+   * Run one request inside the budget and the queue: take a request from the caller's share,
+   * wait for a free connection, and hand `send` the signal that covers the per-request timeout
+   * and the caller's cancellation. `send` makes the request and reads its body *inside* the
+   * slot. A request that never reaches Zendesk (refused, cancelled, timed out waiting) gives
+   * its budget back.
+   */
+  async function guarded({ callerKey, deadlineAt, signal }, send) {
     if (signal?.aborted) throw cancelled();
     const ticket = await takeBudget(callerKey, deadlineAt, signal);
     try {
@@ -439,6 +582,16 @@ export function createZendeskClient({
 
       const timeout = AbortSignal.timeout(Math.min(limits.requestTimeoutMs, remainingMs));
       sent = true;
+      return await send(signal && typeof AbortSignal.any === "function" ? AbortSignal.any([timeout, signal]) : timeout);
+    } finally {
+      releaseSlot(callerKey);
+      if (!sent) refundBudget(callerKey, ticket);
+    }
+  }
+
+  /** One attempt at a JSON read: the response, with its body read inside the slot. */
+  function attempt(url, settings, context) {
+    return guarded(context, async (requestSignal) => {
       const response = await fetchImpl(url, {
         method: "GET", // the only method this module can send
         redirect: "manual",
@@ -447,7 +600,7 @@ export function createZendeskClient({
           Accept: "application/json",
           "User-Agent": "agendo-mcp",
         },
-        signal: signal && typeof AbortSignal.any === "function" ? AbortSignal.any([timeout, signal]) : timeout,
+        signal: requestSignal,
       });
       const seen = readRateLimit(response.headers, now());
       if (seen) rateLimit = seen;
@@ -457,7 +610,10 @@ export function createZendeskClient({
         new ZendeskError(
           "Zendesk's answer was too large to handle. Ask for less (a narrower search or fewer items).",
         );
-      if (Number(response.headers.get("content-length")) > limits.maxBodyChars) throw tooLarge();
+      if (Number(response.headers.get("content-length")) > limits.maxBodyChars) {
+        await discardBody(response);
+        throw tooLarge();
+      }
 
       // A body that fails to arrive on a success is a failed attempt, retried like any other
       // network error. On an error status the status matters more than a missing body.
@@ -470,12 +626,8 @@ export function createZendeskClient({
         body,
         retryAfter: parseRetryAfter(response.headers.get("retry-after")),
       };
-    } finally {
-      releaseSlot(callerKey);
-      if (!sent) refundBudget(callerKey, ticket);
-    }
+    });
   }
-
   /**
    * GET a Zendesk API path and return the parsed JSON, spending `callerKey`'s share of the
    * budget. Throws ZendeskError for anything a person should hear about.
@@ -532,11 +684,7 @@ export function createZendeskClient({
         ) {
           continue;
         }
-        throw new ZendeskError(
-          `Zendesk is rate-limiting requests (HTTP 429). Try again in about ${waitSeconds} seconds — ` +
-            "the limit is shared by Duda's whole Zendesk account, not just agendo.",
-          { status, retryAfterSeconds: waitSeconds },
-        );
+        throw rateLimited(waitSeconds, status);
       }
       if (status >= 500) {
         if (!last && (await pause(backoffMs, deadlineAt, signal))) continue;
@@ -546,6 +694,74 @@ export function createZendeskClient({
     }
   }
 
+  /**
+   * GET an attachment's bytes, spending `callerKey`'s share of the budget. Returns
+   * `{ bytes, contentType }`; throws ZendeskError for anything a person should hear about.
+   *
+   * This is the one place the client follows a redirect, and it does it under rules a JSON read
+   * never needs (see the header): the address must be a file on the configured Zendesk host
+   * (`/attachments/…`), credentials go to that first request and no other, each redirect must
+   * lead to an https host that is a real name, there are at most a few hops, the body is read
+   * up to a byte cap and no further, and nothing about the address is ever logged — its path
+   * carries a secret token. There is no retry: a failed download is the person's to ask for again.
+   */
+  async function runDownload(callerKey, contentUrl, { signal, deadlineAt: toolDeadline, maxBytes } = {}) {
+    const settings = readSettings(env());
+    let url = attachmentUrl(settings, contentUrl);
+    const deadlineAt = Math.min(toolDeadline ?? Infinity, now() + limits.overallDeadlineMs);
+    const cap = Math.min(maxBytes ?? limits.maxDownloadBytes, limits.maxDownloadBytes);
+    const context = { callerKey, deadlineAt, signal };
+    let credentialed = true;
+
+    for (let hop = 0; hop <= limits.maxDownloadRedirects; hop += 1) {
+      let answer;
+      try {
+        answer = await guarded(context, async (requestSignal) => {
+          const headers = { Accept: "*/*", "User-Agent": "agendo-mcp" };
+          // Credentials go to the first request, on the Zendesk host, and to nothing after it.
+          if (credentialed) headers.Authorization = settings.authorization;
+          const response = await fetchImpl(url, { method: "GET", redirect: "manual", headers, signal: requestSignal });
+          const status = response.status;
+          if (status >= 200 && status < 300) {
+            return { status, bytes: await readBounded(response, cap), contentType: cleanContentType(response.headers.get("content-type")) };
+          }
+          const location = response.headers.get("location");
+          const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
+          await discardBody(response);
+          return { status, location, retryAfter };
+        });
+      } catch (err) {
+        if (err instanceof ZendeskError) throw err;
+        if (signal?.aborted) throw cancelled();
+        throw new ZendeskError(
+          err?.name === "TimeoutError" ? "Zendesk did not answer in time." : "Could not reach Zendesk.",
+        );
+      }
+
+      const { status } = answer;
+      if (status >= 200 && status < 300) return { bytes: answer.bytes, contentType: answer.contentType };
+
+      if (status >= 300 && status < 400) {
+        // The normal way a file is served, so not worth a log line.
+        url = resolveRedirect(answer.location, url);
+        credentialed = false;
+        continue;
+      }
+
+      // The status only: the address holds a secret token and is never logged.
+      console.warn(`[mcp][zendesk] attachment download HTTP ${status} (hop ${hop})`);
+
+      if (status === 429 && hop === 0) throw rateLimited(answer.retryAfter ?? 5, status);
+      if (hop > 0) {
+        throw new ZendeskError(
+          `The file's download link was refused or has expired (HTTP ${status}). Ask for the attachment again.`,
+          { status },
+        );
+      }
+      throw errorForStatus(status);
+    }
+    throw new ZendeskError("The file's download link redirected too many times, so it was not followed.");
+  }
   return {
     /**
      * A handle that spends `callerKey`'s share of the budget — the caller's Clerk id. The
@@ -557,6 +773,7 @@ export function createZendeskClient({
       }
       return Object.freeze({
         get: (target, params = {}, options = {}) => run(callerKey, target, params, options),
+        download: (contentUrl, options = {}) => runDownload(callerKey, contentUrl, options),
       });
     },
     /** The configured Zendesk host (`<subdomain>.zendesk.com`). Throws if unconfigured. */

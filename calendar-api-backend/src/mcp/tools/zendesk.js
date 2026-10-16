@@ -2,6 +2,8 @@ import { registerZendeskTool } from "../lib/registerZendeskTool.js";
 import { zendesk } from "../lib/zendeskClient.js";
 import { textResult } from "../lib/format.js";
 import { registerZendeskTicketTools } from "./zendeskTickets.js";
+import { registerZendeskTicketDetailTools } from "./zendeskTicketDetail.js";
+import { registerZendeskPeopleTools } from "./zendeskPeople.js";
 
 /**
  * The Zendesk half of this server: read-only, and every tool here is registered through
@@ -74,6 +76,8 @@ export function registerZendeskTools(server, caller) {
   });
 
   registerZendeskTicketTools(server, caller);
+  registerZendeskTicketDetailTools(server, caller);
+  registerZendeskPeopleTools(server, caller);
 }
 
 export default { registerZendeskTools };

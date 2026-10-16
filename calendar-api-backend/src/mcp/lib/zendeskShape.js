@@ -66,43 +66,51 @@ function attributeSafe(label) {
 }
 
 /**
- * Characters JSON leaves raw that a reader may still treat as a line break or hide in: NEL,
- * the Unicode line and paragraph separators, the bidirectional marks, embeddings and
- * isolates, zero-width and invisible characters, the soft hyphen and the byte-order mark.
- * `JSON.stringify` escapes only what JSON requires (controls below U+0020, quotes,
- * backslashes, lone surrogates), so a customer's subject could otherwise break onto "new
- * lines" in a renderer that splits on those, or have its tail disguised by a right-to-left
- * override.
+ * Characters that can change what a reader sees, or where a line seems to end, without changing
+ * what a model reads: every control character (C0 and C1, which includes the 8-bit CSI), every
+ * format character (zero-width characters and joiners, bidirectional marks, embeddings, overrides
+ * and isolates, the soft hyphen, the interlinear annotation marks, the Unicode Tag block that can
+ * hide ASCII), the line and paragraph separators, private-use characters, and everything Unicode
+ * lists as default-ignorable (variation selectors, the combining grapheme joiner, the Hangul
+ * fillers). `JSON.stringify` escapes only what JSON requires (controls below U+0020, quotes,
+ * backslashes, lone surrogates), so a customer's subject or file could otherwise carry a terminal
+ * escape sequence, break onto "new lines" in a renderer that splits on U+2028, hide an instruction
+ * in Tag characters, or have its tail disguised by a right-to-left override.
  *
- * Built from code points at load time, so this file holds no invisible characters and no
- * escape sequence a tool or an editor could mangle: a raw U+2028 inside a regex literal is a
- * syntax error.
+ * Built from Unicode property classes, not a hand-kept list of ranges, and from no escape
+ * sequence a tool or an editor could mangle: a raw U+2028 inside a regex literal is a syntax
+ * error.
  */
-const SLIPPERY_RANGES = [
-  [0x85, 0x85], // next line
-  [0xad, 0xad], // soft hyphen
-  [0x61c, 0x61c], // Arabic letter mark
-  [0x200b, 0x200f], // zero-width characters, left-to-right and right-to-left marks
-  [0x2028, 0x202e], // line and paragraph separators, bidirectional embeddings and overrides
-  [0x2060, 0x2069], // word joiner, invisible operators, bidirectional isolates
-  [0xfeff, 0xfeff], // byte-order mark
-];
-const RAW_BUT_SLIPPERY = new RegExp(
-  `[${SLIPPERY_RANGES.map(([from, to]) => String.fromCodePoint(from) + (from === to ? "" : `-${String.fromCodePoint(to)}`)).join("")}]`,
-  "g",
-);
+const SLIPPERY = new RegExp("[\\p{Cc}\\p{Cf}\\p{Co}\\p{Zl}\\p{Zp}\\p{Default_Ignorable_Code_Point}]", "gu");
 const BACKSLASH = String.fromCharCode(92);
+const hex4 = (n) => n.toString(16).padStart(4, "0");
+
+/** A character as backslash-u escapes (a surrogate pair for one beyond the basic plane). */
+function escapeChar(char) {
+  const code = char.codePointAt(0);
+  if (code <= 0xffff) return `${BACKSLASH}u${hex4(code)}`;
+  const offset = code - 0x10000;
+  return `${BACKSLASH}u${hex4(0xd800 + (offset >> 10))}${BACKSLASH}u${hex4(0xdc00 + (offset & 0x3ff))}`;
+}
 
 /**
- * One JSON object on one line, with those characters written as a backslash-u escape. The
- * result is still valid JSON and parses back to the same value; it just cannot be misread as
- * more than one line, and shows what it contains.
+ * One JSON object on one line, with those characters written as backslash-u escapes. The result
+ * is still valid JSON and parses back to the same value; it just cannot be misread as more than
+ * one line, cannot carry a terminal escape or hidden text, and shows what it contains.
  */
 export function jsonLine(value) {
-  return JSON.stringify(value).replace(
-    RAW_BUT_SLIPPERY,
-    (char) => `${BACKSLASH}u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
-  );
+  return JSON.stringify(value).replace(SLIPPERY, escapeChar);
+}
+
+/**
+ * Text for a person or a model to read — a file's contents — with the same characters made
+ * visible, except the two a text file legitimately has: newline and tab. Line endings are
+ * normalized to newline first, so a Windows log does not read as a sea of escapes.
+ */
+export function visibleText(text) {
+  return String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(SLIPPERY, (char) => (char === "\n" || char === "\t" ? char : escapeChar(char)));
 }
 
 const newNonce = () => crypto.randomBytes(8).toString("hex");
@@ -123,7 +131,7 @@ function fence(body, source, nonce) {
  * (64 random bits) and exists as an option only so a test can pin the output.
  */
 export function untrusted(text, { source, max = DEFAULT_FIELD_CHARS, nonce = newNonce() } = {}) {
-  return fence(truncateText(text, max), source, nonce);
+  return fence(visibleText(truncateText(text, max)), source, nonce);
 }
 
 /**
@@ -174,4 +182,4 @@ export function fitPage({ blocks, nextCursor = null, maxChars = DEFAULT_ANSWER_C
   };
 }
 
-export default { UNTRUSTED_TAG, UNTRUSTED_NOTICE, truncateText, untrusted, fencePayload, fitPage, jsonLine };
+export default { UNTRUSTED_TAG, UNTRUSTED_NOTICE, truncateText, untrusted, fencePayload, fitPage, jsonLine, visibleText };

@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildTicketQuery, ZendeskQueryError } from "./zendeskTicketQuery.js";
+import { NO_SLIPPERY, cp, generator, hostileString, sample, strictTokenize, tokenize } from "../testing/queryKit.js";
 
 // Synthetic values only — the repo is public. Every unusual character below is built from
 // its code point, so this file holds none of them raw.
 
-const cp = (...codes) => String.fromCodePoint(...codes);
 const q = (filters) => buildTicketQuery(filters).query;
 const refused = (filters, pattern) =>
   assert.throws(
@@ -13,51 +13,6 @@ const refused = (filters, pattern) =>
     (error) => error instanceof ZendeskQueryError && pattern.test(error.message),
     JSON.stringify(filters),
   );
-
-/** Split a query into top-level tokens, the way Zendesk reads it: spaces inside quotes do not split. */
-function tokenize(query) {
-  const tokens = [];
-  let current = "";
-  let quoted = false;
-  for (const char of query) {
-    if (char === '"') quoted = !quoted;
-    if (char === " " && !quoted) {
-      if (current) tokens.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  assert.equal(quoted, false, `unbalanced quotes in: ${query}`);
-  if (current) tokens.push(current);
-  return tokens;
-}
-
-/** Characters a stricter reader could take for a double quote. */
-const QUOTE_LOOKALIKES = new Set([0x201c, 0x201d, 0x201e, 0x201f, 0xff02, 0xab, 0xbb, 0x2033, 0x301d, 0x301e, 0x275d, 0x275e].map((code) => String.fromCodePoint(code)));
-
-/**
- * A harsher reading than `tokenize`: fold the text to NFKC, treat quote lookalikes as quotes,
- * and break on any Unicode whitespace or separator outside quotes. We do not know how Zendesk
- * tokenizes Unicode, so the guarantee must hold under the strictest plausible reading.
- */
-function strictTokenize(query) {
-  const tokens = [];
-  let current = "";
-  let quoted = false;
-  for (let char of query.normalize("NFKC")) {
-    if (QUOTE_LOOKALIKES.has(char)) char = '"';
-    if (char === '"') quoted = !quoted;
-    if (!quoted && (/\s/u.test(char) || char === cp(0x85) || /\p{Z}/u.test(char) || /\p{Cc}/u.test(char))) {
-      if (current) tokens.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  if (current) tokens.push(current);
-  return { tokens, balanced: !quoted };
-}
 
 /* ------------------------------ the shape of a query ------------------------------ */
 
@@ -175,6 +130,55 @@ test("a character Unicode folds into another is refused, so it cannot become an 
   assert.equal(q({ organization: "Caf" + cp(0xe9) + " Noir" }), 'organization:"Caf' + cp(0xe9) + ' Noir"');
 });
 
+test("a value with no letter or digit is refused: it would match nothing, and says so", () => {
+  const nothing = [".", "...", "---", "@", "( )", "/", "&", ",", "+", "'", "_", ". . ."];
+  for (const bad of nothing) {
+    for (const field of ["assignee", "requester", "organization", "group", "brand", "form"]) {
+      refused({ [field]: bad }, new RegExp(`${field} must contain at least one letter or digit`));
+    }
+    refused({ custom_field_id: 5, custom_field_value: bad }, /custom_field_value must contain at least one letter or digit/);
+    refused({ include_tags: [bad] }, /include_tags entries may only use/);
+  }
+  assert.equal(q({ assignee: "a.b" }), "assignee:a.b");
+  assert.equal(q({ assignee: "+15551234567" }), "assignee:+15551234567");
+});
+
+test("an invisible character is refused anywhere in a value or tag, even beside real text", () => {
+  // Combining grapheme joiner, Hangul fillers, variation selectors, joiners, word joiner, a Tag
+  // letter, the soft hyphen: none changes what a reader sees, so none may ride along.
+  const invisible = [0x34f, 0x115f, 0x1160, 0x180b, 0x200b, 0x200c, 0x200d, 0x2060, 0x3164, 0xfe0f, 0xffa0, 0xe0041, 0xe0100, 0xad];
+  const refusal = /^(organization|include_tags) (may only contain|must contain|must be plain text|entries may only use)/;
+  for (const code of invisible) {
+    const hidden = cp(code);
+    for (const text of [hidden, `Acme${hidden}`, `${hidden}Acme`, `Ac${hidden}me Ltd`]) {
+      assert.throws(
+        () => buildTicketQuery({ organization: text }),
+        (error) => error instanceof ZendeskQueryError && refusal.test(error.message),
+        `organization U+${code.toString(16)} in ${JSON.stringify(text)}`,
+      );
+    }
+    assert.throws(
+      () => buildTicketQuery({ include_tags: [`vip${hidden}`] }),
+      (error) => error instanceof ZendeskQueryError && refusal.test(error.message),
+      `tag U+${code.toString(16)}`,
+    );
+  }
+  // In free text they only separate words, and a text made of nothing else has nothing to search for.
+  assert.equal(q({ text: `re${cp(0x200b)}fund` }), '"re" "fund"');
+  assert.equal(q({ text: `re${cp(0xe0041)}fund` }), '"re" "fund"');
+  refused({ text: cp(0x200b, 0x3164, 0x34f) }, /text has no searchable words/);
+});
+
+test("a combining mark cannot start a word, where it could fuse to the quote or space before it", () => {
+  const mark = cp(0x301);
+  refused({ organization: `${mark}Acme` }, /organization cannot start a word with a combining mark/);
+  refused({ organization: `Acme ${mark}Ltd` }, /organization cannot start a word with a combining mark/);
+  refused({ assignee: `${mark}${mark}x` }, /assignee cannot start a word with a combining mark/);
+  // Inside a word, after a letter no letter-plus-mark composes into, a mark is part of the word.
+  assert.equal(q({ organization: `x${mark}y Ltd` }), `organization:"x${mark}y Ltd"`);
+  // Free text keeps only letters and digits, so a mark never reaches the quoted word.
+  assert.equal(q({ text: `${mark}refund` }), '"refund"');
+  assert.equal(q({ text: `x${mark}y` }), '"x" "y"');});
 test("'me' is refused: it would mean the shared Zendesk user, not the person asking", () => {
   refused({ assignee: "me" }, /would mean the shared Zendesk user/);
   refused({ requester: " ME " }, /would mean the shared Zendesk user/);
@@ -211,6 +215,9 @@ test("free text is searched for as words; operators and lookalikes typed into it
 
   refused({ text: "   " }, /text has no searchable words/);
   refused({ text: '"\\' }, /text has no searchable words/);
+  // Punctuation that survives as a "word" has nothing to match, so it is dropped like the rest.
+  refused({ text: "... --- ' _ @ +" }, /text has no searchable words/);
+  assert.equal(q({ text: "refund ... now --- ok" }), '"refund" "now" "ok"');
   refused({ text: Array.from({ length: 21 }, (_, i) => `w${i}`).join(" ") }, /too many words/);
   assert.equal(tokenize(q({ text: Array.from({ length: 20 }, (_, i) => `w${i}`).join(" ") })).length, 20);
 });
@@ -360,35 +367,6 @@ test("a query too long for Zendesk is refused", () => {
 
 /* ------------------------------ a value can add nothing: property tests ------------------------------ */
 
-/** A small deterministic generator, so a failure can be reproduced. */
-function generator(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 2 ** 32;
-  };
-}
-
-const HOSTILE = [
-  ...'"\\ :-*<>=()[]{}|&;,#%+@._\n\r\t\'',
-  ..."abcXYZ0189",
-  " status:solved", " OR ", " -tags:", " type:user", ' " ', "organization:", "custom_field_1:", "created>2000-01-01", " has_attachment:true ",
-  // Lookalikes and separators a stricter reader might fold or break on.
-  cp(0), cp(0x1f), cp(0x7f), cp(0x85), cp(0xa0), cp(0xad), cp(0x2028), cp(0x2029), cp(0x3000), cp(0x2003),
-  cp(0x201c), cp(0x201d), cp(0x201e), cp(0xff02), cp(0xab), cp(0xbb), cp(0x2033), cp(0x301d),
-  cp(0xff1a), cp(0xff0d), cp(0x2010), cp(0x2011), cp(0x2212), cp(0xfe63), cp(0xff0a),
-  cp(0x200b), cp(0x200d), cp(0x202e), cp(0x2066), cp(0xfeff), cp(0xfdfa), cp(0xfb01), cp(0x2460), cp(0xff21),
-  cp(0xe9), cp(0x3b1), cp(0x4e2d), cp(0x1f600),
-];
-
-function hostileString(random) {
-  const length = 1 + Math.floor(random() * 25);
-  return Array.from({ length }, () => HOSTILE[Math.floor(random() * HOSTILE.length)]).join("");
-}
-
-/** What an accepted query may contain: no control or separator character other than a plain space. */
-const NO_SLIPPERY = /[\p{C}\p{Zl}\p{Zp}]|[^\S ]|\p{Zs}(?<! )/u;
-
 function assertOneCondition(query, shape, label) {
   const loose = tokenize(query);
   assert.equal(loose.length, 1, `${label} became ${query}`);
@@ -415,7 +393,7 @@ test("whatever a value contains, it yields exactly one condition of the expected
   let rejected = 0;
   for (const [field, build, shape] of oneCondition) {
     for (let i = 0; i < 4000; i += 1) {
-      const hostile = hostileString(random);
+      const hostile = sample(random, i);
       let query;
       try {
         query = q(build(hostile));
@@ -458,7 +436,7 @@ test("whatever a tag contains, it yields only tags: conditions — or is refused
   const random = generator(99);
   let accepted = 0;
   for (let i = 0; i < 4000; i += 1) {
-    const hostile = hostileString(random);
+    const hostile = sample(random, i);
     for (const filters of [
       { status: ["open"], include_tags: [hostile] },
       { status: ["open"], exclude_tags: [hostile] },

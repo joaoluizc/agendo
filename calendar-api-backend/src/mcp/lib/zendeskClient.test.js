@@ -71,7 +71,8 @@ test("every request is a GET, never follows redirects, and authenticates as the 
 test("the client has no write surface, and parameters cannot change the method", async () => {
   const { client, zd, calls } = harness({ responses: [ok()] });
   assert.deepEqual(Object.keys(client).sort(), ["forCaller", "host", "lastRateLimit"]);
-  assert.deepEqual(Object.keys(zd), ["get"]);
+  // Reading JSON and downloading a file: both are GETs, and nothing here can send anything else.
+  assert.deepEqual(Object.keys(zd), ["get", "download"]);
 
   // `method` in the parameters is just another query parameter.
   await zd.get("/api/v2/tickets/1.json", { method: "DELETE" });
@@ -577,6 +578,407 @@ test("the latest rate-limit headers are remembered, in either header family", as
   assert.equal(client.lastRateLimit().remaining, 650, "a response with no headers keeps the last reading");
 });
 
+/* ------------------------------ downloading a file ------------------------------ */
+
+const FILE_URL = `${BASE}/attachments/token/abc123SECRETtoken/?name=screenshot.png`;
+const bytes = (n, fill = 7) => new Uint8Array(n).fill(fill);
+const file = (body = bytes(10), type = "image/png") => new Response(body, { status: 200, headers: { "content-type": type } });
+const redirect = (location, code = 302) => new Response(null, { status: code, headers: { location } });
+const streamed = (...chunks) =>
+  new Response(
+    new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    }),
+    { status: 200, headers: { "content-type": "image/png" } },
+  );
+const headersOf = (call) => Object.fromEntries(Object.entries(call.init.headers).map(([key, value]) => [key.toLowerCase(), value]));
+
+test("a file is fetched from the Zendesk host with its credentials, as a GET, and comes back as bytes", async () => {
+  const { zd, calls } = harness({ responses: [file(bytes(10), "Image/PNG; charset=binary")] });
+  const result = await zd.download(FILE_URL);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, FILE_URL);
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[0].init.redirect, "manual");
+  assert.match(headersOf(calls[0]).authorization, /^Basic /);
+  assert.equal(result.bytes.length, 10);
+  assert.equal(result.contentType, "image/png", "the type is cleaned");
+  assert.equal((await harness({ responses: [file(bytes(1), "not a type")] }).zd.download(FILE_URL)).contentType, null);
+  assert.equal((await harness({ responses: [file(bytes(1), `image/${"p".repeat(200)}`)] }).zd.download(FILE_URL)).contentType, null, "a type of absurd length is not one");
+});
+
+test("a redirect is followed without credentials, and only the first request carries them", async () => {
+  for (const next of ["https://files.example-cdn.test/blob/abc?sig=xyz", "/attachments/token/other/", `${BASE}/attachments/token/again/`]) {
+    const { zd, calls } = harness({ responses: [redirect(next), file(bytes(5))] });
+    const result = await zd.download(FILE_URL);
+    assert.equal(result.bytes.length, 5);
+    assert.equal(calls.length, 2, next);
+    assert.match(headersOf(calls[0]).authorization, /^Basic /);
+    assert.equal(headersOf(calls[1]).authorization, undefined, `no credentials on the second request (${next})`);
+    assert.equal(calls[1].init.method, "GET");
+    assert.equal(calls[1].init.redirect, "manual");
+  }
+});
+
+test("a redirect to anywhere but a real https name is refused, and nothing is requested there", async () => {
+  const refusedTargets = [
+    "http://files.example-cdn.test/x",
+    "https://127.0.0.1/x",
+    "https://10.0.0.5/x",
+    "https://169.254.169.254/latest/meta-data/",
+    "https://2130706433/x",
+    "https://0x7f.1/x",
+    "https://localhost/x",
+    "https://intranet/x",
+    "https://metadata.internal/x",
+    "https://printer.local/x",
+    "https://localhost./x",
+    "https://evil.localhost./x",
+    "https://metadata.internal./x",
+    "https://127.0.0.1./x",
+    "https://nas.lan/x",
+    "https://box.corp/x",
+    "https://host.home.arpa/x",
+    "https://1.0.0.127.in-addr.arpa/x",
+    "https://db.localdomain/x",
+    "https://svc.private/x",    "https://[::1]/x",
+    "https://user:secret@files.example-cdn.test/x",
+    "https://files.example-cdn.test:8443/x",
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "data:text/plain,hello",
+    "",
+  ];
+  for (const target of refusedTargets) {
+    const { zd, calls } = harness({ responses: [redirect(target), file()] });
+    await assert.rejects(zd.download(FILE_URL), (error) => error instanceof ZendeskError && /redirected/.test(error.message), target);
+    assert.equal(calls.length, 1, `${target}: nothing was requested after the refusal`);
+  }
+  // A protocol-relative address is https to a real name, so it is allowed — still with no credentials.
+  const { zd, calls } = harness({ responses: [redirect("//files.example-cdn.test/x"), file()] });
+  await zd.download(FILE_URL);
+  assert.equal(calls[1].url, "https://files.example-cdn.test/x");
+  assert.equal(headersOf(calls[1]).authorization, undefined);
+});
+
+test("redirects stop after a few hops", async () => {
+  const hop = (n) => redirect(`https://files.example-cdn.test/hop${n}`);
+  const { zd, calls } = harness({ responses: [hop(1), hop(2), hop(3), hop(4), file()] });
+  await assert.rejects(zd.download(FILE_URL), /redirected too many times/);
+  assert.equal(calls.length, 4, "the first request and three redirects, no more");
+});
+
+test("only a file on the configured Zendesk host, under /attachments/, is ever the starting point", async () => {
+  const refusedAddresses = [
+    "https://evil.example.test/attachments/token/x/",
+    "http://example-test.zendesk.com/attachments/token/x/",
+    "https://example-test.zendesk.com:8443/attachments/token/x/",
+    "https://user:pw@example-test.zendesk.com/attachments/token/x/",
+    "https://example-test.zendesk.com.evil.example.test/attachments/token/x/",
+    "https://example-test.zendesk.com/api/v2/users.json",
+    "https://example-test.zendesk.com/",
+    "https://example-test.zendesk.com/attachments/../api/v2/users.json",
+    "https://example-test.zendesk.com/attachments/%2e%2e/api/v2/users.json",
+    "https://example-test.zendesk.com/attachments/..%2fapi/x",
+    "https://example-test.zendesk.com/attachments//x",
+    "//example-test.zendesk.com/attachments/token/x/",
+    "/attachments/token/x/",
+    "javascript:alert(1)",
+    "",
+    undefined,
+    null,
+    123,
+  ];
+  for (const address of refusedAddresses) {
+    const { zd, calls } = harness({ responses: [file()] });
+    await assert.rejects(
+      zd.download(address),
+      (error) => error instanceof ZendeskError && /not a file on this agendo server's Zendesk account/.test(error.message),
+      String(address),
+    );
+    assert.equal(calls.length, 0, `${String(address)} sent nothing`);
+  }
+  // The URL parser reads a backslash as a slash, so this is a plain path under /attachments/,
+  // and what is requested is that normalized path, not anything the backslash could smuggle.
+  const { zd, calls } = harness({ responses: [file()] });
+  await zd.download("https://example-test.zendesk.com/attachments/a\\b");
+  assert.equal(calls[0].url, "https://example-test.zendesk.com/attachments/a/b");
+  // And a backslash cannot climb out: the dot segments are resolved before the path is checked.
+  await assert.rejects(
+    harness({ responses: [file()] }).zd.download("https://example-test.zendesk.com/attachments\\..\\api\\v2\\users.json"),
+    /not a file on this agendo server's Zendesk account/,
+  );
+});
+
+test("a redirect with no destination, or an empty one, is refused rather than followed to where it already is", async () => {
+  for (const response of [new Response(null, { status: 302 }), redirect(""), redirect("   ")]) {
+    const { zd, calls } = harness({ responses: [response, file()] });
+    await assert.rejects(zd.download(FILE_URL), /redirected somewhere that is not an address/);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("a file over the byte cap is refused, whether its size is declared or only discovered", async () => {
+  const declared = new Response(bytes(10), { status: 200, headers: { "content-length": "5000", "content-type": "image/png" } });
+  const { zd: declaredZd } = harness({ responses: [declared] });
+  await assert.rejects(declaredZd.download(FILE_URL, { maxBytes: 1000 }), /larger than the \d+ MB this connection will download/);
+
+  const { zd: streamedZd } = harness({ responses: [streamed(bytes(600), bytes(600))] });
+  await assert.rejects(streamedZd.download(FILE_URL, { maxBytes: 1000 }), /larger than the/);
+
+  // Exactly at the cap is fine.
+  const { zd: exactZd } = harness({ responses: [streamed(bytes(500), bytes(500))] });
+  assert.equal((await exactZd.download(FILE_URL, { maxBytes: 1000 })).bytes.length, 1000);
+
+  // A caller cannot ask for more than the client's own ceiling.
+  const { zd: ceilingZd } = harness({ responses: [streamed(bytes(150), bytes(150))], limits: { maxDownloadBytes: 200 } });
+  await assert.rejects(ceilingZd.download(FILE_URL, { maxBytes: 10_000_000 }), /larger than the/);
+});
+
+test("a response with no stream to read is still held to the byte cap", async () => {
+  const unstreamed = (size) => ({
+    status: 200,
+    headers: new Headers({ "content-type": "image/png" }),
+    body: null,
+    arrayBuffer: async () => new Uint8Array(size).fill(7).buffer,
+  });
+  await assert.rejects(harness({ responses: [unstreamed(600)] }).zd.download(FILE_URL, { maxBytes: 500 }), /larger than the/);
+  assert.equal((await harness({ responses: [unstreamed(400)] }).zd.download(FILE_URL, { maxBytes: 500 })).bytes.length, 400);
+});
+test("a failed download says whose problem it is, is not retried, and never logs the address", async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    for (const [code, pattern] of [
+      [401, /rejected the credentials/],
+      [403, /shared user's Zendesk role/],
+      [404, /no such item/],
+    ]) {
+      const { zd, calls } = harness({ responses: [new Response("denied", { status: code }), file()] });
+      await assert.rejects(zd.download(FILE_URL), pattern, `first request ${code}`);
+      assert.equal(calls.length, 1, "no retry");
+    }
+    // A refusal after a redirect is the link, not the shared user's role.
+    const { zd } = harness({ responses: [redirect("https://files.example-cdn.test/x"), new Response("", { status: 403 })] });
+    await assert.rejects(zd.download(FILE_URL), /download link was refused or has expired \(HTTP 403\)/);
+    // 5xx and 429 are plain failures too, not retried.
+    const { zd: busy, calls } = harness({ responses: [new Response("", { status: 503 }), file()] });
+    await assert.rejects(busy.download(FILE_URL), /unexpected response \(HTTP 503\)/);
+    assert.equal(calls.length, 1);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(warnings.length > 0, "the failures were logged");
+  for (const line of warnings) assert.doesNotMatch(line, /abc123SECRETtoken|attachments|files\.example-cdn/, line);
+});
+
+test("each request of a download spends the caller's budget, and a cancelled download sends nothing", async () => {
+  const { zd } = harness({
+    responses: [redirect("https://files.example-cdn.test/x"), file(), ok()],
+    limits: { maxRequestsPerCallerPerMinute: 2 },
+  });
+  await zd.download(FILE_URL); // two requests: the file's address and the redirect
+  const error = await zd.get("/api/v2/tickets.json").catch((e) => e);
+  assert.match(error.message, /your share of the Zendesk requests/);
+
+  const { zd: cancelledZd, calls } = harness({ responses: [file()] });
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(cancelledZd.download(FILE_URL, { signal: controller.signal }), /cancelled/);
+  assert.equal(calls.length, 0);
+});
+
+test("a body that fails halfway, and an unconfigured server, are reported plainly", async () => {
+  const broken = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes(10));
+        controller.error(new Error("socket reset secret-detail"));
+      },
+    }),
+    { status: 200, headers: { "content-type": "image/png" } },
+  );
+  const error = await harness({ responses: [broken] }).zd.download(FILE_URL).catch((e) => e);
+  assert.equal(error.message, "Could not reach Zendesk.");
+
+  const { zd, calls } = harness({ env: {}, responses: [file()] });
+  await assert.rejects(zd.download(FILE_URL), /missing ZD_SUBDOMAIN/);
+  assert.equal(calls.length, 0);
+});
+
+/** A response whose body records whether anyone let go of it, and is never closed on its own. */
+function watched(init, ...chunks) {
+  const state = { cancelled: false };
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    }),
+    init,
+  );
+  return { response, state };
+}
+
+test("every redirect status is followed, and a redirect is not logged as if it were a problem", async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    for (const code of [301, 302, 303, 307, 308]) {
+      const { zd, calls } = harness({ responses: [redirect("https://files.example-cdn.test/x", code), file(bytes(3))] });
+      assert.equal((await zd.download(FILE_URL)).bytes.length, 3, `HTTP ${code}`);
+      assert.equal(calls.length, 2, `HTTP ${code}`);
+    }
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, [], "following a redirect is how a file is served, not something to log");
+});
+
+test("a rate-limited download says so and for how long; after a redirect it is the link's problem, not Zendesk's", async () => {
+  const limited = harness({ responses: [new Response("", { status: 429, headers: { "retry-after": "7" } }), file()] });
+  const error = await limited.zd.download(FILE_URL).catch((e) => e);
+  assert.match(error.message, /rate-limiting requests \(HTTP 429\)\. Try again in about 7 seconds/);
+  assert.equal(error.retryAfterSeconds, 7);
+  assert.equal(limited.calls.length, 1, "not retried");
+
+  const bare = await harness({ responses: [new Response("", { status: 429 })] }).zd.download(FILE_URL).catch((e) => e);
+  assert.equal(bare.retryAfterSeconds, 5, "the default wait when Zendesk gives none");
+
+  const later = harness({ responses: [redirect("https://files.example-cdn.test/x"), new Response("", { status: 429 })] });
+  await assert.rejects(later.zd.download(FILE_URL), /download link was refused or has expired \(HTTP 429\)/);
+});
+
+test("a body nobody will read is let go, so its connection is not held open", async () => {
+  // Declared too big, found too big while streaming, a redirect's body, an error's body.
+  const declared = watched({ status: 200, headers: { "content-length": "5000", "content-type": "image/png" } }, bytes(10));
+  await assert.rejects(harness({ responses: [declared.response] }).zd.download(FILE_URL, { maxBytes: 1000 }), /larger than the/);
+  assert.equal(declared.state.cancelled, true, "declared too big");
+
+  const growing = watched({ status: 200, headers: { "content-type": "image/png" } }, bytes(600), bytes(600));
+  await assert.rejects(harness({ responses: [growing.response] }).zd.download(FILE_URL, { maxBytes: 1000 }), /larger than the/);
+  assert.equal(growing.state.cancelled, true, "found too big while reading");
+
+  const hop = watched({ status: 302, headers: { location: "https://files.example-cdn.test/x" } }, bytes(5));
+  await harness({ responses: [hop.response, file()] }).zd.download(FILE_URL);
+  assert.equal(hop.state.cancelled, true, "a redirect's body");
+
+  const denied = watched({ status: 403 }, bytes(5));
+  await assert.rejects(harness({ responses: [denied.response] }).zd.download(FILE_URL), /HTTP 403/);
+  assert.equal(denied.state.cancelled, true, "an error's body");
+
+  // And the JSON path: an answer declared bigger than it will read is dropped without reading it.
+  const json = watched({ status: 200, headers: { "content-length": "500", "content-type": "application/json" } }, bytes(5));
+  await assert.rejects(harness({ responses: [json.response], limits: { maxBodyChars: 100 } }).zd.get("/api/v2/tickets.json"), /too large/);
+  assert.equal(json.state.cancelled, true, "a JSON answer declared too large");
+});
+
+test("a download that hangs is cut off at the deadline and not retried; one cancelled in flight stops", { timeout: 5000 }, async () => {
+  let started = 0;
+  const client = createZendeskClient({
+    env: () => ENV,
+    fetchImpl: (_url, init) =>
+      new Promise((_resolve, reject) => {
+        started += 1;
+        init.signal.addEventListener("abort", () => reject(init.signal.reason));
+      }),
+    limits: { requestTimeoutMs: 4000, overallDeadlineMs: 60 },
+  });
+  const zd = client.forCaller("user_a");
+  const keepAlive = setTimeout(() => {}, 3000); // the timeout timer is unref'd and a stub holds no socket
+  try {
+    const began = Date.now();
+    await assert.rejects(zd.download(FILE_URL), /did not answer in time/);
+    assert.ok(Date.now() - began < 1500, "gave up at the deadline, not after the 4 s request timeout");
+    assert.equal(started, 1, "a download is not retried");
+
+    const controller = new AbortController();
+    const pending = zd.download(FILE_URL, { signal: controller.signal });
+    setTimeout(() => controller.abort(), 10);
+    await assert.rejects(pending, /cancelled/);
+    assert.equal(started, 2);
+  } finally {
+    clearTimeout(keepAlive);
+  }
+});
+
+test("a call whose deadline has already passed sends nothing and costs nothing", async () => {
+  const { zd, calls } = harness({ responses: [ok(), file(), ok()], limits: { maxRequestsPerCallerPerMinute: 1 } });
+  const expired = { deadlineAt: 1_000_000 - 1 };
+  await assert.rejects(zd.get("/api/v2/tickets.json", {}, expired), /took too long/);
+  await assert.rejects(zd.download(FILE_URL, expired), /took too long/);
+  assert.equal(calls.length, 0);
+  await zd.get("/api/v2/tickets.json"); // their one request this minute is still theirs
+  assert.equal(calls.length, 1);
+});
+
+test("a queued call that runs out of time gives back its place and its budget", { timeout: 5000 }, async () => {
+  const { client, release } = gatedClient({
+    maxConcurrent: 1,
+    maxQueued: 20,
+    maxPendingPerCaller: 2,
+    maxRequestsPerCallerPerMinute: 2,
+    overallDeadlineMs: 40,
+  });
+  const zd = client.forCaller("user_a");
+  const first = zd.get("/api/v2/a.json"); // holds the connection
+  await assert.rejects(zd.get("/api/v2/b.json"), /took too long/); // queued, and out of time there
+  // Had its place leaked, this would be refused as "several requests in progress"; had its budget
+  // leaked, as "your share". It is queued instead, and runs out of time the same way.
+  await assert.rejects(zd.get("/api/v2/c.json"), /took too long/);
+  release();
+  await first;
+  await zd.get("/api/v2/d.json"); // first + this one are their two
+});
+test("a call cancelled while it is running frees its place once, not twice", { timeout: 5000 }, async () => {
+  const release = [];
+  const client = createZendeskClient({
+    env: () => ENV,
+    fetchImpl: (_url, init) =>
+      new Promise((resolve, reject) => {
+        release.push(() => resolve(ok()));
+        init.signal.addEventListener("abort", () => reject(init.signal.reason));
+      }),
+    limits: { maxConcurrent: 1, maxQueued: 20, maxPendingPerCaller: 2, maxRequestsPerMinute: 1000, maxRequestsPerCallerPerMinute: 1000 },
+  });
+  const zd = client.forCaller("user_a");
+  const running = new AbortController();
+  const rest = new AbortController(); // whatever is still waiting when the test ends
+  const quiet = (promise) => promise.catch(() => {});
+  try {
+    const first = zd.get("/api/v2/a.json", {}, { signal: rest.signal }); // holds the connection
+    const second = zd.get("/api/v2/b.json", {}, { signal: running.signal }); // queued, then handed the connection
+    await settle();
+    release[0]();
+    await first;
+    await settle();
+    assert.equal(release.length, 2, "the second is now running");
+
+    quiet(zd.get("/api/v2/c.json", {}, { signal: rest.signal })); // queued behind it: their second place
+    await settle();
+    running.abort();
+    await assert.rejects(second, /cancelled/);
+    await settle();
+
+    // They now hold one place (the third). Had cancelling the running call freed its place a
+    // second time, they would seem to hold none and be let in past their share.
+    quiet(zd.get("/api/v2/d.json", {}, { signal: rest.signal })); // their second place again, rightly
+    await settle();
+    const fifth = zd.get("/api/v2/e.json", {}, { signal: rest.signal });
+    const outcome = await Promise.race([fifth.then(() => "was let in", (error) => error.message), settle().then(() => "was let in")]);
+    assert.match(outcome, /already have several Zendesk requests/);
+  } finally {
+    rest.abort();
+  }
+});
 /* ------------------------------ nothing else gets a client ------------------------------ */
 
 test("only the Zendesk tools import the client, and nothing outside the MCP module reaches for it", () => {
@@ -596,7 +998,12 @@ test("only the Zendesk tools import the client, and nothing outside the MCP modu
     .filter(({ rel, text }) => rel.startsWith("mcp/") && /zendeskClient/.test(text))
     .map(({ rel }) => rel)
     .sort();
-  assert.deepEqual(mentions, ["mcp/tools/zendesk.js", "mcp/tools/zendeskTickets.js"]);
+  assert.deepEqual(mentions, [
+    "mcp/tools/zendesk.js",
+    "mcp/tools/zendeskPeople.js",
+    "mcp/tools/zendeskTicketDetail.js",
+    "mcp/tools/zendeskTickets.js",
+  ]);
 
   // Outside mcp/: nothing imports it at all. (The Jira-backlog feature has its own,
   // unrelated client of the same file name.)
