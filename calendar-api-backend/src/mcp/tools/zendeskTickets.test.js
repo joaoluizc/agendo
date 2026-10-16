@@ -526,6 +526,17 @@ test("a cursor Zendesk sends that is not shaped like one is not offered", async 
 
 /* ------------------------------ sizes and ids ------------------------------ */
 
+test("a ticket's custom fields are bounded in characters as well as in number, and say what was left out", async () => {
+  const fields = Array.from({ length: 10 }, (_, i) => ({ id: 100 + i, value: Array.from({ length: 10 }, (_, j) => `${"v".repeat(95)}${j}`) }));
+  await withZendesk(() => json(exportPage([ticket(1, { custom_fields: fields })])), async () => {
+    const { text } = await search({ status: ["open"], include_fields: ["custom_fields"] });
+    const [record] = parseFence(text).sections.tickets;
+    const kept = record.custom_fields.length;
+    assert.ok(kept >= 1 && kept < 10, `kept ${kept} of 10`);
+    assert.equal(record.custom_fields_more, 10 - kept);
+    assert.ok(JSON.stringify(record.custom_fields).length < 3_500, "about three thousand characters at most");
+  });
+});
 test("every field Zendesk sends is cut to a size, so one ticket cannot swell the answer", async () => {
   const long = (n, ch) => ch.repeat(n);
   const customFields = Array.from({ length: 40 }, (_, i) => ({ id: 100 + i, value: `v${i}` }));
@@ -561,13 +572,16 @@ test("every field Zendesk sends is cut to a size, so one ticket cannot swell the
 
       assert.equal(record.subject, `${long(300, "s")}… [700 more characters not shown]`);
       assert.equal(record.tags.length, 20);
+      assert.equal(record.tags_more, 10, "what was cut is counted, not silently dropped");
       assert.ok(record.tags.every((tag) => clippedAt(tag, 100)));
 
       assert.equal(record.custom_fields.length, 25);
+      assert.equal(record.custom_fields_more, 14, "39 usable fields, 25 shown");
       assert.ok(clippedAt(record.custom_fields[0].value, 100), "a long custom value is cut");
       assert.equal(record.custom_fields[1].value, 42, "a number is kept");
       assert.equal(record.custom_fields[2].value, true, "a boolean is kept");
-      assert.equal(record.custom_fields[3].value.length, 10, "a list is cut to ten");
+      assert.equal(record.custom_fields[3].value.length, 11, "a list is cut to ten, and says how many more");
+      assert.equal(record.custom_fields[3].value[10], `… and 5 more`);
       assert.equal(record.custom_fields.some((field) => field.id === 104), false, "an object is dropped, not stringified");
 
       assert.ok(clippedAt(sections.users[0].name, 200));
@@ -758,6 +772,125 @@ test("a lookup that fails for a reason that is not Zendesk's is an error, not a 
     forCaller.mock.restore();
     host.mock.restore();
   }
+});
+
+/* ------------------------------ counting ------------------------------ */
+
+async function countTickets(args) {
+  const client = await connect();
+  try {
+    const result = await client.callTool({ name: "zendesk_count_tickets", arguments: args });
+    return { result, text: result.content[0].text };
+  } finally {
+    await client.close();
+  }
+}
+
+test("a count takes the very same filters as a search, puts the type in the query, and is one GET", async () => {
+  await withZendesk(() => json({ count: 7 }), async (calls) => {
+    const { result, text } = await countTickets({ status: ["open"], assignee: "Jane Doe", start_date: "2026-10-01", end_date: "2026-10-06" });
+    assert.equal(result.isError, undefined, text);
+    assert.equal(calls.length, 1);
+    const { url, init } = calls[0];
+    assert.equal(init.method, "GET");
+    assert.equal(url.pathname, "/api/v2/search/count.json");
+    assert.equal(
+      url.searchParams.get("query"),
+      'type:ticket status:open assignee:"Jane Doe" created>=2026-10-01T00:00:00Z created<2026-10-07T00:00:00Z',
+    );
+    assert.equal(url.searchParams.has("filter[type]"), false, "the count endpoint takes the type in the query");
+    assert.match(text, /Tickets matching: 7/);
+    assert.match(text, /Query sent to Zendesk: type:ticket status:open/);
+    assert.match(text, /search index, which can lag a few minutes/);
+    assert.match(text, /Names match loosely in Zendesk/);
+  });
+});
+
+test("Zendesk's count may arrive as a number or as an object with a value and a refresh time", async () => {
+  for (const [body, expected] of [[{ count: 0 }, 0], [{ count: 12345 }, 12345], [{ count: { value: 42, refreshed_at: "2026-10-16T10:00:00Z" } }, 42], [{ count: { value: 3 } }, 3]]) {
+    await withZendesk(() => json(body), async () => {
+      const { result, text } = await countTickets({ status: ["open"] });
+      assert.equal(result.isError, undefined, JSON.stringify(body));
+      assert.match(text, new RegExp(`Tickets matching: ${expected}\\n`));
+    });
+  }
+  await withZendesk(() => json({ count: { value: 42, refreshed_at: "2026-10-16T10:00:00Z" } }), async () => {
+    assert.match((await countTickets({ status: ["open"] })).text, /refreshed at 2026-10-16T10:00:00\.000Z/);
+  });
+  await withZendesk(() => json({ count: 3 }), async () => {
+    assert.doesNotMatch((await countTickets({ status: ["open"] })).text, /refreshed at/, "no refresh time, none claimed");
+    assert.doesNotMatch((await countTickets({ status: ["open"] })).text, /Names match loosely/, "no name filter, no such note");
+  });
+});
+
+test("a count Zendesk answers in a shape it should not is an error, never a guess", async () => {
+  for (const body of [{}, { count: "7" }, { count: -1 }, { count: 1e21 }, { count: 1.5 }, { count: null }, { count: { value: "x" } }, { count: [] }, { results: 7 }]) {
+    await withZendesk(() => json(body), async () => {
+      const { result, text } = await countTickets({ status: ["open"] });
+      assert.equal(result.isError, true, JSON.stringify(body));
+      assert.match(text, /count in a shape this tool does not understand/);
+    });
+  }
+});
+
+test("a count refuses what a search refuses, before Zendesk is asked, and cannot set the type", async () => {
+  await withZendesk(() => assert.fail("must not call Zendesk"), async (calls) => {
+    const cases = [
+      [{ assignee: 'jane" status:solved' }, /assignee may only contain/],
+      [{ assignee: "me" }, /would mean the shared Zendesk user/],
+      [{ requester: `x${cp(0x201d)} status:solved ${cp(0x201c)}y` }, /requester may only contain/],
+      [{ exclude_tags: ["spam"] }, /exclusions alone/],
+      [{ include_tags: ["a"], require_tags: ["b"] }, /not both/],
+      [{ start_date: "2026-02-30" }, /start_date is not a real date and time/],
+      [{ form: "7000" }, /form takes the ticket form's name/],
+      [{}, /give at least one filter/],
+    ];
+    for (const [args, pattern] of cases) {
+      const { result, text } = await countTickets(args);
+      assert.equal(result.isError, true, JSON.stringify(args));
+      assert.match(text, pattern);
+    }
+    assert.equal(calls.length, 0);
+  });
+  await withZendesk(() => json({ count: 1 }), async (calls) => {
+    await countTickets({ text: "type:user status:solved" });
+    const query = calls[0].url.searchParams.get("query");
+    assert.equal(query, 'type:ticket "type" "user" "status" "solved"');
+    assert.equal((query.match(/type:/g) ?? []).length, 1, "the one type is ours");
+  });
+});
+
+test("a count has the search's filters and none of its paging or extra fields", async () => {
+  const client = await connect();
+  const { tools } = await client.listTools();
+  await client.close();
+  const search = Object.keys(tools.find((tool) => tool.name === "zendesk_search_tickets").inputSchema.properties);
+  const count = Object.keys(tools.find((tool) => tool.name === "zendesk_count_tickets").inputSchema.properties);
+  const extras = ["include_fields", "include", "page_size", "after_cursor"];
+  assert.deepEqual(count, search.filter((name) => !extras.includes(name)), "exactly the search's filters, in its order");
+  for (const name of extras) assert.equal(count.includes(name), false);
+});
+
+test("a count's log line keeps the enumerations and sizes only, and a Zendesk refusal is the shared user's limit", async () => {
+  await withZendesk(() => json({ count: 1 }), async () => {
+    const client = await connect();
+    const log = mock.method(console, "log", () => {});
+    try {
+      await client.callTool({ name: "zendesk_count_tickets", arguments: { status: ["open"], assignee: "jane@example.test", text: "secret complaint" } });
+    } finally {
+      log.mock.restore();
+    }
+    await client.close();
+    const line = log.mock.calls.map((c) => c.arguments.join(" ")).find((entry) => entry.includes("tool=zendesk_count_tickets"));
+    assert.match(line, /"status":\["open"\]/);
+    assert.doesNotMatch(line, /jane@example\.test|secret complaint/);
+    assert.match(line, /"assignee":"\[redacted: 17 chars\]"/);
+  });
+  await withZendesk(() => json({}, 403), async () => {
+    const { result, text } = await countTickets({ status: ["open"] });
+    assert.equal(result.isError, true);
+    assert.match(text, /shared user's Zendesk role/);
+  });
 });
 
 /* ------------------------------ logging ------------------------------ */

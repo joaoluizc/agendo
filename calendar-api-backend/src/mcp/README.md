@@ -25,8 +25,10 @@ per person by their agendo permissions (below). Clients connect through the `mcp
 bridge, identified by CIMD, with no credential on anyone's machine. Still open: publishing
 agendo in the claude.ai org connector directory, which would retire the bridge.
 
-**Zendesk: foundation, connection status and ticket search** (the rest of the ticket tools
-come next, see the Zendesk plan). Read-only, and not by a setting: see "Zendesk" below.
+**Zendesk: eight tools** — the connection status, ticket search and count, one ticket, its
+conversation and its attachments, and user and organization search. Metrics, satisfaction
+ratings and the lookup lists come next (see the Zendesk plan). Read-only, and not by a
+setting: see "Zendesk" below.
 
 ## Tools
 
@@ -49,6 +51,12 @@ come next, see the Zendesk plan). Read-only, and not by a setting: see "Zendesk"
 | --- | --- | --- |
 | `zendesk_connection_status` | `zendesk:view` | Which Zendesk account and user these tools read as, that user's role and ticket access, and the rate-limit headroom |
 | `zendesk_search_tickets` | `zendesk:view` | Find tickets by structured filters (status, assignee, requester, organization, tags, dates, custom field, text), minimal fields unless more are asked for, optionally with the people and organizations behind the ids, paged by cursor |
+| `zendesk_count_tickets` | `zendesk:view` | How many tickets match the same filters, as a number |
+| `zendesk_get_ticket` | `zendesk:view` | One ticket by number, with a useful default; optionally the people, the organization and, for a problem ticket, its incidents |
+| `zendesk_get_ticket_conversation` | `zendesk:view` | The comments: author and side, public or internal, channel, text, attachments listed by id; paged by cursor |
+| `zendesk_get_ticket_attachment` | `zendesk:view` | One attachment by id: an image as an image, a text file as fenced text; only what Zendesk's malware scan cleared, only from Zendesk, up to a size |
+| `zendesk_search_users` | `zendesk:view` | Users by structured filters (name, email, role, organization, group, phone, tags, dates …), or by id |
+| `zendesk_search_organizations` | `zendesk:view` | Organizations by structured filters (name, external id, tags, dates), or by id |
 
 **`zendesk_search_tickets` in brief.** The model gives filters; `lib/zendeskTicketQuery.js`
 builds the Zendesk query, so the model never writes search syntax and no value can add a
@@ -68,6 +76,31 @@ field cut to a size (people and organizations have a budget of their own); the t
 words (the query, counts, which way the page runs, the next cursor) are outside it. A page
 that is cut offers no cursor, and says it was cut instead of calling itself the last page.
 
+**The other tools, in brief.**
+- *Count* takes search's filters and nothing else, adds `type:ticket` (the count endpoint takes
+  only a query), and shows a number. Zendesk's reference does not show the endpoint's
+  response, so the tool accepts a number or an object with a value and refuses any other shape.
+- *Get ticket* and the conversation build their path with ``zendeskPath`...` ``, which takes
+  only a positive whole number in each slot, so a model-supplied value chooses *which* ticket,
+  never which endpoint. The conversation shows internal notes by default, labelled
+  `internal` (`include_internal_notes: false` leaves them out and counts them; a comment that
+  does not say whether it is public is labelled `unknown` and counts as not public), says which side
+  each author is on from Zendesk's own role for them, and lists attachments by id, name, type,
+  size and scan result — never their download addresses.
+- *Get attachment* downloads only what Zendesk's own malware scan found clean (any other result,
+  or none, is "not cleared"), only a file on the configured Zendesk host, only an image
+  (typed by its own bytes, not its claim: PNG, JPEG, GIF, WebP) up to 1.5 MB or a plain-text
+  file (valid UTF-8 with no NUL byte anywhere in it) up to 500 kB. Anything else returns its details and says why not.
+  The file's name and declared type, and any text in it, are fenced as customer data.
+- *Search users* and *search organizations* are filters only, no search string, through the
+  same export endpoint with `filter[type]=user` or `organization`. `ids` is a separate mode (up
+  to a hundred, with `show_many`), never mixed with filters. Zendesk documents no user-id search
+  keyword; custom user and organization fields are not offered yet.
+- *Every list or bag that is cut says so.* A record never silently drops what it does not show:
+  `tags_more`, `custom_fields_more`, `user_fields_more`, `organization_fields_more` and
+  `attachments_more` count what was left out, and a bag of custom values is bounded in
+  characters (about 3,000) as well as in number.
+
 A new area's tools go in their own `tools/<area>.js`, each with `requires: "<area>:<level>"`,
 registered in `server.js`. A "self"-level tool must scope with `scopeFor(caller, area)` and
 ignore any agent or user id the client sends.
@@ -79,10 +112,10 @@ All Zendesk tools read as **one shared Zendesk user**, whose credential is the
 uses them). Three consequences to keep in mind:
 
 - **A Zendesk API token cannot be scoped.** It can do whatever its owner can, so
-  "read-only" is guaranteed only by `lib/zendeskClient.js`: `get()` is the one function
-  that reaches the network, the HTTP method is a literal inside it, and a test fails if any
-  request is not a GET. Do not add a write path there. Writes, if they ever come, are a
-  separate module behind their own permission level.
+  "read-only" is guaranteed only by `lib/zendeskClient.js`: `get()` (JSON) and `download()`
+  (a file) are the only functions that reach the network, the HTTP method is a literal inside
+  each, and a test fails if any request is not a GET. Do not add a write path there. Writes,
+  if they ever come, are a separate module behind their own permission level.
 - **`zendesk:view` grants the token owner's visibility, not the person's own.** Zendesk's
   audit trail shows the shared user; agendo's tool-call log is the record of who asked.
   `zendesk_connection_status` shows whose eyes these are.
@@ -99,7 +132,8 @@ Only plain `/api/v2/…` paths are ever fetched (a tight character allowlist: no
 no `%`, `;`, `\` or `..`). Tools build the path from a fixed template and validated ids, so
 a model-supplied value never chooses the endpoint, and a pagination cursor travels as the
 opaque `page[after]` value, never as a URL. Credentials only reach
-`<ZD_SUBDOMAIN>.zendesk.com`, and redirects are never followed. Text customers wrote goes
+`<ZD_SUBDOMAIN>.zendesk.com`. A JSON read never follows a redirect; a file download is the one
+exception, under the rules below. Text customers wrote goes
 through `lib/zendeskShape.js` (`untrusted()` for one block of prose, `fencePayload()` for a
 list), which fences it with a random per-block id the text cannot forge (read the file for
 its limits). A truncated page withholds its next-page cursor, since following it would skip
@@ -116,6 +150,21 @@ and their model still see the full message.
 **Handlers get the cancellation signal and nothing else of the SDK's request context** (the
 rest carries the caller's bearer token and headers), so a handler cannot leak what it never
 holds.
+
+**Downloading a file is the one place the client follows a redirect**, so it has rules a JSON
+read never needs. The starting address must be `https://<the configured Zendesk host>/attachments/...`
+(an attachment's `content_url` can point outside Zendesk, and a customer may have chosen where:
+those are not fetched). Credentials go to that first request and no other. Each redirect must
+lead to an https host that is a real name, on the default port, with no userinfo, and not an IP
+address, `localhost`, a single label or an internal-looking name (`.local`, `.internal`, `.lan`,
+`.corp`, `.home`, `.arpa` and the like, a trailing dot included, so `evil.localhost.` is no way
+round it); there are at most three hops,
+an empty or missing `Location` is refused, and every hop spends the caller's budget. The body is
+read up to a byte cap and no further (a body declared too large, and the body of a redirect or
+an error, is cancelled rather than left holding the connection), there is no retry, and nothing
+about the address is
+logged, because its path carries a secret token. What this does *not* stop is a public name that
+resolves to a private address; the redirect is Zendesk's to give, not a customer's.
 
 ## Endpoints
 
@@ -188,7 +237,13 @@ mcp/
 │   ├── clerkOauth.js   OAuth discovery metadata (see "No @clerk/mcp-tools" below)
 │   ├── registerZendeskTool.js  registerTool + the Zendesk naming/annotation rules
 │   ├── zendeskClient.js        the GET-only, host-pinned, rate-limited Zendesk client
-│   ├── zendeskTicketQuery.js   structured filters -> a Zendesk search query, never the reverse
+│   ├── zendeskQueryParts.js    the allowlist, dates, tags and text every search query is built from
+│   ├── zendeskTicketQuery.js   ticket filters -> a Zendesk search query, never the reverse
+│   ├── zendeskPeopleQuery.js   user and organization filters -> a query
+│   ├── zendeskPath.js          paths with ids in them, where an id can only be an id
+│   ├── zendeskRecord.js        how a ticket, a user and an organization are shown (sized, checked)
+│   ├── zendeskSideload.js      the people and organizations behind a page of ids
+│   ├── zendeskCommon.js        the shared deadline, the cursor shape, paging text
 │   └── zendeskShape.js         untrusted-text fencing, answer size cap
 ├── tools/
 │   ├── identity.js     whoami
@@ -196,7 +251,10 @@ mcp/
 │   ├── find.js         find_shifts
 │   ├── shifts.js       draft writes
 │   ├── zendesk.js      the Zendesk connection status; registers the rest
-│   └── zendeskTickets.js  zendesk_search_tickets
+│   ├── zendeskTickets.js       zendesk_search_tickets, zendesk_count_tickets
+│   ├── zendeskTicketDetail.js  zendesk_get_ticket, ..._conversation, ..._attachment
+│   └── zendeskPeople.js        zendesk_search_users, zendesk_search_organizations
+├── testing/            query and tool test helpers (never imported by production code)
 └── mcp.test.js         the server over the SDK's in-memory client: tools per person, refusals
 ```
 

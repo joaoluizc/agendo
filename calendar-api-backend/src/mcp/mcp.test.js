@@ -90,7 +90,16 @@ const EDIT_TOOLS = [
   "update_shift",
 ];
 
-const ZENDESK_TOOLS = ["zendesk_connection_status", "zendesk_search_tickets"];
+const ZENDESK_TOOLS = [
+  "zendesk_connection_status",
+  "zendesk_count_tickets",
+  "zendesk_get_ticket",
+  "zendesk_get_ticket_attachment",
+  "zendesk_get_ticket_conversation",
+  "zendesk_search_organizations",
+  "zendesk_search_tickets",
+  "zendesk_search_users",
+];
 
 test("each person is offered exactly the tools their access allows", async () => {
   const agendoOnly = [...READ_TOOLS, ...EDIT_TOOLS].sort();

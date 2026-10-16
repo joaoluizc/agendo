@@ -2,8 +2,10 @@
 
 _Read-only Zendesk access for the support team, inside the existing agendo MCP server._
 
-_Started 2026-10-15. **Phase 1 is merged (PR #53) and verified live.** Phase 2 has begun:
-`zendesk_search_tickets` is built. Status per decision is in the table below._
+_Started 2026-10-15. **Phase 1 is merged (PR #53) and verified live.** Phase 2 is under way:
+`zendesk_search_tickets` is merged (PR #54); ticket count, get ticket, conversation, attachment, and
+user and organization search are built and reviewed, and none of Phase 2 has yet run against the
+live account. Status per decision is in the table below._
 
 ## Goal
 
@@ -53,6 +55,8 @@ is Node, remote and per-person authorized. Its _design_ is.
 | 7 | New module, own config reader (same env var names); does not import from `jiraBacklog/`. | Built (Phase 1) |
 | 8 | No generic passthrough; no account-administration endpoints. | Built (Phase 1: nothing exposes either) |
 | 9 | The connector's title is **"Agendo + Zendesk"** (the server `title`; its `name` stays `agendo`). | Decided 2026-10-15; built |
+| 10 | The conversation shows **internal notes by default**, each labelled `internal`; `include_internal_notes: false` leaves them out. This matches the connector the team uses today; the first prototype hid them by default. Everyone with `zendesk:view` reads them. That is an agendo permission and is *not* tied to anyone holding a Zendesk seat or agent role, so the audience is wider than Zendesk's own; what exists to read is limited only by the shared Zendesk user's role. A comment that does not say whether it is public counts as not public. | Built; worth confirming (the reviewer would default to hiding them) |
+| 11 | **Attachments are downloaded only if Zendesk's scan cleared them, only from Zendesk, only as an image or plain text, up to a size.** Everything else returns its details and says why not. | Built; worth confirming |
 
 ### What decision 3 costs
 
@@ -214,6 +218,59 @@ Not fixed, by design, and worth confirming:
 - **Fixtures are synthetic.** This repo is public: no real tickets, customers, rule names
   or subdomain in tests, docs or commit messages.
 
+### Review of the second batch (count, ticket, conversation, attachment, people)
+
+The same reviewer, again given the code and not my conclusions, found no high-severity issue.
+It could not make the credential go anywhere but the first attachment request, the byte cap
+held, and 8.7 million accepted query values broke nothing under the strict reading. Fixed from
+its medium and low findings:
+
+- **Characters a reader cannot see.** `jsonLine` escaped what JSON requires and left terminal
+  escapes (C1 and 8-bit CSI), Tag characters that hide ASCII, bidirectional overrides, joiners,
+  variation selectors and fillers raw. Every control, format, private-use, separator and
+  default-ignorable character is now written as an escape, in structured lines and in a file's
+  text alike, built from Unicode property classes rather than a list.
+- **The query allowlist let through values that read as nothing, or fuse.** A value that is all
+  punctuation, holds an invisible character, or starts a word with a combining mark (which a
+  grapheme-aware reader fuses to the quote before it) is refused; free text drops them; tags
+  follow. The property tests now read under grapheme clusters, use a hostile alphabet with
+  marks, selectors, fillers and Tag characters, and mix those into otherwise acceptable text so
+  accepted values are exercised, not only refusals.
+- **The client.** A trailing dot hid an internal name (`evil.localhost.`), and more internal-looking
+  suffixes are now refused; a body declared too large, and the body of a redirect or an error,
+  is cancelled instead of holding the connection; a redirect, the normal way a file is served, is
+  no longer logged as a warning; a rate-limited download now says so and for how long; and the
+  header comment, which still said redirects are never followed, is corrected.
+- **The tools.** A NUL byte anywhere in a text file makes it binary (only the first 8 kB was
+  checked); `image/jpg` is an image; comment visibility fails closed (only an explicit `true` is
+  public, an unmarked comment is labelled `unknown` and kept out of the public thread); every
+  list that is cut says how many were left out, and a bag of custom values is bounded in
+  characters; a lookup that does not fit says to look up fewer ids instead of describing a
+  cursor it does not have.
+- **Tests that would not have noticed a regression** were added: a queued call that times out
+  gives back its place and its budget, an expired deadline sends nothing, a download is cut at the
+  deadline and not retried, every redirect status is followed, bodies are let go, the notice that
+  explains the fence is present once before it, each kind of attachment is asked for under its own
+  size limit, results without a usable id are counted, and cut pages of users and organizations
+  withhold their cursor.
+
+The tests were then checked by breaking 157 guarded behaviours on purpose (every size cap, id and
+address check, deadline, cancellation, refund and signal hand-off, every class of hidden character,
+and one or more per fix above): 151 are caught. The first pass missed ten; four of those got new
+tests (a cancelled running call freeing its place twice, the content-type length bound, the
+no-stream byte cap, free text keeping words with no letter or digit). The six that remain are
+equivalent or redundant by construction: the abort check at the top of a call (the budget wait
+makes the same check first), the one after the connection is won (only a microsecond race
+window), the host's case-fold on a download address (the URL parser lowercases it), the bracket
+checks on a redirect host (an IPv6 name has no dot, so the single-label check refuses it), the
+conversation handler's second look at a cursor (the schema already refused it), and the
+first-item guarantee of the size bound (no single item can exceed the budget at today's caps).
+Not changed, by judgment, and worth confirming:
+
+- **Internal notes are shown by default** (decision 10).
+- **The redirect check narrows what a bad redirect can reach; it does not stop a public name that
+  resolves to a private address.** The redirect is Zendesk's to give, not a customer's.
+- **`view` still means every Zendesk tool.** Nothing here widened who has it.
 ## Tool surface
 
 The tools mirror Zendesk's API (decision 6), using the connector the team uses today as the
@@ -225,25 +282,58 @@ description, until the prototype's own README table is in hand. All are `zendesk
 | Tool | Does |
 | --- | --- |
 | `zendesk_connection_status` | Which Zendesk account and shared user this runs as, that user's role and ticket access, the rate-limit headroom |
-| `zendesk_search_tickets` | Structured filters in, tickets out; minimal fields unless more are asked for; optional people and organizations behind the ids; cursor paging. Details in the MCP README |
+| `zendesk_search_tickets` | Structured filters in, tickets out; minimal fields unless more are asked for; optional people and organizations behind the ids; cursor paging |
+| `zendesk_count_tickets` | The same filters, only a number |
+| `zendesk_get_ticket` | One ticket by number, with a useful default; optionally the people, the organization and, for a problem ticket, its incidents |
+| `zendesk_get_ticket_conversation` | The comments: author and side (customer, agent, system), public or internal, channel, text, attachments listed by id; cursor paging |
+| `zendesk_get_ticket_attachment` | One attachment by id: an image as an image, a text file as fenced text; only what Zendesk's malware scan cleared, only from Zendesk, up to a size |
+| `zendesk_search_users` | Users by structured filters, or by id |
+| `zendesk_search_organizations` | Organizations by structured filters, or by id |
+
+Details of each are in the MCP README.
 
 **Next, in roughly this order** (each a thin wrapper, with the same conventions)
 
 | Tool | Does |
 | --- | --- |
-| `zendesk_count_tickets` | The same filters, only a number |
-| `zendesk_get_ticket` | One ticket by id |
-| `zendesk_get_ticket_conversation` | The whole thread: author, side (agent or customer), visibility, attachments, internal notes included |
 | `zendesk_get_ticket_audits` | What changed on a ticket, and which trigger, automation or macro did it (author `-1` is automation) |
 | `zendesk_get_ticket_metrics_summary` | Reply, resolution and wait times, aggregated, optionally split by group, brand, assignee, channel, week or month |
 | `zendesk_get_satisfaction_ratings` | CSAT records |
-| `zendesk_search_users`, `zendesk_search_organizations` | People and organizations, by structured filter |
 | `zendesk_list_*` | Brands, ticket forms, triggers, permission groups, user segments; ticket fields only on request, since the full dump is huge |
 
-Not yet decided: CSV output for bulk pulls (the reference connector offers up to 1,000 rows
-in one string), attachments, and the Help Center. Response conventions hold for all of them:
-hard caps with an explicit "N more not shown", timestamps with their zone (Zendesk's are
+Not yet decided: CSV output for bulk pulls (the reference connector offers up to 1,000 rows in
+one string), the Help Center, and custom user and organization fields in search (Zendesk's
+reference says only "use the field name as the keyword"). Response conventions hold for all of
+them: hard caps with an explicit "N more not shown", timestamps with their zone (Zendesk's are
 UTC with a `Z`), and everything Zendesk sent fenced as untrusted.
+
+### What is built on Zendesk's documentation and not yet seen to work
+
+Everything in Phases 1 and 2 was built from Zendesk's published documentation and stubbed
+responses; no real tickets were pulled while building. These are the assumptions most worth
+checking the first time each tool runs on the live account, in the order they are likely to matter:
+
+- **Search order and counts.** That export search runs newest-first (the answer states which way
+  the page runs, from its own timestamps), and that the count endpoint accepts `type:ticket` in
+  its query and answers a number or `{ value, refreshed_at }`. The count should equal a search
+  with the same filters.
+- **Tag and date semantics.** That `require_tags` finds only tickets with *all* the tags, and that
+  `>=`, `<` and `<=` with UTC instants bound a range as expected.
+- **Conversation.** That `include=users`, `include_inline_images` and `sort=-created_at` work with
+  cursor paging on the comments endpoint, and that the sideloaded users carry `role`.
+- **Incidents.** That the incidents endpoint answers `tickets`, `count` and `next_page` with
+  `per_page`; Zendesk's reference does not show it.
+- **Attachments.** How an attachment's `content_url` is authenticated and where it redirects:
+  the reference says neither. The download is written to work whether the first address needs
+  credentials or only a token in its path, and whether it redirects to a CDN or not; the first
+  live download will show which.
+- **Lookups.** That `show_many` takes comma-separated `ids`, up to a hundred, for users and for
+  organizations.
+- **People search.** That the export endpoint accepts `filter[type]=user` and `organization`, and
+  that `role:end-user` is how the end-user role is spelt in a query.
+- **`ticket_type:` in an export query.** That the export endpoint does not reject the substring
+  `type:` inside `ticket_type:` (it refuses a `type:` condition of its own). If it does, a
+  ticket-type filter fails with a visible 400 and needs another spelling.
 
 ## Architecture
 
@@ -278,45 +368,34 @@ section. Nothing else imports them.
    Not done in Phase 1, deliberately: the team handout (`docs/mcp-team-setup.md`) still
    describes agendo alone. Announcing Zendesk before it does more than report its own
    status would mislead; update it with Phase 2.
-2. **Tickets. In progress: `zendesk_search_tickets` is built** (branch
-   `feat/zendesk-search-tickets`); the rest of the tools under "Next" above follow.
-   Requirements carried over from the Phase 1 review, because this is the first phase with
-   tools that take a model-supplied value. Status after the first tool:
-   - *Done:* cursors are opaque values passed as `page[after]`; the people and organizations
-     are looked up by `show_many` with checked ids; one deadline covers the tool's requests;
-     `logArgs` lists only enumerations, numbers and booleans; the whole answer's customer text
-     is one fenced block of JSON lines (see below, which replaces the inline form).
-   - *Still ahead:* the path helper, for tools whose path contains an id (`/tickets/{id}`); the
-     shared 429 back-off.
-   - **Fixed path templates.** Each tool owns the path it fetches, with any id validated as
-     digits before it is placed in the path. A model-supplied string never becomes part of a
-     path, a query *key*, or a URL.
-   - **Cursors are opaque values**, taken from `meta.after_cursor` and passed back as
-     `page[after]` on the same fixed path. Never a URL, which `get()` refuses anyway.
+2. **Tickets and people. Built:** search, count, get ticket, conversation, attachment, user
+   search and organization search (the first by PR #54, the rest on branch
+   `feat/zendesk-ticket-tools`). **Next:** audits, the metrics summary, satisfaction ratings and
+   the lookup lists. Requirements carried over from the Phase 1 review, because these are the
+   tools that take a model-supplied value:
+   - *Done:* cursors are opaque values passed as `page[after]`; every id in a path goes through
+     `zendeskPath`, which takes only a positive whole number, and an id in a lookup is refused
+     if it is not one; the people and organizations behind a page are loaded by `show_many`
+     with checked ids; one deadline covers each tool's requests; `logArgs` lists only
+     enumerations, numbers and booleans; the customer text of every answer is one fenced block of
+     JSON lines, with invisible and line-separator characters escaped.
+   - *Still ahead:* a shared 429 back-off. Zendesk's limit is account-wide, but each call retries
+     on its own; when any call is told to slow down, the others should pause too.
    - **Short outsider fields are fenced as a whole block, not one by one.** A requester's name,
      a subject, a tag, a custom-field value or an attachment filename sit on structured lines.
      Rather than an inline marker per field (which would bury a 100-ticket page in markup),
      `fencePayload()` fences the list once, with one random id, and every value is
      JSON-encoded so a newline in a value cannot start a line, a section or the end of the
      block. What a tool says for itself goes outside the fence. No tool prints such a field
-     outside one. The `source` label on a fence is written by code only. (This is the design
-     `zendesk_search_tickets` uses; the review requirement it answers was "an inline form".)
-   - **Declare `logArgs` deliberately.** Only a number, boolean, enum or literal field can be
-     listed (the wrapper refuses a free-text field), so this is a check, not a promise.
-   - **A path helper that validates ids.** The client's allowlist is character-level: it would
-     let a tool fetch `/api/v2/audit_logs.json` if one asked. Which endpoints are read is
-     decided by each tool's fixed path, so make that structural: a small `zendeskPath`
-     template helper that accepts only digit ids and rejects everything else, rather than
-     string-building paths in each tool.
-   - **One deadline per tool call.** A tool that makes several requests computes one
-     `deadlineAt` and passes it to each (`get(path, params, { deadlineAt })`), so the tool is
-     bounded as a whole and not request by request.
-   - **A shared 429 back-off.** Zendesk's limit is account-wide, but each call retries on its
-     own. When any call is told to slow down, the others should pause too, rather than each
-     discovering it separately.
+     outside one. The `source` label on a fence is written by code only.
    - **Say what the fence's id means** in the first line of any answer carrying outsider text
      (`UNTRUSTED_NOTICE`); the server instructions already do.
-3. **People and configuration.** People lookup, automation rules, views, fields and forms.
+   - **Attachments are the exception that proves the rule about redirects.** The JSON client
+     never follows one; the download does, under its own rules (see the MCP README): a starting
+     address on the configured Zendesk host under `/attachments/`, credentials on that first
+     request only, redirects only to an https host that is a real name, a few hops at most, a byte
+     cap, no retry, nothing about the address logged. Only a file Zendesk's malware scan found
+     clean is downloaded, only an image (typed by its own bytes) or UTF-8 text, and only up to a size.3. **People and configuration.** People lookup, automation rules, views, fields and forms.
 4. **Help Center and export.**
 
 Each phase ships on its own, and a security review precedes any change to
