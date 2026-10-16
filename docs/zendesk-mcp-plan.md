@@ -2,8 +2,8 @@
 
 _Read-only Zendesk access for the support team, inside the existing agendo MCP server._
 
-_Draft, 2026-10-15. **Phase 1 is built** (on branch `feat/zendesk-mcp`, not yet merged or
-deployed); Phases 2–4 are not. Status per decision is in the table below._
+_Started 2026-10-15. **Phase 1 is merged (PR #53) and verified live.** Phase 2 has begun:
+`zendesk_search_tickets` is built. Status per decision is in the table below._
 
 ## Goal
 
@@ -49,7 +49,7 @@ is Node, remote and per-person authorized. Its _design_ is.
 | 3 | **Credential: reuse the existing `ZD_SUBDOMAIN` / `ZD_API_EMAIL` / `ZD_API_TOKEN`** (already used by the Jira-backlog feature). No new secret, no Render change. | Decided 2026-10-15 |
 | 4 | A new permission area **`zendesk`**, levels `none` and `view`, default `none`. Admins get it through the admin flag. | Built (Phase 1) |
 | 5 | Every Zendesk tool is named `zendesk_*`; agendo's existing tool names do not change, but their titles and descriptions now say `agendo`. | Built (Phase 1) |
-| 6 | **Task-shaped tools** (about 12), not a 1:1 mirror of the Zendesk API. | Proposed |
+| 6 | **API-shaped tools**: thin, filter-rich wrappers over Zendesk's API calls (structured filters, field selection, cursor paging), modelled on the connector the team uses today. The model composes them. *Replaces the earlier proposal of about a dozen task-shaped tools:* the task-shaped tools built for agendo's own schedule did not work well, and the model can combine API-shaped tools itself. | Decided 2026-10-16 |
 | 7 | New module, own config reader (same env var names); does not import from `jiraBacklog/`. | Built (Phase 1) |
 | 8 | No generic passthrough; no account-administration endpoints. | Built (Phase 1: nothing exposes either) |
 | 9 | The connector's title is **"Agendo + Zendesk"** (the server `title`; its `name` stays `agendo`). | Decided 2026-10-15; built |
@@ -94,8 +94,11 @@ to one file (`lib/zendeskClient.js`).
    Zendesk status tool is separate and says plainly that it describes the shared user.
 6. **Server title is "Agendo + Zendesk"**, with a one-sentence `description` naming both
    systems, set on the server's `Implementation` (the SDK supports `title` and
-   `description`). **Not yet seen in a real client:** whether Claude Desktop, claude.ai and
-   Claude Code display it is the first thing to check after deploying.
+   `description`). **Checked 2026-10-16: Claude Desktop does not show it** for a connector
+   added by hand to `claude_desktop_config.json`, which is labelled by its config key
+   (here, `agendo`). It may show in clients that read the server's own title, such as an
+   org connector in claude.ai, so it stays. Until then discoverability rests on the other
+   levers: the `zendesk_*` names, the titles, the description openers and the instructions.
 7. **No tool spans both systems.** A question that needs both ("who is on shift and how
    many open tickets do they have?") is composed by the model from one call to each.
 8. **Team setup doc** names the connector in a way that says what it contains.
@@ -167,6 +170,36 @@ tests would not have noticed a regression; those were added, including one that 
 the fence's id comes from. Deferred to Phase 2 and listed there: the path helper, one
 deadline per tool call, and a shared 429 back-off.
 
+### Review of `zendesk_search_tickets`
+
+The same reviewer, given the code and not my conclusions, found no high-severity issue: no
+model value reaches a path, a parameter name or another host; the logs hold no customer data;
+everything Zendesk sent is inside the fence. Fixed from it:
+
+- **The query builder trusted ASCII.** A blocklist of ASCII quotes did nothing about smart or
+  fullwidth quotes, folded characters, or separators such as U+2028, and with a stricter
+  tokenizer than mine thousands of accepted values added a condition. It is now an allowlist,
+  with NFKC-equality, and the property tests run under a harsher reading of Unicode.
+- **An impossible date was silently moved** (`2026-02-30T10:00:00Z` became March 2). Dates are
+  now checked as real calendar dates, years 1970–9998.
+- **Own-voice lines were not purely the tool's own:** a Zendesk error's text could appear in a
+  note, and a filter value with a line separator could reach the query echo. Notes now use
+  the log-safe text, and the allowlist refuses separators.
+- **JSON leaves some characters raw** (U+2028/2029, NEL, bidi controls, zero-width): they are
+  now written as escapes.
+- **Answer size was not bounded** as tightly as claimed: every field has a cap, people and
+  organizations have their own budget.
+- **Wrong answers that read as right:** a search of exclusions alone, `form` given an id,
+  `none` where Zendesk does not document it, loose name matching (now flagged), unresolved ids
+  (now counted), the direction of the page (now stated from its own timestamps), a cut page
+  called "the last page".
+- **The tests missed 28 of 38 deliberate breakages.** They now catch all 31 tried, including
+  every size cap, id check, deadline and signal hand-off, and the caller key.
+
+Open, by judgment: Zendesk's real handling of names and of the word limit is only knowable on
+a live account; the query echo and the notes are the tool's words, so they stay outside the
+fence, and now contain nothing a customer wrote.
+
 Not fixed, by design, and worth confirming:
 
 - **Admins get `zendesk:view` automatically**, now and for every future admin — a privilege
@@ -181,29 +214,36 @@ Not fixed, by design, and worth confirming:
 - **Fixtures are synthetic.** This repo is public: no real tickets, customers, rule names
   or subdomain in tests, docs or commit messages.
 
-## Tool surface (provisional)
+## Tool surface
 
-The list is provisional because it should be checked against the tool table of the
-third-party connector this replaces, so nothing the team uses is missed. All are
-`zendesk:view` in v1.
+The tools mirror Zendesk's API (decision 6), using the connector the team uses today as the
+reference for what to offer and how it answers. That reference is the pasted tool
+description, until the prototype's own README table is in hand. All are `zendesk:view`.
 
-| Tool | Answers |
+**Built**
+
+| Tool | Does |
 | --- | --- |
-| `zendesk_connection_status` | Which Zendesk account and shared user this runs as, that user's role, current rate-limit headroom |
-| `zendesk_search_tickets` | Find tickets by status, tag, requester, group, dates, text |
-| `zendesk_get_ticket` | One ticket with comments (internal notes opt-in) and names instead of ids |
-| `zendesk_get_ticket_audits` | What changed on a ticket, and which trigger, automation or macro did it |
-| `zendesk_get_ticket_metrics` | Reply, resolution and wait times for a ticket |
-| `zendesk_find_people` | Customers, organizations and staff, by name or email |
-| `zendesk_find_automation_rules` | Triggers, automations and macros that mention a tag, field or text |
-| `zendesk_list_views` | Views, their ticket counts and contents |
-| `zendesk_get_ticket_setup` | Ticket fields, forms and user fields |
-| `zendesk_search_help_center` | Help Center articles, with translations |
-| `zendesk_export_tickets` | Bulk incremental pull, for analysis beyond what search returns |
+| `zendesk_connection_status` | Which Zendesk account and shared user this runs as, that user's role and ticket access, the rate-limit headroom |
+| `zendesk_search_tickets` | Structured filters in, tickets out; minimal fields unless more are asked for; optional people and organizations behind the ids; cursor paging. Details in the MCP README |
 
-Response shaping follows the rules `mcp-server-plan.md` set for agendo: hard row caps
-with an explicit "N more omitted", names rather than ids (resolved server-side), and every
-timestamp rendered in the caller's timezone with the zone stated.
+**Next, in roughly this order** (each a thin wrapper, with the same conventions)
+
+| Tool | Does |
+| --- | --- |
+| `zendesk_count_tickets` | The same filters, only a number |
+| `zendesk_get_ticket` | One ticket by id |
+| `zendesk_get_ticket_conversation` | The whole thread: author, side (agent or customer), visibility, attachments, internal notes included |
+| `zendesk_get_ticket_audits` | What changed on a ticket, and which trigger, automation or macro did it (author `-1` is automation) |
+| `zendesk_get_ticket_metrics_summary` | Reply, resolution and wait times, aggregated, optionally split by group, brand, assignee, channel, week or month |
+| `zendesk_get_satisfaction_ratings` | CSAT records |
+| `zendesk_search_users`, `zendesk_search_organizations` | People and organizations, by structured filter |
+| `zendesk_list_*` | Brands, ticket forms, triggers, permission groups, user segments; ticket fields only on request, since the full dump is huge |
+
+Not yet decided: CSV output for bulk pulls (the reference connector offers up to 1,000 rows
+in one string), attachments, and the Help Center. Response conventions hold for all of them:
+hard caps with an explicit "N more not shown", timestamps with their zone (Zendesk's are
+UTC with a `Z`), and everything Zendesk sent fenced as untrusted.
 
 ## Architecture
 
@@ -227,7 +267,7 @@ section. Nothing else imports them.
 
 ## Phases
 
-1. **Foundation. Built; awaiting security review, merge and deploy.** The `zendesk`
+1. **Foundation. Merged (PR #53) and verified live 2026-10-16.** The `zendesk`
    permission area (registry, backfill, the frontend's mirror in `permissions.ts`), the
    GET-only client, shaping helpers, `registerZendeskTool`, `zendesk_connection_status`,
    the discoverability changes to instructions, titles and descriptions, fail-closed log
@@ -238,17 +278,29 @@ section. Nothing else imports them.
    Not done in Phase 1, deliberately: the team handout (`docs/mcp-team-setup.md`) still
    describes agendo alone. Announcing Zendesk before it does more than report its own
    status would mislead; update it with Phase 2.
-2. **Tickets.** Search, get, audits, metrics. Requirements carried over from the Phase 1
-   review, because this is the first phase with a tool that takes a model-supplied value:
+2. **Tickets. In progress: `zendesk_search_tickets` is built** (branch
+   `feat/zendesk-search-tickets`); the rest of the tools under "Next" above follow.
+   Requirements carried over from the Phase 1 review, because this is the first phase with
+   tools that take a model-supplied value. Status after the first tool:
+   - *Done:* cursors are opaque values passed as `page[after]`; the people and organizations
+     are looked up by `show_many` with checked ids; one deadline covers the tool's requests;
+     `logArgs` lists only enumerations, numbers and booleans; the whole answer's customer text
+     is one fenced block of JSON lines (see below, which replaces the inline form).
+   - *Still ahead:* the path helper, for tools whose path contains an id (`/tickets/{id}`); the
+     shared 429 back-off.
    - **Fixed path templates.** Each tool owns the path it fetches, with any id validated as
      digits before it is placed in the path. A model-supplied string never becomes part of a
      path, a query *key*, or a URL.
    - **Cursors are opaque values**, taken from `meta.after_cursor` and passed back as
      `page[after]` on the same fixed path. Never a URL, which `get()` refuses anyway.
-   - **An inline form for short outsider fields.** `untrusted()` fences multi-line blocks
-     (a comment, an article). A requester's name, a subject, a tag, a custom-field value or an
-     attachment filename sit on a structured line and need their own marked form; until it
-     exists no tool prints them bare. The `source` label on a fence is written by code only.
+   - **Short outsider fields are fenced as a whole block, not one by one.** A requester's name,
+     a subject, a tag, a custom-field value or an attachment filename sit on structured lines.
+     Rather than an inline marker per field (which would bury a 100-ticket page in markup),
+     `fencePayload()` fences the list once, with one random id, and every value is
+     JSON-encoded so a newline in a value cannot start a line, a section or the end of the
+     block. What a tool says for itself goes outside the fence. No tool prints such a field
+     outside one. The `source` label on a fence is written by code only. (This is the design
+     `zendesk_search_tickets` uses; the review requirement it answers was "an inline form".)
    - **Declare `logArgs` deliberately.** Only a number, boolean, enum or literal field can be
      listed (the wrapper refuses a free-text field), so this is a check, not a promise.
    - **A path helper that validates ids.** The client's allowlist is character-level: it would

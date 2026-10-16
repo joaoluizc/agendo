@@ -1,11 +1,13 @@
 import { registerZendeskTool } from "../lib/registerZendeskTool.js";
 import { zendesk } from "../lib/zendeskClient.js";
 import { textResult } from "../lib/format.js";
+import { registerZendeskTicketTools } from "./zendeskTickets.js";
 
 /**
  * The Zendesk half of this server: read-only, and every tool here is registered through
- * `registerZendeskTool` (see it for what that fixes). Phase 1 is the connection status
- * alone — it answers "whose eyes are these?", which every later tool's answer depends on.
+ * `registerZendeskTool` (see it for what that fixes). The connection status lives in this
+ * file — it answers "whose eyes are these?", which every other answer depends on — and each
+ * further area gets its own `zendesk<Area>.js`, registered at the bottom.
  *
  * All Zendesk tools read as ONE shared Zendesk user (the credential in `ZD_API_*`), not as
  * the person asking. That is the thing most worth being honest about: a person's own
@@ -70,6 +72,8 @@ export function registerZendeskTools(server, caller) {
       ]);
     },
   });
+
+  registerZendeskTicketTools(server, caller);
 }
 
 export default { registerZendeskTools };

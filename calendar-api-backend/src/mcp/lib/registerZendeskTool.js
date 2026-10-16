@@ -23,7 +23,8 @@ import { registerTool } from "./registerTool.js";
  * does not opt *in* to redaction, it opts *out*, argument by argument: `logArgs` lists the
  * arguments that are safe to record, and every other argument is logged by size only. A
  * tool that lists nothing logs nothing but sizes. "Safe" is checked, not trusted: only a
- * number, boolean, enum or literal field can be listed, because a free-text field is
+ * number, boolean, enum or literal field (or a list of them) can be listed, because a
+ * free-text field is
  * exactly what must not be (this is also why a `z.object` schema is refused — every
  * argument has to be visible here). If the schema library ever stops exposing field types
  * this way, nothing can be listed and everything is redacted: it fails in the safe direction.
@@ -49,7 +50,10 @@ const LOGGABLE_TYPES = new Set(["ZodNumber", "ZodBoolean", "ZodEnum", "ZodNative
 /** Wrappers around a field type (`.optional()`, `.default()` …) to look through. */
 const WRAPPER_TYPES = new Set(["ZodOptional", "ZodNullable", "ZodDefault", "ZodCatch", "ZodReadonly"]);
 
-/** Is this zod field a number, boolean, enum or literal, however it is wrapped? */
+/**
+ * Is this zod field a number, boolean, enum or literal — or a list of them — however it is
+ * wrapped? A list of enums (`status: ["open", "pending"]`) carries no free text either.
+ */
 function isSafeToLog(field) {
   let type = field;
   for (let depth = 0; depth < 8 && type?._def; depth += 1) {
@@ -57,6 +61,7 @@ function isSafeToLog(field) {
     if (LOGGABLE_TYPES.has(name)) return true;
     if (WRAPPER_TYPES.has(name)) type = type._def.innerType;
     else if (name === "ZodEffects") type = type._def.schema;
+    else if (name === "ZodArray") type = type._def.type;
     else return false;
   }
   return false;

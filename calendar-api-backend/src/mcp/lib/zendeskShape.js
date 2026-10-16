@@ -28,8 +28,9 @@ import crypto from "node:crypto";
  *    requester's name or a subject line there would sit outside the fence.
  *  - `untrusted()` suits multi-line blocks (a comment, an article). Short outsider fields on
  *    a structured line — a requester's name, a subject, a tag, a custom-field value, an
- *    attachment filename — need an inline form, which does not exist yet and is a Phase 2
- *    requirement (docs/zendesk-mcp-plan.md): until it does, no tool may print them bare.
+ *    attachment filename — are fenced as a whole with `fencePayload()`, one block for the
+ *    list, with every value JSON-encoded. No tool may print such a field bare, outside a
+ *    fence.
  *
  * **2. A truncated page withholds its cursor.** When a page does not fit and items are
  * dropped, handing back "the next page" cursor would skip the dropped items without
@@ -65,19 +66,81 @@ function attributeSafe(label) {
 }
 
 /**
- * Outsider-written text, fenced.
+ * Characters JSON leaves raw that a reader may still treat as a line break or hide in: NEL,
+ * the Unicode line and paragraph separators, the bidirectional marks, embeddings and
+ * isolates, zero-width and invisible characters, the soft hyphen and the byte-order mark.
+ * `JSON.stringify` escapes only what JSON requires (controls below U+0020, quotes,
+ * backslashes, lone surrogates), so a customer's subject could otherwise break onto "new
+ * lines" in a renderer that splits on those, or have its tail disguised by a right-to-left
+ * override.
  *
- * `nonce` is generated per block (64 random bits) and exists as an option only so a test
- * can pin the output. The text's own copies of the closing tag are rewritten too, case and
- * spacing variants included — a second line of defence, not the first.
+ * Built from code points at load time, so this file holds no invisible characters and no
+ * escape sequence a tool or an editor could mangle: a raw U+2028 inside a regex literal is a
+ * syntax error.
  */
-export function untrusted(text, { source, max = DEFAULT_FIELD_CHARS, nonce = crypto.randomBytes(8).toString("hex") } = {}) {
-  const body = truncateText(text, max).replace(
-    new RegExp(`<\\s*/\\s*${UNTRUSTED_TAG}`, "gi"),
-    `<\\/${UNTRUSTED_TAG}`,
+const SLIPPERY_RANGES = [
+  [0x85, 0x85], // next line
+  [0xad, 0xad], // soft hyphen
+  [0x61c, 0x61c], // Arabic letter mark
+  [0x200b, 0x200f], // zero-width characters, left-to-right and right-to-left marks
+  [0x2028, 0x202e], // line and paragraph separators, bidirectional embeddings and overrides
+  [0x2060, 0x2069], // word joiner, invisible operators, bidirectional isolates
+  [0xfeff, 0xfeff], // byte-order mark
+];
+const RAW_BUT_SLIPPERY = new RegExp(
+  `[${SLIPPERY_RANGES.map(([from, to]) => String.fromCodePoint(from) + (from === to ? "" : `-${String.fromCodePoint(to)}`)).join("")}]`,
+  "g",
+);
+const BACKSLASH = String.fromCharCode(92);
+
+/**
+ * One JSON object on one line, with those characters written as a backslash-u escape. The
+ * result is still valid JSON and parses back to the same value; it just cannot be misread as
+ * more than one line, and shows what it contains.
+ */
+export function jsonLine(value) {
+  return JSON.stringify(value).replace(
+    RAW_BUT_SLIPPERY,
+    (char) => `${BACKSLASH}u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );
+}
+
+const newNonce = () => crypto.randomBytes(8).toString("hex");
+
+/**
+ * `body` between an opening and a closing tag that share an id. The body's own copies of the
+ * closing tag are rewritten too, case and spacing variants included — a second line of
+ * defence, not the first.
+ */
+function fence(body, source, nonce) {
+  const defused = body.replace(new RegExp(`<\\s*/\\s*${UNTRUSTED_TAG}`, "gi"), `<\\/${UNTRUSTED_TAG}`);
   const attribute = source ? ` source="${attributeSafe(source)}"` : "";
-  return `<${UNTRUSTED_TAG} id="${nonce}"${attribute}>\n${body}\n</${UNTRUSTED_TAG} id="${nonce}">`;
+  return `<${UNTRUSTED_TAG} id="${nonce}"${attribute}>\n${defused}\n</${UNTRUSTED_TAG} id="${nonce}">`;
+}
+
+/**
+ * Outsider-written text, fenced: one comment, one article. `nonce` is generated per block
+ * (64 random bits) and exists as an option only so a test can pin the output.
+ */
+export function untrusted(text, { source, max = DEFAULT_FIELD_CHARS, nonce = newNonce() } = {}) {
+  return fence(truncateText(text, max), source, nonce);
+}
+
+/**
+ * A whole data block fenced once: a list of tickets, one JSON object per line.
+ *
+ * For a list this is the right grain. Nearly everything in it — subjects, tags, names,
+ * custom-field values — was written by an outsider, so fencing each field would bury the
+ * data in markers; fencing the block says the true thing in one place. What keeps it safe
+ * is that every value is JSON-encoded (with `jsonLine`): a newline inside a value cannot
+ * start a new line, so it cannot pose as a line, a section header or the end of the block.
+ * Anything a tool says for itself (counts, cursors, notes) goes *outside* the fence.
+ *
+ * Unlike `untrusted`, this does not truncate: the caller has already bounded each line
+ * (`fitPage`).
+ */
+export function fencePayload(lines, { source, nonce = newNonce() } = {}) {
+  return fence(lines.join("\n"), source, nonce);
 }
 
 /**
@@ -111,4 +174,4 @@ export function fitPage({ blocks, nextCursor = null, maxChars = DEFAULT_ANSWER_C
   };
 }
 
-export default { UNTRUSTED_TAG, UNTRUSTED_NOTICE, truncateText, untrusted, fitPage };
+export default { UNTRUSTED_TAG, UNTRUSTED_NOTICE, truncateText, untrusted, fencePayload, fitPage, jsonLine };
