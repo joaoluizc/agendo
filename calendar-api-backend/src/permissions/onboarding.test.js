@@ -25,7 +25,7 @@ const who = (overrides = {}) => ({
 const invite = (overrides = {}) => ({
   email: "new.agent@example.test",
   type: "normal",
-  permissions: { scheduling: "edit", bugs: "view", reports: "self", performance: "none" },
+  permissions: { scheduling: "edit", bugs: "view", reports: "self", performance: "none", zendesk: "none" },
   invitedBy: "user_admin",
   ...overrides,
 });

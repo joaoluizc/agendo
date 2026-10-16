@@ -47,6 +47,9 @@ test("registry: the decided v1 areas and levels", () => {
       bugs: ["none", "view", "edit"],
       reports: ["none", "self", "edit"],
       performance: ["none", "edit"],
+      // Read-only today. Adding a write level here would hand it to every admin at once
+      // (an admin holds the top level of every area), so it is a deliberate change.
+      zendesk: ["none", "view"],
     },
   );
   // Agents never see the performance score: there is no self level to grant.
@@ -67,6 +70,7 @@ test("admins hold the top level of every area", () => {
     bugs: "edit",
     reports: "edit",
     performance: "edit",
+    zendesk: "view",
   });
 });
 
@@ -105,6 +109,7 @@ test("new users get the decided defaults", () => {
     bugs: "none",
     reports: "self",
     performance: "none",
+    zendesk: "none",
   });
 });
 

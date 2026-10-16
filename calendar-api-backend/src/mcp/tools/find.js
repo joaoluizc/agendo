@@ -116,9 +116,9 @@ export function registerFindTools(server, caller) {
   registerTool(server, caller, {
     name: "find_shifts",
     requires: "scheduling:view",
-    title: "Query shifts",
+    title: "agendo: Query shifts",
     description:
-      "The general shift query — use it for anything the narrower tools do not cover " +
+      "[agendo scheduling] The general shift query — use it for anything the narrower tools do not cover " +
       "exactly. Filters combine: agents, locations, positions, position types, an " +
       "arbitrary time window (15 minutes or 6 months), publication status, whether the " +
       "shift reached Google Calendar, and where it came from. " +

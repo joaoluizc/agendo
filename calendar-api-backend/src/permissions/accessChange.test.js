@@ -29,6 +29,7 @@ test("a user with nothing stored starts from the new-user defaults", () => {
     bugs: "none",
     reports: "self",
     performance: "edit",
+    zendesk: "none",
   });
 });
 

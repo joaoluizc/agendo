@@ -180,9 +180,9 @@ export function registerShiftWriteTools(server, caller) {
   registerTool(server, caller, {
     name: "create_shift",
     requires: "scheduling:edit",
-    title: "Draft a shift",
+    title: "agendo: Draft a shift",
     description:
-      "Create a draft shift for one or more agents. Drafts are plans: they do not appear " +
+      "[agendo scheduling] Create a draft shift for one or more agents. Drafts are plans: they do not appear " +
       "on the schedule's published view, are not synced to anyone's Google Calendar, and " +
       "are not counted as coverage. Someone with Scheduling: edit publishes them in agendo's UI, which is the " +
       "deliberate step that reaches real calendars. Times are UTC.",
@@ -256,9 +256,9 @@ export function registerShiftWriteTools(server, caller) {
   registerTool(server, caller, {
     name: "list_draft_shifts",
     requires: "scheduling:edit",
-    title: "Draft shifts for a day",
+    title: "agendo: Draft shifts for a day",
     description:
-      "The unpublished draft shifts on a given UTC day, optionally for one agent. The " +
+      "[agendo scheduling] The unpublished draft shifts on a given UTC day, optionally for one agent. The " +
       "other schedule tools deliberately show only published shifts, so this is how to " +
       "review what has been drafted but not yet committed.",
     inputSchema: {
@@ -325,9 +325,9 @@ export function registerShiftWriteTools(server, caller) {
   registerTool(server, caller, {
     name: "update_shift",
     requires: "scheduling:edit",
-    title: "Change a draft shift",
+    title: "agendo: Change a draft shift",
     description:
-      "Change the times or position of an existing DRAFT shift, identified by agent and " +
+      "[agendo scheduling] Change the times or position of an existing DRAFT shift, identified by agent and " +
       "day. Published shifts cannot be changed here — edit those in agendo, where the " +
       "Google Calendar event is kept in step. Give `start` or `position` to narrow when " +
       "the agent has several drafts that day.",
@@ -412,9 +412,9 @@ export function registerShiftWriteTools(server, caller) {
   registerTool(server, caller, {
     name: "delete_shift",
     requires: "scheduling:edit",
-    title: "Delete draft shifts",
+    title: "agendo: Delete draft shifts",
     description:
-      "Delete DRAFT shifts for an agent on a day. Published shifts are never deleted " +
+      "[agendo scheduling] Delete DRAFT shifts for an agent on a day. Published shifts are never deleted " +
       "here — removing one has to remove its Google Calendar event too, which only " +
       "agendo does. Without `start` or `position` this deletes every draft that agent " +
       "has that day, and says exactly which ones first.",

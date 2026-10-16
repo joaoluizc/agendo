@@ -206,9 +206,9 @@ export function registerScheduleTools(server, caller) {
   registerTool(server, caller, {
     name: "get_my_schedule",
     requires: "signedIn",
-    title: "My schedule",
+    title: "agendo: My schedule",
     description:
-      "The signed-in agent's own shifts over a date range: when they work, which position, " +
+      "[agendo scheduling] The signed-in agent's own shifts over a date range: when they work, which position, " +
       "and for how long. Defaults to the next 7 days from today. Dates are UTC days; times " +
       "are shown in the caller's agendo timezone and always carry the zone.",
     inputSchema: {
@@ -245,9 +245,9 @@ export function registerScheduleTools(server, caller) {
   registerTool(server, caller, {
     name: "get_agent_schedule",
     requires: "scheduling:view",
-    title: "A colleague's schedule",
+    title: "agendo: A colleague's schedule",
     description:
-      "Another support agent's shifts over a date range, found by name. The whole team's " +
+      "[agendo scheduling] Another support agent's shifts over a date range, found by name. The whole team's " +
       "schedule is visible to everyone in agendo, same as the schedule page. If the name " +
       "matches more than one person the tool lists the candidates instead of guessing.",
     inputSchema: {
@@ -302,9 +302,9 @@ export function registerScheduleTools(server, caller) {
   registerTool(server, caller, {
     name: "get_coverage_at",
     requires: "scheduling:view",
-    title: "Who is working right now",
+    title: "agendo: Who is working right now",
     description:
-      "Who is on shift at a given moment, grouped by position — the answer to " +
+      "[agendo scheduling] Who is on shift at a given moment, grouped by position — the answer to " +
       '"who is covering tickets right now" or "who is on at 3pm Thursday". Defaults to now.',
     inputSchema: {
       at: z
@@ -370,9 +370,9 @@ export function registerScheduleTools(server, caller) {
   registerTool(server, caller, {
     name: "summarize_shifts",
     requires: "scheduling:view",
-    title: "Hours over a period",
+    title: "agendo: Hours over a period",
     description:
-      "Total scheduled hours across a date range, broken down by agent and by position — " +
+      "[agendo scheduling] Total scheduled hours across a date range, broken down by agent and by position — " +
       "the tool for questions about a period rather than a moment. Answers 'does anyone " +
       "have development time this week?', 'how many hours of Personal Queue did Sarah " +
       "have?', 'who worked the most last week?'. Filter by agent, by position name, or by " +
@@ -525,9 +525,9 @@ export function registerScheduleTools(server, caller) {
   registerTool(server, caller, {
     name: "find_coverage_gaps",
     requires: "scheduling:edit",
-    title: "Coverage gaps for a day",
+    title: "agendo: Coverage gaps for a day",
     description:
-      "Half-hour stretches of a day where scheduled headcount falls below a coverage " +
+      "[agendo scheduling] Half-hour stretches of a day where scheduled headcount falls below a coverage " +
       "meter's target. Needs Scheduling: edit, matching the coverage rows on the schedule " +
       "page, which need it there too. Targets are stored in UTC, so gaps are reported in UTC.",
     inputSchema: {

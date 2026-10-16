@@ -14,11 +14,13 @@ export function registerIdentityTools(server, caller) {
   registerTool(server, caller, {
     name: "whoami",
     requires: "signedIn",
-    title: "Who am I in agendo",
+    title: "agendo: Who am I",
     description:
-      "The agendo account this connection is authenticated as: name, email, access (admin, and " +
-      "a level per area) and timezone. Use it when a schedule answer looks wrong or a tool is " +
-      "unavailable — access explains what is permitted, timezone explains how times are rendered.",
+      "[agendo] The agendo account this connection is authenticated as: name, email, access " +
+      "(admin, and a level per area, Zendesk included) and timezone. Use it when a schedule " +
+      "answer looks wrong or a tool is unavailable — access explains what is permitted, " +
+      "timezone explains how times are rendered. It describes your agendo account only; the " +
+      "Zendesk tools, if you have them, read as a separate shared Zendesk user.",
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: async (_args, caller) => {
       const { mongoUser, isAdmin, clientId } = caller;
