@@ -596,7 +596,7 @@ test("only the Zendesk tools import the client, and nothing outside the MCP modu
     .filter(({ rel, text }) => rel.startsWith("mcp/") && /zendeskClient/.test(text))
     .map(({ rel }) => rel)
     .sort();
-  assert.deepEqual(mentions, ["mcp/tools/zendesk.js"]);
+  assert.deepEqual(mentions, ["mcp/tools/zendesk.js", "mcp/tools/zendeskTickets.js"]);
 
   // Outside mcp/: nothing imports it at all. (The Jira-backlog feature has its own,
   // unrelated client of the same file name.)

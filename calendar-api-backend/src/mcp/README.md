@@ -25,7 +25,7 @@ per person by their agendo permissions (below). Clients connect through the `mcp
 bridge, identified by CIMD, with no credential on anyone's machine. Still open: publishing
 agendo in the claude.ai org connector directory, which would retire the bridge.
 
-**Zendesk: Phase 1 only** (foundation and `zendesk_connection_status`; the ticket tools
+**Zendesk: foundation, connection status and ticket search** (the rest of the ticket tools
 come next, see the Zendesk plan). Read-only, and not by a setting: see "Zendesk" below.
 
 ## Tools
@@ -48,6 +48,25 @@ come next, see the Zendesk plan). Read-only, and not by a setting: see "Zendesk"
 | Tool | Requires | What |
 | --- | --- | --- |
 | `zendesk_connection_status` | `zendesk:view` | Which Zendesk account and user these tools read as, that user's role and ticket access, and the rate-limit headroom |
+| `zendesk_search_tickets` | `zendesk:view` | Find tickets by structured filters (status, assignee, requester, organization, tags, dates, custom field, text), minimal fields unless more are asked for, optionally with the people and organizations behind the ids, paged by cursor |
+
+**`zendesk_search_tickets` in brief.** The model gives filters; `lib/zendeskTicketQuery.js`
+builds the Zendesk query, so the model never writes search syntax and no value can add a
+condition. Values go through an **allowlist** (bare if made of `A-Za-z0-9 @ . _ + -`, quoted
+if they use only letters, digits, spaces and `. - _ @ ' & ( ) , / +`, otherwise *refused*,
+never altered; it must also equal its own NFKC form, so a lookalike quote, colon or
+separator cannot get through whatever Zendesk does with Unicode). Free text is folded,
+stripped of everything that is not a word, and searched as quoted words. Dates must exist
+(`2026-02-30T10:00:00Z` is refused, not moved to March) and go out as UTC instants. `me` is
+refused because it would mean the shared Zendesk user, `form` takes a name, and a search
+of exclusions alone is refused because it can match nothing. It uses the *Export Search Results* endpoint: cursor paging with no
+1,000-result cap, but ordered by creation date only, no total count, 100 requests a minute for
+the whole Zendesk account, and cursors that expire after an hour. Everything Zendesk sent
+(subjects, tags, names, custom-field values) is one JSON-lines block inside one fence with one
+random id, each line written with invisible and line-separator characters escaped, and every
+field cut to a size (people and organizations have a budget of their own); the tool's own
+words (the query, counts, which way the page runs, the next cursor) are outside it. A page
+that is cut offers no cursor, and says it was cut instead of calling itself the last page.
 
 A new area's tools go in their own `tools/<area>.js`, each with `requires: "<area>:<level>"`,
 registered in `server.js`. A "self"-level tool must scope with `scopeFor(caller, area)` and
@@ -81,9 +100,10 @@ no `%`, `;`, `\` or `..`). Tools build the path from a fixed template and valida
 a model-supplied value never chooses the endpoint, and a pagination cursor travels as the
 opaque `page[after]` value, never as a URL. Credentials only reach
 `<ZD_SUBDOMAIN>.zendesk.com`, and redirects are never followed. Text customers wrote goes
-through `lib/zendeskShape.js`'s `untrusted()`, which fences it with a random per-block id the
-text cannot forge (read the file for its limits). A truncated page withholds its next-page
-cursor, since following it would skip items.
+through `lib/zendeskShape.js` (`untrusted()` for one block of prose, `fencePayload()` for a
+list), which fences it with a random per-block id the text cannot forge (read the file for
+its limits). A truncated page withholds its next-page cursor, since following it would skip
+items.
 
 **Logging fails closed.** Every call is logged with its arguments, and a Zendesk search query
 or a customer's name can be an email address. A Zendesk tool lists only the arguments that
@@ -168,13 +188,15 @@ mcp/
 │   ├── clerkOauth.js   OAuth discovery metadata (see "No @clerk/mcp-tools" below)
 │   ├── registerZendeskTool.js  registerTool + the Zendesk naming/annotation rules
 │   ├── zendeskClient.js        the GET-only, host-pinned, rate-limited Zendesk client
+│   ├── zendeskTicketQuery.js   structured filters -> a Zendesk search query, never the reverse
 │   └── zendeskShape.js         untrusted-text fencing, answer size cap
 ├── tools/
 │   ├── identity.js     whoami
 │   ├── schedule.js     schedules, coverage, totals, coverage gaps
 │   ├── find.js         find_shifts
 │   ├── shifts.js       draft writes
-│   └── zendesk.js      the Zendesk tools
+│   ├── zendesk.js      the Zendesk connection status; registers the rest
+│   └── zendeskTickets.js  zendesk_search_tickets
 └── mcp.test.js         the server over the SDK's in-memory client: tools per person, refusals
 ```
 
