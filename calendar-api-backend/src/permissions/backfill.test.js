@@ -17,6 +17,7 @@ test("an existing user keeps today's access and gains their own report", () => {
     bugs: "none",
     reports: "self",
     performance: "none",
+    zendesk: "none",
   });
 });
 

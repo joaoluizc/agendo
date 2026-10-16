@@ -29,6 +29,26 @@ import { PERMISSION_AREAS } from "../../permissions/registry.js";
 /** The caller kinds a tool may require. Public/webhook/mcp are route-only declarations. */
 const TOOL_REQUIREMENT_KINDS = new Set(["signedIn", "admin", "level"]);
 
+/**
+ * `args` as they should appear in the call log: each named field reduced to its size.
+ *
+ * Every call is logged with its arguments, which suits agendo's own tools (shift ids,
+ * dates). It does not suit a Zendesk search, whose query can hold a customer's email
+ * address — and the log lives in Render, not here. A tool lists such fields in
+ * `redactArgs`; the log then says how much was asked, not what.
+ */
+export function redactForLog(args, redactArgs = []) {
+  if (!redactArgs.length) return args;
+  const logged = { ...args };
+  for (const key of redactArgs) {
+    const value = logged[key];
+    if (value === undefined) continue;
+    const size = Array.isArray(value) ? `${value.length} items` : `${String(value).length} chars`;
+    logged[key] = `[redacted: ${size}]`;
+  }
+  return logged;
+}
+
 /** A tool result that reads as an error to the client rather than crashing the call. */
 function toolError(text) {
   return { content: [{ type: "text", text }], isError: true };
@@ -67,11 +87,12 @@ export function refusalText(name, requires, parsed, caller) {
  *   title?: string,
  *   inputSchema?: object,
  *   annotations?: object,
+ *   redactArgs?: string[],
  *   handler: (args: object, caller: object) => Promise<object>,
  * }} definition
  */
 export function registerTool(server, caller, definition) {
-  const { name, requires, title, description, inputSchema, annotations, handler } =
+  const { name, requires, title, description, inputSchema, annotations, redactArgs, handler } =
     definition;
 
   if (!name) {
@@ -91,6 +112,24 @@ export function registerTool(server, caller, definition) {
   }
   if (typeof handler !== "function") {
     throw new Error(`registerTool: tool "${name}" needs a handler function`);
+  }
+  if (redactArgs !== undefined) {
+    if (!Array.isArray(redactArgs) || redactArgs.some((key) => typeof key !== "string")) {
+      throw new Error(`registerTool: tool "${name}" redactArgs must be a list of argument names`);
+    }
+    // A misspelt name would not redact anything — the value would be logged in clear. So a
+    // name the schema does not have fails the server load instead. (Only checked for the
+    // plain `{ field: z.type() }` shape the tools here use.)
+    const known =
+      inputSchema && typeof inputSchema === "object" && !inputSchema._def
+        ? Object.keys(inputSchema)
+        : null;
+    const unknown = known ? redactArgs.filter((key) => !known.includes(key)) : [];
+    if (unknown.length) {
+      throw new Error(
+        `registerTool: tool "${name}" redacts ${unknown.join(", ")}, which its inputSchema does not have`,
+      );
+    }
   }
 
   if (!decide(caller, parsed).allowed) {
@@ -114,14 +153,15 @@ export function registerTool(server, caller, definition) {
 
   return server.registerTool(name, config, async (...params) => {
     // The SDK calls the handler as (args, extra) for a tool with an inputSchema and as
-    // (extra) for one without.
+    // (extra) for one without. `extra.signal` fires when the client cancels the request.
     const args = params.length > 1 ? params[0] : {};
+    const extra = params.length > 1 ? params[1] : params[0];
 
     // Every call is logged with who asked and what for. An LLM acting on a fuzzy
     // instruction is exactly when "what happened, and who asked for it" has to be
     // reconstructable after the fact.
     console.log(
-      `[${caller.requestId}] - [mcp] tool=${name} caller=${caller.mongoUser.email} client=${caller.clientId} args=${JSON.stringify(args)}`,
+      `[${caller.requestId}] - [mcp] tool=${name} caller=${caller.mongoUser.email} client=${caller.clientId} args=${JSON.stringify(redactForLog(args, redactArgs))}`,
     );
 
     if (!decide(caller, parsed).allowed) {
@@ -132,12 +172,19 @@ export function registerTool(server, caller, definition) {
     }
 
     try {
-      return await handler(args, caller);
+      // Handlers get the cancellation signal and nothing else of `extra`: it also carries the
+      // caller's bearer token and request headers, and a handler (or a debug log of its
+      // arguments) that holds them is one `JSON.stringify` from leaking them. mcpAuth.js
+      // already promises handlers never see a raw token; this keeps the promise.
+      return await handler(args, caller, { signal: extra?.signal });
     } catch (err) {
       // A thrown error would reach the client as an opaque protocol failure; this keeps
-      // it legible and keeps the connection alive.
+      // it legible and keeps the connection alive. The client gets `message`; the log gets
+      // `logMessage` when the error has one, because an error can quote what the caller
+      // asked (a rejected Zendesk search echoes its query) and `redactArgs` keeps that out
+      // of the call log for nothing if the failure line then prints it.
       console.error(
-        `[${caller.requestId}] - [mcp] tool=${name} failed: ${err.message}`,
+        `[${caller.requestId}] - [mcp] tool=${name} failed: ${err.logMessage ?? err.message}`,
       );
       return toolError(`${name} failed: ${err.message}`);
     }

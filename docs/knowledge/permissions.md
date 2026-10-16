@@ -16,6 +16,7 @@ Settings → Users) and the MCP server's tools.
 | `bugs` | `none` · `view` · `edit` | `none` | editing bugs and tasks, running triage |
 | `reports` | `none` · `self` · `edit` | `self` | everyone's reports, report groups |
 | `performance` | `none` · `edit` | `none` | the whole Performance screen |
+| `zendesk` | `none` · `view` | `none` | the Zendesk tools in the MCP server (read-only, see below) |
 
 - **Levels are ordinal.** Each includes the ones below it. They are stored **by name**, so
   a level can be inserted later without changing what stored values mean.
@@ -32,6 +33,11 @@ Settings → Users) and the MCP server's tools.
 - **Self-level access is a row filter.** `reports: self` returns only the caller's own
   report row, built from the caller, never from a client-sent id.
 - **Agents never see the performance score.** `performance` has no self level.
+- **`zendesk` is MCP-only and read-only.** It has no REST routes and no web screen; it gates
+  the `zendesk_*` tools (`src/mcp/`). Everyone holding it reads Zendesk as one shared
+  Zendesk user, so it grants that user's visibility, not the person's own Zendesk role.
+  It has no write level on purpose: an admin holds the top level of every area, so adding
+  one would hand writes to every admin the moment it shipped. See `docs/zendesk-mcp-plan.md`.
 - **Shifts and hours stay visible to everyone.** Seeing everyone's shifts and hours stays
   open under `scheduling: view`, including the MCP totals. Reports access adds friction for
   the leads' monitoring tool; it doesn't keep secrets.
@@ -186,6 +192,7 @@ values in `src/permissions/backfill.js`:
 | `bugs` | `none` |
 | `reports` | `self` |
 | `performance` | `edit` for people on the old `PERFORMANCE_ACCESS_EMAILS` list |
+| `zendesk` | `none` (new, opt-in; nobody has it until an admin grants it) |
 
 Admins get the same stored values, which is what they fall back to if they're ever demoted.
 

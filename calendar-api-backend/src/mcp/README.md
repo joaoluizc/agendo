@@ -1,22 +1,36 @@
 # MCP server (self-contained module)
 
 A remote [Model Context Protocol](https://modelcontextprotocol.io) server that lets the
-support team query and draft agendo's schedule from their own Claude/ChatGPT clients,
-authorized per-user through Clerk OAuth, with each person's agendo permissions resolved
-from Mongo on every request (docs/knowledge/permissions.md). Everything for it
-lives in this folder; `app.js` touches it in exactly one line.
+support team query and draft agendo's schedule — and read Zendesk — from their own
+Claude/ChatGPT clients, authorized per-user through Clerk OAuth, with each person's agendo
+permissions resolved from Mongo on every request (docs/knowledge/permissions.md).
+Everything for it lives in this folder; `app.js` touches it in exactly one line.
 
-Design and rationale: [`docs/mcp-server-plan.md`](../../../docs/mcp-server-plan.md).
+**One connection, two separate systems.** The connector is titled "Agendo + Zendesk". Tools
+act on exactly one of them and say which, in four places a model reads: the name
+(`zendesk_*` is Zendesk, everything else is agendo), the title (`Zendesk: …` / `agendo: …`),
+the description opener (`[Zendesk, read-only]` / `[agendo …]`) and the server instructions,
+which also define the words the two systems use differently (*agent*, *ticket*, *queue*).
+`registerZendeskTool` enforces this for Zendesk tools and a test checks every listed tool.
+No tool spans both systems.
 
-**Status: in production.** Eleven tools: `whoami`, five read tools (`find_shifts` is the
-general query the other four are special cases of), and five for schedule builders —
+Design and rationale: [`docs/mcp-server-plan.md`](../../../docs/mcp-server-plan.md) (agendo)
+and [`docs/zendesk-mcp-plan.md`](../../../docs/zendesk-mcp-plan.md) (Zendesk).
+
+**Status: in production** for agendo: eleven tools, `whoami`, five read tools (`find_shifts`
+is the general query the other four are special cases of), and five for schedule builders —
 `find_coverage_gaps` plus create/update/delete/list confined to **draft** shifts, so
 nothing here can reach a published schedule or Google Calendar. Who gets which is decided
 per person by their agendo permissions (below). Clients connect through the `mcp-remote`
 bridge, identified by CIMD, with no credential on anyone's machine. Still open: publishing
 agendo in the claude.ai org connector directory, which would retire the bridge.
 
+**Zendesk: Phase 1 only** (foundation and `zendesk_connection_status`; the ticket tools
+come next, see the Zendesk plan). Read-only, and not by a setting: see "Zendesk" below.
+
 ## Tools
+
+### agendo (scheduling)
 
 | Tool | Requires | What |
 | --- | --- | --- |
@@ -29,9 +43,59 @@ agendo in the claude.ai org connector directory, which would retire the bridge.
 | `find_coverage_gaps` | `scheduling:edit` | Where headcount falls below coverage targets |
 | `create_shift`, `list_draft_shifts`, `update_shift`, `delete_shift` | `scheduling:edit` | Drafts only — never publish |
 
+### Zendesk (read-only)
+
+| Tool | Requires | What |
+| --- | --- | --- |
+| `zendesk_connection_status` | `zendesk:view` | Which Zendesk account and user these tools read as, that user's role and ticket access, and the rate-limit headroom |
+
 A new area's tools go in their own `tools/<area>.js`, each with `requires: "<area>:<level>"`,
 registered in `server.js`. A "self"-level tool must scope with `scopeFor(caller, area)` and
 ignore any agent or user id the client sends.
+
+## Zendesk
+
+All Zendesk tools read as **one shared Zendesk user**, whose credential is the
+`ZD_SUBDOMAIN` / `ZD_API_EMAIL` / `ZD_API_TOKEN` env vars (the Jira-backlog feature already
+uses them). Three consequences to keep in mind:
+
+- **A Zendesk API token cannot be scoped.** It can do whatever its owner can, so
+  "read-only" is guaranteed only by `lib/zendeskClient.js`: `get()` is the one function
+  that reaches the network, the HTTP method is a literal inside it, and a test fails if any
+  request is not a GET. Do not add a write path there. Writes, if they ever come, are a
+  separate module behind their own permission level.
+- **`zendesk:view` grants the token owner's visibility, not the person's own.** Zendesk's
+  audit trail shows the shared user; agendo's tool-call log is the record of who asked.
+  `zendesk_connection_status` shows whose eyes these are.
+- **Zendesk's rate limit belongs to the whole account** and is shared with every other
+  integration on it. The client keeps a process-wide request budget (100 a minute) with a
+  smaller share per person (30), so one runaway model loop cannot lock out the team; a
+  concurrency cap with a bounded queue, of which one person may hold only 6 places; one
+  25-second deadline across every attempt, wait and retry; and it honours `Retry-After` and
+  the client's cancellation (a cancelled call leaves the queue at once, and a request that
+  never reached Zendesk gives its budget back). The budget is per process: a second Render
+  instance would double it.
+
+Only plain `/api/v2/…` paths are ever fetched (a tight character allowlist: no full URLs,
+no `%`, `;`, `\` or `..`). Tools build the path from a fixed template and validated ids, so
+a model-supplied value never chooses the endpoint, and a pagination cursor travels as the
+opaque `page[after]` value, never as a URL. Credentials only reach
+`<ZD_SUBDOMAIN>.zendesk.com`, and redirects are never followed. Text customers wrote goes
+through `lib/zendeskShape.js`'s `untrusted()`, which fences it with a random per-block id the
+text cannot forge (read the file for its limits). A truncated page withholds its next-page
+cursor, since following it would skip items.
+
+**Logging fails closed.** Every call is logged with its arguments, and a Zendesk search query
+or a customer's name can be an email address. A Zendesk tool lists only the arguments that
+are safe to log in `logArgs` (the wrapper accepts only a number, boolean, enum or literal
+field there); every other argument is logged by size. A failure is logged with the error's
+`logMessage`, which leaves out anything Zendesk echoed back (a rejected search can quote its
+query) — and an unexpected error in a Zendesk tool is logged generically — while the person
+and their model still see the full message.
+
+**Handlers get the cancellation signal and nothing else of the SDK's request context** (the
+rest carries the caller's bearer token and headers), so a handler cannot leak what it never
+holds.
 
 ## Endpoints
 
@@ -101,12 +165,16 @@ mcp/
 │   ├── registerTool.js permission-enforcing registration wrapper (`requires` is mandatory)
 │   ├── roster.js       users, positions and locations for name lookups
 │   ├── format.js       rendering times and tables
-│   └── clerkOauth.js   OAuth discovery metadata (see "No @clerk/mcp-tools" below)
+│   ├── clerkOauth.js   OAuth discovery metadata (see "No @clerk/mcp-tools" below)
+│   ├── registerZendeskTool.js  registerTool + the Zendesk naming/annotation rules
+│   ├── zendeskClient.js        the GET-only, host-pinned, rate-limited Zendesk client
+│   └── zendeskShape.js         untrusted-text fencing, answer size cap
 ├── tools/
 │   ├── identity.js     whoami
 │   ├── schedule.js     schedules, coverage, totals, coverage gaps
 │   ├── find.js         find_shifts
-│   └── shifts.js       draft writes
+│   ├── shifts.js       draft writes
+│   └── zendesk.js      the Zendesk tools
 └── mcp.test.js         the server over the SDK's in-memory client: tools per person, refusals
 ```
 
@@ -142,6 +210,7 @@ Only one new npm dependency: `@modelcontextprotocol/sdk`.
 | `MCP_ALLOWED_EMAIL_DOMAINS` | no | `duda.co` | Comma-separated allowlist |
 | `MCP_PUBLIC_URL` | no | forwarded headers | Override the advertised public origin |
 | `CLERK_FRONTEND_API_URL` | no | derived from the publishable key | Override for custom Clerk domains |
+| `ZD_SUBDOMAIN`, `ZD_API_EMAIL`, `ZD_API_TOKEN` | for the Zendesk tools | — | Already present for the Jira-backlog feature; the same credential, so rotating it affects both. Unset: the Zendesk tools answer "not configured", nothing else breaks |
 
 `MCP_PUBLIC_URL` exists because Render terminates TLS at its proxy: `req.protocol` is
 `http` there while the client used `https`, and the advertised `resource` must match the

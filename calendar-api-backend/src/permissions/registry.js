@@ -69,6 +69,18 @@ export const PERMISSION_AREAS = Object.freeze({
       edit: "The Performance screen: scores, quarters, imports, locking, methodology",
     },
   }),
+  zendesk: area({
+    label: "Zendesk",
+    // Only "view" exists: the Zendesk tools in the MCP server are read-only. A write level
+    // would go above it, and — because an admin holds the top level of every area — would
+    // reach every admin the moment it is added. Decide that on purpose, not by accident.
+    levels: ["none", "view"],
+    defaultForNewUsers: "none",
+    describe: {
+      none: "No access to the Zendesk tools in the agendo MCP connection",
+      view: "Use the read-only Zendesk tools in the agendo MCP connection (they all read as one shared Zendesk user, so this grants that user's visibility)",
+    },
+  }),
 });
 
 export const AREA_KEYS = Object.freeze(Object.keys(PERMISSION_AREAS));

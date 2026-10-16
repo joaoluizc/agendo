@@ -12,6 +12,7 @@ export const AREA_LEVELS = {
   bugs: ["none", "view", "edit"],
   reports: ["none", "self", "edit"],
   performance: ["none", "edit"],
+  zendesk: ["none", "view"],
 } as const;
 
 export type AreaKey = keyof typeof AREA_LEVELS;
@@ -25,6 +26,7 @@ export const AREA_LABELS: Record<AreaKey, string> = {
   bugs: "Bug tracking",
   reports: "Reports",
   performance: "Performance",
+  zendesk: "Zendesk",
 };
 
 export const NO_PERMISSIONS: Permissions = {
@@ -32,6 +34,7 @@ export const NO_PERMISSIONS: Permissions = {
   bugs: "none",
   reports: "none",
   performance: "none",
+  zendesk: "none",
 };
 
 /** What a page or control needs: admin, or at least a level in an area. */
@@ -85,22 +88,22 @@ export const PREVIEW_PRESETS: { key: string; label: string; permissions: Permiss
   {
     key: "agent",
     label: "Agent",
-    permissions: { scheduling: "view", bugs: "none", reports: "self", performance: "none" },
+    permissions: { scheduling: "view", bugs: "none", reports: "self", performance: "none", zendesk: "none" },
   },
   {
     key: "scheduler",
     label: "Scheduler",
-    permissions: { scheduling: "edit", bugs: "none", reports: "self", performance: "none" },
+    permissions: { scheduling: "edit", bugs: "none", reports: "self", performance: "none", zendesk: "none" },
   },
   {
     key: "bugs",
     label: "Bug triager",
-    permissions: { scheduling: "view", bugs: "edit", reports: "self", performance: "none" },
+    permissions: { scheduling: "view", bugs: "edit", reports: "self", performance: "none", zendesk: "none" },
   },
   {
     key: "lead",
     label: "Lead",
-    permissions: { scheduling: "edit", bugs: "view", reports: "edit", performance: "edit" },
+    permissions: { scheduling: "edit", bugs: "view", reports: "edit", performance: "edit", zendesk: "view" },
   },
   { key: "none", label: "No access", permissions: NO_PERMISSIONS },
 ];

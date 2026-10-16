@@ -11,6 +11,7 @@ import { validatePermissionsPatch } from "./evaluate.js";
  *  - reports: self — new: everyone sees their own report (decided 2026-10-06).
  *  - performance: edit for people on today's PERFORMANCE_ACCESS_EMAILS allowlist, which
  *    gated reads and management alike; none for everyone else.
+ *  - zendesk: none — the Zendesk MCP tools are new and opt-in; nobody has them today.
  *
  * Admins get the same stored values as everyone else: their access comes from the admin
  * flag, and these values are what they fall back to if that flag is ever removed.
@@ -22,6 +23,7 @@ export function permissionsForExistingUser(user, performanceAllowlist) {
     bugs: "none",
     reports: "self",
     performance: email && performanceAllowlist.has(email) ? "edit" : "none",
+    zendesk: "none",
   };
   const { ok, errors } = validatePermissionsPatch(permissions);
   if (!ok) {
